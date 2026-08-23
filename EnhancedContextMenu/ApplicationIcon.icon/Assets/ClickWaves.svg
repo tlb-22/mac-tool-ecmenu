@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+<defs>
+        <linearGradient id="accent" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#2B97FF"/>
+            <stop offset="0.52" stop-color="#0A84FF"/>
+            <stop offset="1" stop-color="#0878E8"/>
+        </linearGradient>
+    </defs>
+
+<g id="click-wave-layer" transform="translate(512 512) scale(1.20) translate(-512 -512)" fill="none" stroke="url(#accent)" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M 512 767 A 255 255 0 1 1 767 512" stroke-width="50"/>
+        <path d="M 487 655 A 145 145 0 1 1 655 487" stroke-width="50"/>
+    </g>
+
+</svg>

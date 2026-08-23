@@ -1,0 +1,14 @@
+.DS_Store
+
+.derivedData/
+.artifacts/
+.vscode/
+xcuserdata/
+*.xcuserstate
+*.profraw
+
+.prompt.txt
+reference/
+screenshots/
+/design/AppIcon/output/
+/design/AppIcon/.compose-staging.*/
