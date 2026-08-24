@@ -55,10 +55,12 @@ final class ImageCompressionTests: XCTestCase {
     }
 
     /// 界面质量应线性映射，输入按 Finder 风格文件名排序并逐秒分配时间。
-    func testSettingsAndPlanConstruction() {
-        let settings = ImageCompressionSettings(
-            maximumWidth: 1_440,
-            quality: 8
+    func testSettingsAndPlanConstruction() throws {
+        let settings = try XCTUnwrap(
+            ImageCompressionSettings(
+                maximumWidth: 1_440,
+                quality: 8
+            )
         )
         XCTAssertEqual(settings.imageIOQuality, 0.8, accuracy: 0.000_001)
 
@@ -88,20 +90,30 @@ final class ImageCompressionTests: XCTestCase {
     }
 
     /// 设置领域值应保留标准默认值，并覆盖 ImageIO 映射的两个端点。
-    func testSettingsDefaultsAndQualityMapping() {
+    func testSettingsDefaultsAndQualityMapping() throws {
         XCTAssertEqual(
             ImageCompressionSettings.standard,
-            ImageCompressionSettings(maximumWidth: 1_440, quality: 8)
+            try XCTUnwrap(
+                ImageCompressionSettings(maximumWidth: 1_440, quality: 8)
+            )
+        )
+        XCTAssertNil(
+            ImageCompressionSettings(maximumWidth: 0, quality: 8)
+        )
+        XCTAssertNil(
+            ImageCompressionSettings(maximumWidth: 1_440, quality: 11)
         )
         XCTAssertEqual(
-            ImageCompressionSettings(maximumWidth: 1, quality: 0)
-                .imageIOQuality,
+            try XCTUnwrap(
+                ImageCompressionSettings(maximumWidth: 1, quality: 0)
+            ).imageIOQuality,
             0,
             accuracy: 0.000_001
         )
         XCTAssertEqual(
-            ImageCompressionSettings(maximumWidth: 1, quality: 10)
-                .imageIOQuality,
+            try XCTUnwrap(
+                ImageCompressionSettings(maximumWidth: 1, quality: 10)
+            ).imageIOQuality,
             1,
             accuracy: 0.000_001
         )
@@ -117,9 +129,11 @@ final class ImageCompressionTests: XCTestCase {
 
         XCTAssertEqual(store.load(), .standard)
 
-        let confirmed = ImageCompressionSettings(
-            maximumWidth: 2_560,
-            quality: 6
+        let confirmed = try XCTUnwrap(
+            ImageCompressionSettings(
+                maximumWidth: 2_560,
+                quality: 6
+            )
         )
         store.save(confirmed)
 
@@ -138,14 +152,18 @@ final class ImageCompressionTests: XCTestCase {
         defaults.set(11, forKey: ImageCompressionSettingsStore.qualityKey)
         XCTAssertEqual(
             store.load(),
-            ImageCompressionSettings(maximumWidth: 900, quality: 8)
+            try XCTUnwrap(
+                ImageCompressionSettings(maximumWidth: 900, quality: 8)
+            )
         )
 
         defaults.set(0, forKey: ImageCompressionSettingsStore.maximumWidthKey)
         defaults.set(3, forKey: ImageCompressionSettingsStore.qualityKey)
         XCTAssertEqual(
             store.load(),
-            ImageCompressionSettings(maximumWidth: 1_440, quality: 3)
+            try XCTUnwrap(
+                ImageCompressionSettings(maximumWidth: 1_440, quality: 3)
+            )
         )
     }
 
@@ -187,7 +205,7 @@ final class ImageCompressionTests: XCTestCase {
             requestID: requestID,
             descriptor: CompressImagesCommand.descriptor
         )
-        progress.begin(totalUnitCount: 2, allowsCancellation: true)
+        progress.begin(totalUnitCount: 2)
         for _ in 0..<100 where !didRevealProgress {
             await Task.yield()
         }

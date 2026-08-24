@@ -93,7 +93,7 @@ final class PositiveIntegerFormatter: Formatter {
                 from: CharacterSet.decimalDigits.inverted
             ) == nil,
             let value = Int(string),
-            value >= ImageCompressionWidthRules.minimum
+            ImageCompressionWidthRules.validated(value) != nil
         else {
             return nil
         }
@@ -158,6 +158,9 @@ final class ImageCompressionSettingsWindowController:
     NSWindowController,
     NSWindowDelegate
 {
+    /// 控制器初始化后始终存在、由本对象明确保活的设置窗口。
+    private let ownedWindow: NSWindow
+
     /// 负责参数输入和局部验证的表单。
     private let formView: ImageCompressionSettingsFormView
 
@@ -195,6 +198,7 @@ final class ImageCompressionSettingsWindowController:
         window.isRestorable = false
         window.standardWindowButton(.zoomButton)?.isEnabled = false
 
+        ownedWindow = window
         super.init(window: window)
         window.delegate = self
         configureContent()
@@ -207,15 +211,10 @@ final class ImageCompressionSettingsWindowController:
 
     /// 显示非模态窗口并让最大宽度成为初始输入焦点。
     func present() {
-        guard let window else {
-            finish(with: nil, closeWindow: false)
-            return
-        }
-
         NSApp.activate(ignoringOtherApps: true)
         showWindow(nil)
-        window.center()
-        window.makeKeyAndOrderFront(nil)
+        ownedWindow.center()
+        ownedWindow.makeKeyAndOrderFront(nil)
         formView.focusMaximumWidth()
     }
 
@@ -232,10 +231,6 @@ final class ImageCompressionSettingsWindowController:
 
     /// 构造参数表单、分割线和单行底部操作区。
     private func configureContent() {
-        guard let window else {
-            return
-        }
-
         let contentView = NSView()
         validationLabel.textColor = .systemRed
         validationLabel.font = .systemFont(
@@ -295,7 +290,7 @@ final class ImageCompressionSettingsWindowController:
             after: separator
         )
 
-        window.contentView = contentView
+        ownedWindow.contentView = contentView
         contentStack.translatesAutoresizingMaskIntoConstraints = false
         contentView.addSubview(contentStack)
         let contentPaddingMultiplier =
@@ -321,9 +316,9 @@ final class ImageCompressionSettingsWindowController:
             cancelButton.widthAnchor.constraint(equalTo: compressButton.widthAnchor),
         ])
 
-        window.initialFirstResponder = formView.maximumWidthField
+        ownedWindow.initialFirstResponder = formView.maximumWidthField
         contentView.layoutSubtreeIfNeeded()
-        window.setContentSize(
+        ownedWindow.setContentSize(
             NSSize(
                 width:
                     ImageCompressionSettingsWindowLayout.preferredContentWidth,
@@ -360,7 +355,7 @@ final class ImageCompressionSettingsWindowController:
         self.completion = nil
 
         if closeWindow {
-            window?.close()
+            ownedWindow.close()
         }
         completion(settings)
     }
@@ -380,10 +375,7 @@ private final class ImageCompressionSettingsFormView: NSView {
 
     /// 从两个控件读取并验证当前设置。
     var settings: ImageCompressionSettings? {
-        guard
-            let maximumWidth = Int(maximumWidthField.stringValue),
-            maximumWidth >= ImageCompressionWidthRules.minimum
-        else {
+        guard let maximumWidth = Int(maximumWidthField.stringValue) else {
             return nil
         }
         return ImageCompressionSettings(

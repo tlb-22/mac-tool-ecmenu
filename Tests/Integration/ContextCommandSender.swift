@@ -15,21 +15,23 @@ enum ContextCommandSender {
         if arguments.count >= 2,
            let operation = arguments.first,
            ["--copy-path", "--hide-items", "--show-items"].contains(operation) {
-            let selectedURLs = arguments.dropFirst().map {
-                URL(fileURLWithPath: $0)
-            }
-            guard let selection = FinderItemSelection(urls: selectedURLs) else {
+            guard let selection = FinderItemSelection(
+                paths: Array(arguments.dropFirst())
+            ) else {
                 throw SenderFailure(message: "Expected at least one absolute item path")
             }
-            let snapshot = FinderContextSnapshot.items(selection: selection)
-
             switch operation {
             case "--copy-path":
-                try deliver(CopyPathCommand(finderContext: snapshot))
+                guard let command = CopyPathCommand(
+                    paths: selection.absolutePaths
+                ) else {
+                    throw SenderFailure(message: "Expected at least one absolute item path")
+                }
+                try deliver(command)
             case "--hide-items":
-                try deliver(HideItemsCommand(finderContext: snapshot))
+                try deliver(HideItemsCommand(selection: selection))
             case "--show-items":
-                try deliver(ShowItemsCommand(finderContext: snapshot))
+                try deliver(ShowItemsCommand(selection: selection))
             default:
                 preconditionFailure("Validated operation became unknown")
             }
@@ -37,9 +39,12 @@ enum ContextCommandSender {
         }
 
         if arguments.count == 1, let path = arguments.first {
+            guard let directoryPath = AbsoluteFilePath(path: path) else {
+                throw SenderFailure(message: "Expected an absolute directory path")
+            }
             try deliver(
                 CreateNewTextFileCommand(
-                    finderContext: .container(path: path)
+                    directoryPath: directoryPath
                 )
             )
             return
@@ -62,11 +67,9 @@ enum ContextCommandSender {
     /// 通过已验证 IPC 端点拉取菜单配置快照。
     private static func fetchMenuConfiguration() throws {
         let configuration = try makeClient().fetchMenuConfiguration()
-        guard configuration.schemaVersion == MenuConfiguration.currentSchemaVersion else {
-            throw SenderFailure(message: "Received an invalid menu configuration")
-        }
+        let schemaVersion = MenuConfiguration.currentSchemaVersion
         print(
-            "menu-configuration schema=\(configuration.schemaVersion) enabled=\(configuration.isEnabled)"
+            "menu-configuration schema=\(schemaVersion) enabled=\(configuration.isEnabled)"
         )
     }
 

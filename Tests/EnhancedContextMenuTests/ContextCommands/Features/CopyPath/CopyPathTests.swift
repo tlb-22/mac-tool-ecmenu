@@ -8,10 +8,10 @@ final class CopyPathTests: XCTestCase {
     func testMultipleSelectionPreservesOrder() throws {
         let first = url("/test/Second Item")
         let second = url("/test/first.txt")
-        let snapshot = items([first, second])
+        let command = try command([first, second])
 
         let plan = try CopyPathHandler.makePlan(
-            for: snapshot,
+            for: command,
             existingURLs: [first, second]
         ).get()
 
@@ -26,12 +26,10 @@ final class CopyPathTests: XCTestCase {
     /// 空白处语义快照应直接携带已经解释完成的当前容器。
     func testContainerUsesSemanticDirectory() throws {
         let visibleDirectory = url("/test/parent")
-        let snapshot = FinderContextSnapshot.container(
-            path: visibleDirectory.path
-        )
+        let command = try command([visibleDirectory])
 
         let plan = try CopyPathHandler.makePlan(
-            for: snapshot,
+            for: command,
             existingURLs: [visibleDirectory]
         ).get()
 
@@ -39,13 +37,13 @@ final class CopyPathTests: XCTestCase {
     }
 
     /// 任一快照目标已经失效时不应把不完整的多选写入剪贴板。
-    func testUnavailableSelectionFailsAsAWhole() {
+    func testUnavailableSelectionFailsAsAWhole() throws {
         let existing = url("/test/existing")
         let missing = url("/test/missing")
-        let snapshot = items([existing, missing])
+        let command = try command([existing, missing])
 
         guard case .failure(.targetUnavailable) = CopyPathHandler.makePlan(
-            for: snapshot,
+            for: command,
             existingURLs: [existing]
         ) else {
             return XCTFail("A stale multi-selection must not produce partial clipboard text")
@@ -64,9 +62,7 @@ final class CopyPathTests: XCTestCase {
         )
 
         let outcome = await CopyPathHandler().execute(
-            CopyPathCommand(
-                finderContext: items([link])
-            )
+            try command([link])
         )
 
         XCTAssertEqual(try outcome.get().itemURLs, [link])
@@ -77,11 +73,12 @@ final class CopyPathTests: XCTestCase {
         URL(fileURLWithPath: path).standardizedFileURL
     }
 
-    /// 构造测试使用的非空 Finder 项目语义。
-    private func items(_ urls: [URL]) -> FinderContextSnapshot {
-        guard let selection = FinderItemSelection(urls: urls) else {
-            preconditionFailure("A test item selection cannot be empty")
-        }
-        return .items(selection: selection)
+    /// 把测试 URL 构造成类型化拷贝命令。
+    private func command(_ urls: [URL]) throws -> CopyPathCommand {
+        try XCTUnwrap(
+            CopyPathCommand(
+                paths: urls.map { try XCTUnwrap(AbsoluteFilePath(url: $0)) }
+            )
+        )
     }
 }

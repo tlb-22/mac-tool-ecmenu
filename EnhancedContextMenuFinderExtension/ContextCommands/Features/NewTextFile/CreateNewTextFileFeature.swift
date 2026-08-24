@@ -1,3 +1,5 @@
+import Foundation
+
 /// 新建 TXT 功能在 Finder Extension 中的可用性与命令发送端。
 final class CreateNewTextFileFeature: SingleActionContextMenuFeature {
     /// 为菜单身份和跨进程负载提供唯一的共享命令类型。
@@ -11,20 +13,45 @@ final class CreateNewTextFileFeature: SingleActionContextMenuFeature {
         self.commandClient = commandClient
     }
 
-    // MARK: - ==================== 纯函数：菜单策略与命令构造 ====================
-
-    /// 根据 Finder 当前上下文决定是否显示功能。
-    func isAvailable(in context: FinderContextMenuEvaluationContext) -> Bool {
-        switch context.snapshot {
-        case .container, .sidebar:
-            return true
-        case .items(let selection):
-            return selection.paths.count == 1
+    /// 菜单期把唯一候选解析为实际写入目录。
+    func command(
+        in context: FinderContextMenuEvaluationContext
+    ) -> CreateNewTextFileCommand? {
+        guard let directoryPath = Self.directoryPath(
+            for: context.snapshot
+        ) else {
+            return nil
         }
+        return CreateNewTextFileCommand(directoryPath: directoryPath)
     }
 
-    /// 使用当前菜单项在构建时绑定的 Finder 状态构造新建 TXT 命令。
-    func command(for snapshot: FinderContextSnapshot) -> CreateNewTextFileCommand {
-        CreateNewTextFileCommand(finderContext: snapshot)
+    /// 跟随符号链接重验目标，并把单个文件归一到父目录。
+    private static func directoryPath(
+        for snapshot: FinderContextSnapshot
+    ) -> AbsoluteFilePath? {
+        guard snapshot.absolutePaths.count == 1,
+              let targetPath = snapshot.absolutePaths.first else {
+            return nil
+        }
+
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(
+            atPath: targetPath.path,
+            isDirectory: &isDirectory
+        ) else {
+            return nil
+        }
+
+        switch snapshot {
+        case .container, .sidebar:
+            return isDirectory.boolValue ? targetPath : nil
+        case .items:
+            if isDirectory.boolValue {
+                return targetPath
+            }
+            return AbsoluteFilePath(
+                url: targetPath.url.deletingLastPathComponent()
+            )
+        }
     }
 }

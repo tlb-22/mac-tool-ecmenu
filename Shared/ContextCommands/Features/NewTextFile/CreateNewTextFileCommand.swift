@@ -9,11 +9,11 @@ nonisolated struct CreateNewTextFileCommand: ContextCommandPayload, Equatable {
         icon: .systemSymbol(name: "text.document")
     )
 
-    /// Extension 在 Finder 请求菜单时冻结的上下文。
-    let finderContext: FinderContextSnapshot
+    /// 菜单期已经解析完成、执行时需要重新验证的目标目录路径。
+    let directoryPath: AbsoluteFilePath
 
-    /// 创建携带指定 Finder 快照的新建 TXT 命令。
-    init(finderContext: FinderContextSnapshot) {
-        self.finderContext = finderContext
+    /// 创建指向已解析目标目录的命令。
+    init(directoryPath: AbsoluteFilePath) {
+        self.directoryPath = directoryPath
     }
 }

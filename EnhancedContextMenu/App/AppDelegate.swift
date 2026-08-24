@@ -2,46 +2,6 @@ import AppKit
 import CoreServices
 import OSLog
 
-/// 配置界面相对于常驻命令宿主的两种呈现状态。
-enum ApplicationPresentationMode: Equatable {
-    /// 命令宿主继续运行，Status Page 与 Dock 图标均隐藏。
-    case configurationHidden
-
-    /// Status Page 可见，应用以普通前台应用身份显示在 Dock 中。
-    case configurationVisible
-
-    /// 根据一次配置界面事件返回确定的新状态。
-    /// - Parameter event: 用户或窗口系统产生的呈现事件。
-    /// - Returns: 事件完成后的配置界面状态。
-    func transition(
-        for event: ApplicationPresentationEvent
-    ) -> ApplicationPresentationMode {
-        switch event {
-        case .showConfiguration:
-            .configurationVisible
-        case .launchAtLogin,
-             .hideConfiguration,
-             .configurationWindowDidClose:
-            .configurationHidden
-        }
-    }
-}
-
-/// 能够改变 Status Page 与 Dock 呈现状态的全部事件。
-enum ApplicationPresentationEvent: Equatable {
-    /// 系统登录项启动主应用，只建立后台命令宿主。
-    case launchAtLogin
-
-    /// 用户正常打开或重新打开配置界面。
-    case showConfiguration
-
-    /// 用户通过菜单或 Command-Q 主动退出配置界面。
-    case hideConfiguration
-
-    /// 用户关闭了唯一的 Status Page 窗口。
-    case configurationWindowDidClose
-}
-
 /// 首次 Open Application Apple Event 表达的进程启动来源。
 enum ApplicationInitialOpenSource: Equatable {
     /// 用户或开发工具普通打开了主应用。
@@ -96,10 +56,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// 首次 Open Application 事件是否已经决定了启动呈现形态。
     private var hasHandledInitialOpenApplicationEvent = false
-
-    /// 当前配置界面的呈现状态；业务窗口不会改变此值。
-    private(set) var presentationMode =
-        ApplicationPresentationMode.configurationHidden
 
     /// 在 AppKit 处理首次启动事件前接管应用呈现相关 Apple Event。
     func applicationWillFinishLaunching(_ notification: Notification) {
@@ -165,7 +121,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if ApplicationInitialOpenSource(
             openApplicationEvent: event
         ) == .loginItem {
-            enterBackgroundMode(for: .launchAtLogin)
+            enterBackgroundMode()
         } else {
             showConfiguration()
         }
@@ -189,9 +145,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard changeActivationPolicy(to: .regular) else {
             return
         }
-        presentationMode = presentationMode.transition(
-            for: .showConfiguration
-        )
         statusPageWindowController.showWindow()
         NSApp.activate(ignoringOtherApps: true)
     }
@@ -199,7 +152,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// 关闭 Status Page 并退出配置形态，但不终止命令宿主或业务任务。
     func hideConfiguration() {
         if !statusPageWindowController.closeWindow() {
-            enterBackgroundMode(for: .hideConfiguration)
+            enterBackgroundMode()
         }
     }
 
@@ -210,16 +163,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// 响应用户直接关闭 Status Page 的事件。
     private func handleConfigurationWindowDidClose() {
-        enterBackgroundMode(for: .configurationWindowDidClose)
+        enterBackgroundMode()
     }
 
     /// 把应用切换为无 Dock 图标的 accessory 命令宿主。
-    /// - Parameter event: 触发隐藏状态的用户或窗口事件。
-    private func enterBackgroundMode(for event: ApplicationPresentationEvent) {
-        guard changeActivationPolicy(to: .accessory) else {
-            return
-        }
-        presentationMode = presentationMode.transition(for: event)
+    private func enterBackgroundMode() {
+        _ = changeActivationPolicy(to: .accessory)
     }
 
     /// 将 AppKit activation policy 切换为目标值，并记录平台拒绝。

@@ -11,11 +11,33 @@ nonisolated struct CopyPathCommand: ContextCommandPayload, Equatable {
         )
     )
 
-    /// Extension 在 Finder 请求菜单时冻结的上下文。
-    let finderContext: FinderContextSnapshot
+    /// 保持 Finder 顺序且已经验证为非空的绝对路径集合。
+    let paths: [AbsoluteFilePath]
 
-    /// 创建携带指定 Finder 快照的拷贝路径命令。
-    init(finderContext: FinderContextSnapshot) {
-        self.finderContext = finderContext
+    /// 只为非空路径集合创建命令。
+    init?(paths: [AbsoluteFilePath]) {
+        guard !paths.isEmpty else {
+            return nil
+        }
+        self.paths = paths
+    }
+
+    /// 解码时重新验证非空约束。
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        let paths = try container.decode([AbsoluteFilePath].self)
+        guard let command = Self(paths: paths) else {
+            throw DecodingError.dataCorruptedError(
+                in: container,
+                debugDescription: "Copy-path requires at least one absolute path"
+            )
+        }
+        self = command
+    }
+
+    /// 只编码有序路径数组。
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(paths)
     }
 }

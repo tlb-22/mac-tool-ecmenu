@@ -15,16 +15,27 @@ nonisolated struct ContextCommandProgressItem: Equatable, Sendable {
     let totalUnitCount: Int
 
     /// 已经到达成功或失败终态的项目数。
-    var completedUnitCount: Int
-
-    /// Feature 是否能够在安全边界响应用户取消。
-    let allowsCancellation: Bool
+    fileprivate(set) var completedUnitCount: Int
 
     /// 用户已经请求取消，Feature 尚未结束当前安全边界。
-    var isCancellationRequested: Bool
+    fileprivate(set) var isCancellationRequested: Bool
 
     /// 任务经过显示延迟后才进入窗口，快速任务不会闪现。
-    var isVisible: Bool
+    fileprivate(set) var isVisible: Bool
+
+    /// 只允许进度状态所有者创建已经通过开始条件检查的任务。
+    fileprivate init(
+        requestID: UUID,
+        descriptor: ContextCommandDescriptor,
+        totalUnitCount: Int
+    ) {
+        self.requestID = requestID
+        self.descriptor = descriptor
+        self.totalUnitCount = totalUnitCount
+        completedUnitCount = 0
+        isCancellationRequested = false
+        isVisible = false
+    }
 }
 
 /// 集中维护多个右键命令的进度状态，不包含 AppKit 副作用。
@@ -37,19 +48,17 @@ nonisolated struct ContextCommandProgressState: Equatable, Sendable {
         items.filter(\.isVisible)
     }
 
-    /// 登记一个刚刚开始实际执行的可选进度任务。
+    /// 登记一个刚刚开始实际执行、支持协作取消的进度任务。
     /// - Parameters:
     ///   - requestID: Router 为本次右键请求分配的稳定身份。
     ///   - descriptor: 对应命令的完整产品描述。
     ///   - totalUnitCount: 已知且大于零的总项目数。
-    ///   - allowsCancellation: Feature 是否实现安全取消边界。
     /// - Returns: 成功登记时为 `true`；重复身份或空任务为 `false`。
     @discardableResult
     mutating func begin(
         requestID: UUID,
         descriptor: ContextCommandDescriptor,
-        totalUnitCount: Int,
-        allowsCancellation: Bool
+        totalUnitCount: Int
     ) -> Bool {
         guard
             totalUnitCount > 0,
@@ -62,11 +71,7 @@ nonisolated struct ContextCommandProgressState: Equatable, Sendable {
             ContextCommandProgressItem(
                 requestID: requestID,
                 descriptor: descriptor,
-                totalUnitCount: totalUnitCount,
-                completedUnitCount: 0,
-                allowsCancellation: allowsCancellation,
-                isCancellationRequested: false,
-                isVisible: false
+                totalUnitCount: totalUnitCount
             )
         )
         return true
@@ -93,12 +98,9 @@ nonisolated struct ContextCommandProgressState: Equatable, Sendable {
         )
     }
 
-    /// 记录用户取消意图；不支持取消的 Feature 保持不变。
+    /// 记录用户取消意图，Feature 会在下一个安全边界读取它。
     mutating func requestCancellation(requestID: UUID) {
-        guard
-            let index = index(of: requestID),
-            items[index].allowsCancellation
-        else {
+        guard let index = index(of: requestID) else {
             return
         }
         items[index].isCancellationRequested = true
@@ -148,16 +150,13 @@ final class ContextCommandProgressReporter {
         self.descriptor = descriptor
     }
 
-    /// 用户确认参数并即将产生真实工作时开始进度。
-    /// - Parameters:
-    ///   - totalUnitCount: 批次中需要到达终态的项目数。
-    ///   - allowsCancellation: Feature 是否在项目边界检查取消意图。
-    func begin(totalUnitCount: Int, allowsCancellation: Bool) {
+    /// 用户确认参数并即将产生真实工作时开始可取消进度。
+    /// - Parameter totalUnitCount: 批次中需要到达终态的项目数。
+    func begin(totalUnitCount: Int) {
         center.begin(
             requestID: requestID,
             descriptor: descriptor,
-            totalUnitCount: totalUnitCount,
-            allowsCancellation: allowsCancellation
+            totalUnitCount: totalUnitCount
         )
     }
 
@@ -231,14 +230,12 @@ final class ContextCommandProgressCenter {
     func begin(
         requestID: UUID,
         descriptor: ContextCommandDescriptor,
-        totalUnitCount: Int,
-        allowsCancellation: Bool
+        totalUnitCount: Int
     ) {
         guard state.begin(
             requestID: requestID,
             descriptor: descriptor,
-            totalUnitCount: totalUnitCount,
-            allowsCancellation: allowsCancellation
+            totalUnitCount: totalUnitCount
         ) else {
             return
         }
@@ -603,9 +600,8 @@ private final class ContextCommandProgressIconResolver {
         case .systemSymbol(let name):
             return systemSymbol(named: name)
 
-        case .requiredApplication:
+        case .application(let requirement):
             guard
-                let requirement = descriptor.requiredApplication,
                 let applicationURL = NSWorkspace.shared.urlForApplication(
                     withBundleIdentifier: requirement.bundleIdentifier
                 )
@@ -857,7 +853,7 @@ private final class ContextCommandProgressRowView: NSView {
     /// 以“已完成 / 总数”显示的项目计数。
     private let countLabel = NSTextField(labelWithString: "")
 
-    /// 只在 Feature 实现安全取消时显示的按钮。
+    /// 请求 Feature 在下一个安全边界停止的按钮。
     private let cancelButton = NSButton()
 
     /// 为命令解析 SF Symbol 或所依赖应用图标。
@@ -904,7 +900,6 @@ private final class ContextCommandProgressRowView: NSView {
             totalUnitCount: item.totalUnitCount
         )
         countLabel.stringValue = "\(item.completedUnitCount) / \(item.totalUnitCount)"
-        cancelButton.isHidden = !item.allowsCancellation
         cancelButton.isEnabled = !item.isCancellationRequested
         cancelButton.toolTip = item.isCancellationRequested ? "正在取消…" : "取消"
     }

@@ -9,12 +9,12 @@ nonisolated struct HideItemsCommand: ContextCommandPayload, Equatable {
         icon: .systemSymbol(name: "eye.slash")
     )
 
-    /// Extension 在 Finder 请求菜单时冻结的上下文。
-    let finderContext: FinderContextSnapshot
+    /// 菜单期验证过的非空项目选择。
+    let selection: FinderItemSelection
 
-    /// 创建携带指定 Finder 快照的隐藏命令。
-    init(finderContext: FinderContextSnapshot) {
-        self.finderContext = finderContext
+    /// 创建携带指定项目选择的隐藏命令。
+    init(selection: FinderItemSelection) {
+        self.selection = selection
     }
 }
 
@@ -27,11 +27,11 @@ nonisolated struct ShowItemsCommand: ContextCommandPayload, Equatable {
         icon: .systemSymbol(name: "eye")
     )
 
-    /// Extension 在 Finder 请求菜单时冻结的上下文。
-    let finderContext: FinderContextSnapshot
+    /// 菜单期验证过的非空项目选择。
+    let selection: FinderItemSelection
 
-    /// 创建携带指定 Finder 快照的显示命令。
-    init(finderContext: FinderContextSnapshot) {
-        self.finderContext = finderContext
+    /// 创建携带指定项目选择的显示命令。
+    init(selection: FinderItemSelection) {
+        self.selection = selection
     }
 }

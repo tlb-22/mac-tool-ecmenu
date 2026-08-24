@@ -3,50 +3,8 @@ import Foundation
 import XCTest
 @testable import EnhancedContextMenu
 
-/// 验证隐藏/显示的上下文范围、点号规则和真实文件属性写入。
+/// 验证隐藏/显示的点号规则和真实文件属性写入。
 final class VisibilityTests: XCTestCase {
-    /// 只有明确的 Finder 选择可以形成可见性操作目标。
-    func testOnlyItemSelectionsResolveTargets() {
-        let parent = url("/test/parent")
-        let first = url("/test/parent/first")
-        let second = url("/test/parent/second")
-
-        XCTAssertNil(
-            VisibilityExecution.targetURLs(
-                for: .container(path: parent.path)
-            )
-        )
-        XCTAssertEqual(
-            VisibilityExecution.targetURLs(for: items([first, second])),
-            [first, second]
-        )
-        XCTAssertNil(
-            VisibilityExecution.targetURLs(
-                for: .sidebar(path: parent.path)
-            )
-        )
-    }
-
-    /// 执行端应拒绝空白处和侧边栏请求，防止迟到请求触发整层批量操作。
-    func testContainerAndSidebarCommandsAreRejected() async {
-        let snapshots: [FinderContextSnapshot] = [
-            .container(path: "/test/parent"),
-            .sidebar(path: "/test/parent"),
-        ]
-
-        for snapshot in snapshots {
-            let hideOutcome = await HideItemsHandler().execute(
-                HideItemsCommand(finderContext: snapshot)
-            )
-            let showOutcome = await ShowItemsHandler().execute(
-                ShowItemsCommand(finderContext: snapshot)
-            )
-
-            XCTAssertEqual(hideOutcome, .targetUnavailable)
-            XCTAssertEqual(showOutcome, .targetUnavailable)
-        }
-    }
-
     /// 点号名称必须保持原名并从属性写入计划中排除。
     func testDotItemsAreSkipped() {
         let ordinary = url("/test/ordinary")
@@ -58,7 +16,6 @@ final class VisibilityTests: XCTestCase {
         )
 
         XCTAssertEqual(plan.itemURLs, [ordinary])
-        XCTAssertEqual(plan.skippedDotItemCount, 1)
     }
 
     /// 真实批量执行只修改选中对象；符号链接不应影响目标文件。
@@ -83,9 +40,9 @@ final class VisibilityTests: XCTestCase {
             withDestinationURL: nested
         )
 
-        let hideOutcome = await HideItemsHandler().execute(
+        let hideReport = await HideItemsHandler().execute(
             HideItemsCommand(
-                finderContext: items([
+                selection: selection([
                     ordinary,
                     directory,
                     link,
@@ -93,12 +50,7 @@ final class VisibilityTests: XCTestCase {
                 ])
             )
         )
-        guard case .completed(let hideReport) = hideOutcome else {
-            return XCTFail("A valid selection must produce a visibility report")
-        }
-
         XCTAssertEqual(hideReport.succeededCount, 3)
-        XCTAssertEqual(hideReport.skippedDotItemCount, 1)
         XCTAssertTrue(hideReport.issues.isEmpty)
         XCTAssertTrue(try isHidden(ordinary))
         XCTAssertTrue(try isHidden(directory))
@@ -116,7 +68,6 @@ final class VisibilityTests: XCTestCase {
             )
         )
         XCTAssertEqual(showReport.succeededCount, 3)
-        XCTAssertEqual(showReport.skippedDotItemCount, 1)
         XCTAssertFalse(try isHidden(ordinary))
         XCTAssertFalse(try isHidden(directory))
         XCTAssertFalse(try isHidden(link))
@@ -146,7 +97,7 @@ final class VisibilityTests: XCTestCase {
                 for: POSIXError(.ENOENT),
                 itemURL: item
             ).kind,
-            .fileSystem
+            .unavailable
         )
     }
 
@@ -162,11 +113,11 @@ final class VisibilityTests: XCTestCase {
         URL(fileURLWithPath: path).standardizedFileURL
     }
 
-    /// 构造测试使用的非空 Finder 项目语义。
-    private func items(_ urls: [URL]) -> FinderContextSnapshot {
+    /// 构造测试使用的非空 Finder 项目选择。
+    private func selection(_ urls: [URL]) -> FinderItemSelection {
         guard let selection = FinderItemSelection(urls: urls) else {
             preconditionFailure("A test item selection cannot be empty")
         }
-        return .items(selection: selection)
+        return selection
     }
 }

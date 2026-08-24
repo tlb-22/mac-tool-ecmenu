@@ -5,7 +5,7 @@ import XCTest
 final class ContextMenuLayoutTests: XCTestCase {
     /// 隐藏功能不应留下空子菜单、首尾分隔线或连续分隔线。
     func testVisibilityFilteringNormalizesStructure() {
-        let layout: [ContextMenuLayout<TestFeatureID>] = [
+        let nodes: [ContextMenuNode<TestFeatureID>] = [
             .separator,
             .item(.first),
             .separator,
@@ -24,10 +24,9 @@ final class ContextMenuLayoutTests: XCTestCase {
         ]
 
         XCTAssertEqual(
-            ContextMenuLayoutResolver.visibleElements(
-                in: layout,
-                isItemVisible: { $0 == .second }
-            ),
+            ContextMenuNodeResolver.compactMapItems(in: nodes) {
+                $0 == .second ? $0 : nil
+            },
             [
                 .submenu(
                     title: "开发工具",
@@ -39,7 +38,7 @@ final class ContextMenuLayoutTests: XCTestCase {
 
     /// 没有任何可见功能时，布局应解析为空而不是只剩装饰节点。
     func testCompletelyHiddenLayoutIsEmpty() {
-        let layout: [ContextMenuLayout<TestFeatureID>] = [
+        let nodes: [ContextMenuNode<TestFeatureID>] = [
             .item(.first),
             .separator,
             .submenu(
@@ -49,16 +48,15 @@ final class ContextMenuLayoutTests: XCTestCase {
         ]
 
         XCTAssertTrue(
-            ContextMenuLayoutResolver.visibleElements(
-                in: layout,
-                isItemVisible: { _ in false }
-            ).isEmpty
+            ContextMenuNodeResolver.compactMapItems(in: nodes) { _ in
+                Optional<TestFeatureID>.none
+            }.isEmpty
         )
     }
 
     /// 可见功能应保持声明顺序和递归层级。
     func testDeclarationOrderAndNestingArePreserved() {
-        let layout: [ContextMenuLayout<TestFeatureID>] = [
+        let nodes: [ContextMenuNode<TestFeatureID>] = [
             .item(.first),
             .separator,
             .submenu(
@@ -71,10 +69,7 @@ final class ContextMenuLayoutTests: XCTestCase {
         ]
 
         XCTAssertEqual(
-            ContextMenuLayoutResolver.visibleElements(
-                in: layout,
-                isItemVisible: { _ in true }
-            ),
+            ContextMenuNodeResolver.compactMapItems(in: nodes) { $0 },
             [
                 .item(.first),
                 .separator,

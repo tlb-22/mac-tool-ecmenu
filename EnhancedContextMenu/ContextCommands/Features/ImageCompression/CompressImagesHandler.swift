@@ -43,20 +43,8 @@ nonisolated enum ImageCompressionIssueStage: String, Equatable, Sendable {
 
 }
 
-/// 决定一项失败最终采用弹窗还是提示音的类别。
-nonisolated enum ImageCompressionIssueKind: Equatable, Sendable {
-    /// 当前进程缺少读取源文件或写入目标目录的权限；汇总后弹窗。
-    case permissionDenied
-
-    /// 目标位于只读文件系统；汇总后弹窗。
-    case readOnlyFileSystem
-
-    /// 文件失效、损坏、编解码失败或其他罕见错误；只记日志并提示音。
-    case fileSystem
-}
-
 /// 图片批处理中一项没有完整完成的事实。
-nonisolated struct ImageCompressionIssue: Error, Equatable, Sendable {
+nonisolated struct ImageCompressionIssue: Equatable, Sendable {
     /// 发生失败的源文件或已经写出的目标文件。
     let itemURL: URL
 
@@ -64,7 +52,7 @@ nonisolated struct ImageCompressionIssue: Error, Equatable, Sendable {
     let stage: ImageCompressionIssueStage
 
     /// 决定用户反馈策略的稳定错误类别。
-    let kind: ImageCompressionIssueKind
+    let kind: FileSystemErrorKind
 
     /// 用于日志和稳定分类的底层错误快照。
     let systemError: SystemErrorSnapshot
@@ -84,9 +72,6 @@ nonisolated struct ImageCompressionReport: Equatable, Sendable {
 
 /// 压缩图片命令的完整类型化结果。
 nonisolated enum ImageCompressionOutcome: Equatable, Sendable {
-    /// Finder 快照不再包含完整有效的图片选择；记录日志并播放提示音。
-    case targetUnavailable
-
     /// 用户取消设置窗口；正常静默结束。
     case cancelled
 
@@ -146,13 +131,13 @@ nonisolated private enum ImageCompressionProcessingError: LocalizedError {
     }
 }
 
-/// 单项执行后同时保留成功输出和非致命的文件时间问题。
-nonisolated private struct ImageCompressionItemResult {
-    /// 成功写入时的输出 URL；编解码或写入失败时为 `nil`。
-    let outputURL: URL?
+/// 单项要么没有输出，要么保留输出及可选的时间属性问题。
+nonisolated private enum ImageCompressionItemResult {
+    /// 编解码或写入失败，没有可用输出。
+    case failed(ImageCompressionIssue)
 
-    /// 当前源文件产生的零个或一个分类问题。
-    let issue: ImageCompressionIssue?
+    /// JPG 已写入；时间属性写入可能单独失败。
+    case output(URL, fileDateIssue: ImageCompressionIssue?)
 }
 
 // MARK: - ==================== 执行管线编排 ====================
@@ -160,9 +145,9 @@ nonisolated private struct ImageCompressionItemResult {
 /// 在主应用中请求设置、压缩选中图片并呈现批量结果。
 @MainActor
 struct CompressImagesHandler: ContextCommandHandling {
-    /// 先验证点击快照，再请求设置并在后台执行不可变计划。
-    /// - Parameter command: Extension 冻结项目选择后构造的命令。
-    /// - Returns: 取消、目标失效或批量处理报告。
+    /// 请求设置，再在后台执行命令携带的非空图片选择。
+    /// - Parameter command: Extension 已验证图片类型后构造的命令。
+    /// - Returns: 取消或批量处理报告。
     @concurrent nonisolated func execute(
         _ command: CompressImagesCommand
     ) async -> ImageCompressionOutcome {
@@ -182,20 +167,14 @@ struct CompressImagesHandler: ContextCommandHandling {
         _ command: CompressImagesCommand,
         progress: ContextCommandProgressReporter?
     ) async -> ImageCompressionOutcome {
-        let imageURLs = Self.selectedImageURLs(for: command.finderContext)
-        guard let imageURLs else {
-            return .targetUnavailable
-        }
+        let imageURLs = command.selection.urls
 
         guard let settings = await ImageCompressionSettingsPrompt.request() else {
             return .cancelled
         }
 
         if let progress {
-            await progress.begin(
-                totalUnitCount: imageURLs.count,
-                allowsCancellation: true
-            )
+            await progress.begin(totalUnitCount: imageURLs.count)
         }
 
         let plan = Self.makePlan(
@@ -205,22 +184,6 @@ struct CompressImagesHandler: ContextCommandHandling {
         )
         let report = await Self.execute(plan, progress: progress)
         return .completed(report)
-    }
-
-    // MARK: - ==================== 纯函数：恢复 Finder 选择 ====================
-
-    /// 从已经通过 Extension 类型判断的项目快照恢复源 URL。
-    /// - Parameter snapshot: Finder 请求菜单时冻结的项目上下文。
-    /// - Returns: 保持 Finder 顺序的标准化 URL；上下文不合法时为 `nil`。
-    private nonisolated static func selectedImageURLs(
-        for snapshot: FinderContextSnapshot
-    ) -> [URL]? {
-        guard case .items(let selection) = snapshot else {
-            return nil
-        }
-
-        let urls = selection.urls.map(\.standardizedFileURL)
-        return urls
     }
 
     // MARK: - ==================== 纯函数：构造批量执行计划 ====================
@@ -289,11 +252,14 @@ struct CompressImagesHandler: ContextCommandHandling {
                     imageIOQuality: plan.imageIOQuality
                 )
             }
-            if let outputURL = result.outputURL {
-                outputURLs.append(outputURL)
-            }
-            if let issue = result.issue {
+            switch result {
+            case .failed(let issue):
                 issues.append(issue)
+            case .output(let outputURL, let fileDateIssue):
+                outputURLs.append(outputURL)
+                if let fileDateIssue {
+                    issues.append(fileDateIssue)
+                }
             }
             if let progress {
                 await progress.advance()
@@ -321,9 +287,8 @@ struct CompressImagesHandler: ContextCommandHandling {
                 imageIOQuality: imageIOQuality
             )
         } catch {
-            return ImageCompressionItemResult(
-                outputURL: nil,
-                issue: issue(
+            return .failed(
+                issue(
                     for: error,
                     itemURL: item.sourceURL,
                     stage: (error as? ImageCompressionProcessingError)?.stage
@@ -339,9 +304,8 @@ struct CompressImagesHandler: ContextCommandHandling {
                 for: item.sourceURL
             )
         } catch {
-            return ImageCompressionItemResult(
-                outputURL: nil,
-                issue: issue(
+            return .failed(
+                issue(
                     for: error,
                     itemURL: item.sourceURL.deletingLastPathComponent(),
                     stage: .write
@@ -357,14 +321,11 @@ struct CompressImagesHandler: ContextCommandHandling {
                 ],
                 ofItemAtPath: outputURL.path
             )
-            return ImageCompressionItemResult(
-                outputURL: outputURL,
-                issue: nil
-            )
+            return .output(outputURL, fileDateIssue: nil)
         } catch {
-            return ImageCompressionItemResult(
-                outputURL: outputURL,
-                issue: issue(
+            return .output(
+                outputURL,
+                fileDateIssue: issue(
                     for: error,
                     itemURL: outputURL,
                     stage: .fileDates
@@ -541,21 +502,10 @@ struct CompressImagesHandler: ContextCommandHandling {
         stage: ImageCompressionIssueStage
     ) -> ImageCompressionIssue {
         let systemError = SystemErrorSnapshot(capturing: error)
-        let kind: ImageCompressionIssueKind
-
-        switch FileSystemErrorKind(classifying: systemError) {
-        case .permissionDenied:
-            kind = .permissionDenied
-        case .readOnlyFileSystem:
-            kind = .readOnlyFileSystem
-        case .unavailable, .other:
-            kind = .fileSystem
-        }
-
         return ImageCompressionIssue(
             itemURL: itemURL,
             stage: stage,
-            kind: kind,
+            kind: FileSystemErrorKind(classifying: systemError),
             systemError: systemError
         )
     }
@@ -629,9 +579,6 @@ private enum ImageCompressionFeedback {
         ImageCompressionOutcomeLogger.log(outcome, requestID: requestID)
 
         switch outcome {
-        case .targetUnavailable:
-            NSSound.beep()
-
         case .cancelled:
             return
 
@@ -666,11 +613,6 @@ private enum ImageCompressionOutcomeLogger {
         requestID: UUID
     ) {
         switch outcome {
-        case .targetUnavailable:
-            logger.error(
-                "Could not resolve image targets for request \(requestID.uuidString, privacy: .public)"
-            )
-
         case .cancelled:
             logger.debug(
                 "Cancelled image-compression request \(requestID.uuidString, privacy: .public)"

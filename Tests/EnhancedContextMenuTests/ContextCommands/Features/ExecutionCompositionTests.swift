@@ -44,8 +44,8 @@ final class ExecutionCompositionTests: XCTestCase {
                 .systemSymbol(name: "eye.slash"),
                 .systemSymbol(name: "eye"),
                 .systemSymbol(name: "photo.badge.arrow.down"),
-                .requiredApplication,
-                .requiredApplication,
+                .application(OpenInVSCodeCommand.applicationRequirement),
+                .application(OpenInITerm2Command.applicationRequirement),
             ]
         )
     }

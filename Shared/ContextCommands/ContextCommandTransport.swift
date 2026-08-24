@@ -31,7 +31,7 @@ nonisolated struct ContextCommandEnvelope: Codable, Equatable, Sendable {
 /// 跨进程传输的一次右键命令请求。
 nonisolated struct ContextCommandRequest: Codable, Equatable, Sendable {
     /// 当前请求负载格式版本。
-    static let currentSchemaVersion = 5
+    static let currentSchemaVersion = 6
 
     /// 生成该请求时使用的格式版本。
     let schemaVersion: Int

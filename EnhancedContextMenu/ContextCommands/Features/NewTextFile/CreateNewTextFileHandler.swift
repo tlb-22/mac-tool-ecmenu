@@ -4,12 +4,6 @@ import OSLog
 
 // MARK: - ==================== 类型化计划与结果 ====================
 
-/// 描述一次新建 TXT 执行所需的、已经解析完成的不可变计划。
-struct CreateNewTextFilePlan: Equatable, Sendable {
-    /// 实际写入新文件的目标目录。
-    let directoryURL: URL
-}
-
 /// 描述一次成功创建产生的事实，供反馈阶段使用。
 struct CreateNewTextFileSuccess: Equatable, Sendable {
     /// 已经创建且需要在 Finder 中选中的文件。
@@ -21,9 +15,6 @@ struct CreateNewTextFileSuccess: Equatable, Sendable {
 
 /// 新建 TXT 用例中会影响后续反馈策略的失败类型。
 enum CreateNewTextFileFailure: Error, Sendable {
-    /// Finder 快照无法确定唯一目标；记录日志并播放系统错误提示音。
-    case targetUnavailable
-
     /// 已解析的目标目录在执行前失效；记录日志并播放系统错误提示音。
     case directoryUnavailable(URL, SystemErrorSnapshot)
 
@@ -56,122 +47,13 @@ struct CreateNewTextFileHandler: ContextCommandHandling {
     ) async -> CreateNewTextFileOutcome {
         let startedAt = DispatchTime.now().uptimeNanoseconds
 
-        return Self.executeSynchronously(
-            command,
+        return Self.execute(
+            in: command.directoryPath,
             startedAt: startedAt
         )
     }
 
-    /// 在非主线程边界顺序组合事实读取、纯规划和文件系统执行。
-    /// - Parameters:
-    ///   - command: Extension 采集 Finder 快照后构造的命令。
-    ///   - startedAt: 整条命令执行管线的单调时钟起点。
-    /// - Returns: 文件创建成功事实或分类后的失败。
-    private nonisolated static func executeSynchronously(
-        _ command: CreateNewTextFileCommand,
-        startedAt: UInt64
-    ) -> CreateNewTextFileOutcome {
-        let snapshot = command.finderContext
-
-        let directoryURLs = readDirectoryURLs(for: snapshot)
-        return makePlan(
-            for: snapshot,
-            directoryURLs: directoryURLs
-        ).flatMap { plan in
-            execute(plan, startedAt: startedAt)
-        }
-    }
-
-    // MARK: - ==================== 副作用：读取文件系统事实 ====================
-
-    /// 读取快照中候选 URL 的目录类型，形成纯规划阶段的事实集合。
-    /// - Parameter snapshot: Finder 请求菜单时冻结的上下文。
-    /// - Returns: 候选中当前确实指向目录的标准化 URL 集合。
-    private nonisolated static func readDirectoryURLs(
-        for snapshot: FinderContextSnapshot
-    ) -> Set<URL> {
-        return Set(
-            snapshot.urls
-                .filter(fileSystemIsDirectory)
-                .map(\.standardizedFileURL)
-        )
-    }
-
-    /// 查询一个 URL 当前是否指向目录。
-    /// - Parameter url: 需要检查的文件 URL。
-    /// - Returns: URL 存在且是目录时为 `true`。
-    private nonisolated static func fileSystemIsDirectory(_ url: URL) -> Bool {
-        if let value = try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory {
-            return value
-        }
-
-        var isDirectory: ObjCBool = false
-        FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory)
-        return isDirectory.boolValue
-    }
-
-    // MARK: - ==================== 纯函数：构造执行计划与候选路径 ====================
-
-    /// 根据 Finder 快照和已经读取的目录事实构造执行计划。
-    /// - Parameters:
-    ///   - snapshot: 不可变的 Finder 上下文。
-    ///   - directoryURLs: 系统读取阶段确认的目录集合。
-    /// - Returns: 可执行计划，或无法解析目标的类型化失败。
-    nonisolated static func makePlan(
-        for snapshot: FinderContextSnapshot,
-        directoryURLs: Set<URL>
-    ) -> Result<CreateNewTextFilePlan, CreateNewTextFileFailure> {
-        guard let directoryURL = targetDirectory(
-            for: snapshot,
-            directoryURLs: directoryURLs
-        ) else {
-            return .failure(.targetUnavailable)
-        }
-
-        return .success(
-            CreateNewTextFilePlan(
-                directoryURL: directoryURL.standardizedFileURL
-            )
-        )
-    }
-
-    /// 只依据输入值解析应当创建文件的目录，不读取文件系统或 Finder 状态。
-    /// - Parameters:
-    ///   - snapshot: Finder 报告的菜单类型、目标和选择集合。
-    ///   - directoryURLs: 已知为目录的 URL 集合。
-    /// - Returns: 目标目录；输入不足或不符合菜单规则时为 `nil`。
-    nonisolated static func targetDirectory(
-        for snapshot: FinderContextSnapshot,
-        directoryURLs: Set<URL>
-    ) -> URL? {
-        let normalizedDirectoryURLs = Set(
-            directoryURLs.map(\.standardizedFileURL)
-        )
-        let isDirectory: (URL) -> Bool = {
-            normalizedDirectoryURLs.contains($0.standardizedFileURL)
-        }
-
-        switch snapshot {
-        case .container(let path):
-            return URL(fileURLWithPath: path).standardizedFileURL
-
-        case .items(let selection):
-            guard selection.urls.count == 1,
-                  let selectedURL = selection.urls.first else {
-                return nil
-            }
-            return isDirectory(selectedURL)
-                ? selectedURL
-                : selectedURL.deletingLastPathComponent()
-
-        case .sidebar(let path):
-            let directoryURL = URL(fileURLWithPath: path).standardizedFileURL
-            guard isDirectory(directoryURL) else {
-                return nil
-            }
-            return directoryURL
-        }
-    }
+    // MARK: - ==================== 纯函数：构造候选路径 ====================
 
     /// 根据业务命名规则构造指定序号的 TXT 候选 URL。
     /// - Parameters:
@@ -203,18 +85,19 @@ struct CreateNewTextFileHandler: ContextCommandHandling {
 
     // MARK: - ==================== 副作用：执行计划并映射系统错误 ====================
 
-    /// 执行已经完成解析的计划，并在边界处把系统错误转换为功能错误。
+    /// 重验菜单期已解析的目录，并执行文件创建。
     /// - Parameters:
-    ///   - plan: 纯规划阶段生成的执行计划。
+    ///   - directoryURL: 命令携带的目标目录。
     ///   - startedAt: 整条命令管线的单调时钟起点。
     /// - Returns: 文件创建成功事实或分类后的失败。
     private nonisolated static func execute(
-        _ plan: CreateNewTextFilePlan,
+        in directoryPath: AbsoluteFilePath,
         startedAt: UInt64
     ) -> CreateNewTextFileOutcome {
+        let directoryURL = directoryPath.url
         do {
             let createdURL = try createEmptyTextFile(
-                in: plan.directoryURL
+                in: directoryPath
             )
             let elapsedMilliseconds = (
                 DispatchTime.now().uptimeNanoseconds - startedAt
@@ -229,21 +112,20 @@ struct CreateNewTextFileHandler: ContextCommandHandling {
             return .failure(
                 classify(
                     error,
-                    directoryURL: plan.directoryURL
+                    directoryURL: directoryURL
                 )
             )
         }
     }
 
     /// 按纯命名规则逐个排他创建，不先查询候选是否存在。
-    /// - Parameter directoryURL: 已解析的目标目录。
+    /// - Parameter directoryPath: 已解析的绝对目标目录路径。
     /// - Returns: 实际创建的文件 URL。
     /// - Throws: 目标无效、不可写或底层写入失败时抛出系统错误。
-    nonisolated static func createEmptyTextFile(in directoryURL: URL) throws -> URL {
-        guard directoryURL.isFileURL else {
-            throw CocoaError(.fileNoSuchFile)
-        }
-
+    nonisolated static func createEmptyTextFile(
+        in directoryPath: AbsoluteFilePath
+    ) throws -> URL {
+        let directoryURL = directoryPath.url
         var isDirectory: ObjCBool = false
         guard FileManager.default.fileExists(
             atPath: directoryURL.path,
@@ -340,7 +222,7 @@ nonisolated enum CreateNewTextFileAlertContent {
         case .permissionDenied(let url, _),
              .readOnlyFileSystem(let url, _):
             directoryURL = url
-        case .targetUnavailable, .directoryUnavailable, .fileSystem:
+        case .directoryUnavailable, .fileSystem:
             return nil
         }
 
@@ -387,11 +269,6 @@ private enum CreateNewTextFileOutcomeLogger {
         requestID: UUID
     ) {
         switch failure {
-        case .targetUnavailable:
-            logger.error(
-                "Could not resolve a target for create-new-text-file request \(requestID.uuidString, privacy: .public)"
-            )
-
         case .directoryUnavailable(let directoryURL, let error):
             logFileSystemFailure(
                 "Target directory became unavailable",

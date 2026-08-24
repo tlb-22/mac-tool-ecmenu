@@ -1,84 +1,124 @@
 import Foundation
 
+/// 外部应用命令允许的目标种类。
+nonisolated enum OpenInApplicationTargetKind: Equatable, Sendable {
+    /// 文件或目录都可以成为目标。
+    case item
+
+    /// 只有当前仍然存在的目录可以成为目标。
+    case directory
+
+    /// 执行期是否必须重新确认目录类型。
+    var requiresDirectory: Bool { self == .directory }
+}
+
+/// 由具体类型完整声明应用依赖和目标约束的外部应用命令。
+nonisolated protocol OpenInApplicationCommand: ContextCommandPayload {
+    /// 由一个值绑定产品身份、应用依赖和目标约束。
+    static var definition: OpenInApplicationCommandDefinition { get }
+
+    /// 菜单期解析出的唯一绝对目标路径。
+    var targetPath: AbsoluteFilePath { get }
+
+    /// 创建携带唯一目标的具体命令。
+    init(targetPath: AbsoluteFilePath)
+}
+
+/// 把外部应用命令的展示、依赖和目标规则绑定为单一声明。
+nonisolated struct OpenInApplicationCommandDefinition: Equatable, Sendable {
+    /// 路由和配置使用的稳定功能身份。
+    private let featureID: ContextCommandFeatureID
+
+    /// Finder 菜单和主应用界面共用的产品名称。
+    private let title: String
+
+    /// Launch Services 需要定位的固定应用。
+    let applicationRequirement: ContextCommandApplicationRequirement
+
+    /// 该命令接受的目标种类。
+    let targetKind: OpenInApplicationTargetKind
+
+    /// 由唯一应用依赖派生菜单图标，不另存一份可能分歧的状态。
+    var descriptor: ContextCommandDescriptor {
+        ContextCommandDescriptor(
+            id: featureID.rawValue,
+            title: title,
+            icon: .application(applicationRequirement)
+        )
+    }
+
+    /// 创建一个图标与执行依赖不可能分歧的外部应用声明。
+    init(
+        id: String,
+        title: String,
+        applicationRequirement: ContextCommandApplicationRequirement,
+        targetKind: OpenInApplicationTargetKind
+    ) {
+        precondition(!title.isEmpty)
+        featureID = ContextCommandFeatureID(rawValue: id)
+        self.title = title
+        self.applicationRequirement = applicationRequirement
+        self.targetKind = targetKind
+    }
+}
+
+extension OpenInApplicationCommand {
+    /// `ContextCommandPayload` 使用的身份由同一外部应用声明派生。
+    nonisolated static var descriptor: ContextCommandDescriptor {
+        definition.descriptor
+    }
+
+    /// 执行端使用的应用与 descriptor 图标始终来自同一个值。
+    nonisolated static var applicationRequirement: ContextCommandApplicationRequirement {
+        definition.applicationRequirement
+    }
+
+    /// 菜单端与执行端共用同一目标约束。
+    nonisolated static var targetKind: OpenInApplicationTargetKind {
+        definition.targetKind
+    }
+}
+
 /// 请求主应用把 Finder 的单一目标交给 Visual Studio Code。
-nonisolated struct OpenInVSCodeCommand: ContextCommandPayload, Equatable {
-    /// VS Code 命令唯一一份稳定身份、产品名称、菜单图标和应用依赖。
-    static let descriptor = ContextCommandDescriptor(
+nonisolated struct OpenInVSCodeCommand: OpenInApplicationCommand, Equatable {
+    /// VS Code 命令的单一产品与执行声明。
+    static let definition = OpenInApplicationCommandDefinition(
         id: "open-in-vscode",
         title: "进入 Visual Studio Code",
-        icon: .requiredApplication,
-        requiredApplication: ContextCommandApplicationRequirement(
+        applicationRequirement: ContextCommandApplicationRequirement(
             bundleIdentifier: "com.microsoft.VSCode",
             displayName: "Visual Studio Code"
-        )
+        ),
+        targetKind: .item
     )
 
-    /// Extension 在 Finder 请求菜单时冻结的上下文。
-    let finderContext: FinderContextSnapshot
+    /// 菜单期解析出的唯一目标。
+    let targetPath: AbsoluteFilePath
 
-    /// 创建携带指定 Finder 快照的 VS Code 命令。
-    init(finderContext: FinderContextSnapshot) {
-        self.finderContext = finderContext
+    /// 创建携带指定目标的 VS Code 命令。
+    init(targetPath: AbsoluteFilePath) {
+        self.targetPath = targetPath
     }
 }
 
 /// 请求主应用让 iTerm2 进入 Finder 的单一目录目标。
-nonisolated struct OpenInITerm2Command: ContextCommandPayload, Equatable {
-    /// iTerm2 命令唯一一份稳定身份、产品名称、菜单图标和应用依赖。
-    static let descriptor = ContextCommandDescriptor(
+nonisolated struct OpenInITerm2Command: OpenInApplicationCommand, Equatable {
+    /// iTerm2 命令的单一产品与执行声明。
+    static let definition = OpenInApplicationCommandDefinition(
         id: "open-in-iterm2",
         title: "进入 iTerm2",
-        icon: .requiredApplication,
-        requiredApplication: ContextCommandApplicationRequirement(
+        applicationRequirement: ContextCommandApplicationRequirement(
             bundleIdentifier: "com.googlecode.iterm2",
             displayName: "iTerm2"
-        )
+        ),
+        targetKind: .directory
     )
 
-    /// Extension 在 Finder 请求菜单时冻结的上下文。
-    let finderContext: FinderContextSnapshot
+    /// 菜单期解析出的唯一目录目标。
+    let targetPath: AbsoluteFilePath
 
-    /// 创建携带指定 Finder 快照的 iTerm2 命令。
-    init(finderContext: FinderContextSnapshot) {
-        self.finderContext = finderContext
-    }
-}
-
-/// 只依据 Finder 快照和已读取的文件系统事实解析外部应用目标。
-nonisolated enum OpenInApplicationTargetResolver {
-    /// 解析单选或目录上下文中的唯一目标。
-    /// - Parameters:
-    ///   - snapshot: Finder 请求菜单时冻结的上下文。
-    ///   - existingURLs: 跟随符号链接后仍然存在的 URL 集合。
-    ///   - directoryURLs: 跟随符号链接后指向目录的 URL 集合。
-    ///   - requiresDirectory: 目标是否必须是目录。
-    /// - Returns: 应交给外部应用的原始 URL；上下文无效时为 `nil`。
-    static func targetURL(
-        for snapshot: FinderContextSnapshot,
-        existingURLs: Set<URL>,
-        directoryURLs: Set<URL>,
-        requiresDirectory: Bool
-    ) -> URL? {
-        let existingURLs = Set(existingURLs.map(\.standardizedFileURL))
-        let directoryURLs = Set(directoryURLs.map(\.standardizedFileURL))
-        let candidate: URL?
-
-        switch snapshot {
-        case .container(let path), .sidebar(let path):
-            candidate = URL(fileURLWithPath: path)
-
-        case .items(let selection):
-            guard selection.urls.count == 1 else {
-                return nil
-            }
-            candidate = selection.urls.first
-        }
-
-        guard let targetURL = candidate?.standardizedFileURL,
-              existingURLs.contains(targetURL),
-              !requiresDirectory || directoryURLs.contains(targetURL) else {
-            return nil
-        }
-        return targetURL
+    /// 创建携带指定目录目标的 iTerm2 命令。
+    init(targetPath: AbsoluteFilePath) {
+        self.targetPath = targetPath
     }
 }

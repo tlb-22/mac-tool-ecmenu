@@ -35,7 +35,7 @@ Finder
 
 ## 主应用生命周期
 
-主应用使用单个长期存活的进程同时承载命令服务器和配置界面，并明确区分两个呈现状态：
+主应用使用单个长期存活的进程同时承载命令服务器和按需打开的配置会话：
 
 - 配置会话打开时，`StatusPageWindowController` 拥有唯一 Status Page，应用使用 `.regular` 并显示在程序坞中。最小化窗口不关闭配置会话。
 - 点击关闭按钮、按 `Command-W` 或选择 `Command-Q` 会关闭配置会话，应用切换为 `.accessory` 并从程序坞隐藏，但命令服务器、既有任务和业务窗口能力继续存在。
@@ -49,7 +49,7 @@ Finder
 
 每个运行 target 的 `ContextCommands` 根目录保存稳定机制；`Features` 保存增量业务：
 
-- 稳定机制负责 Finder 上下文解释、菜单值树、调用端 AppKit 视觉配置、类型擦除、认证传输、Router、任务生命周期和可选命令进度；两端相同的无场景画布变换由 `Shared/Rendering` 提供。
+- 稳定机制负责 Finder 上下文解释、菜单值树、调用端 AppKit 视觉配置、类型擦除、认证传输、Router、任务生命周期和惰性命令进度；两端相同的无场景画布变换由 `Shared/Rendering` 提供。
 - `Features/FinderComposition.swift` 只按产品顺序注册 Finder Feature。
 - `Features/ExecutionComposition.swift` 只按产品顺序注册主应用 Handler。
 - `Features/<功能>/` 在 Shared、Finder Extension 和主应用三端保持路径对应。
@@ -61,23 +61,23 @@ Finder
 菜单使用两层身份：
 
 - **Feature ID**是跨进程命令、用户配置和状态页使用的产品功能身份。
-- **Action ID**由 Feature ID 与 Feature 内局部 ID 组成，只负责定位具体菜单叶子及其参数。
+- **Action ID**由 Feature ID 与 Feature 内局部 ID 组成，只负责稳定标识具体菜单叶子。
 
-简单功能遵循 `SingleActionContextMenuFeature`，只声明可见性和命令构造，名称与图标来自共享 Command descriptor。复杂功能可以在同一个 Feature 文件内使用 `ContextMenuFeatureMenu` 声明 Action、分隔线和递归子菜单；同一种 Command 的不同 Action 可以携带不同参数。这样新增一个简单功能仍然只增加三端功能切片和两行注册，未来的多叶子功能也不需要伪装成多个 Feature。
+简单功能遵循 `SingleActionContextMenuFeature`，只声明可见性和命令构造，名称与图标来自共享 Command descriptor。复杂功能直接在同一个 Feature 文件内声明 `ContextMenuNode<ContextMenuAction<Command>>` Action 树，其中可以包含 Action、分隔线和递归子菜单；同一种 Command 的不同 Action 可以携带不同参数。这样新增一个简单功能仍然只增加三端功能切片和两行注册，未来的多叶子功能也不需要伪装成多个 Feature。
 
-Finder 菜单使用一次短生命周期求值，把冻结快照和同次构建共享的系统事实合并为叶子可见性。不可执行叶子在布局阶段删除；每个实际渲染的叶子取得唯一 `NSMenuItem.tag`，绑定“Action ID + 本次菜单语义快照”。后续菜单构建不会覆盖仍在显示的旧菜单上下文。
+Finder 菜单使用一次短生命周期求值，把冻结快照和同次构建共享的系统事实合并为叶子可见性。不可执行叶子在布局阶段删除；每个实际渲染的叶子取得唯一 `NSMenuItem.tag`，绑定本次构建产生的 `PreparedContextMenuAction`。Prepared Action 已捕获构造完成的类型化 Command 及发送行为，后续菜单构建不会覆盖仍在显示的旧菜单上下文。
 
 ## Finder 语义上下文
 
-Finder 原始 `FIMenuKind`、`targetedURL()` 和 `selectedItemURLs()` 只存在于 Extension 的 `FinderContextReader` 边界。跨进程只允许三种有效值：
+Finder 原始 `FIMenuKind`、`targetedURL()` 和 `selectedItemURLs()` 只存在于 Extension 的 `FinderContextReader` 边界。`FinderContextSnapshot` 也只在 Extension 内部使用，并且只允许三种有效值：
 
 ```swift
-.container(path: String)
+.container(path: AbsoluteFilePath)
 .items(selection: FinderItemSelection)
-.sidebar(path: String)
+.sidebar(path: AbsoluteFilePath)
 ```
 
-`FinderItemSelection` 保证路径集合非空并保留 Finder 顺序；快照使用显式 Codable 字段。存在性、文件或目录类型、权限和具体目标规则仍由各 Feature/Handler 读取，不进入共享上下文。
+`AbsoluteFilePath` 保证路径已经标准化且为绝对文件路径；`FinderItemSelection` 保证路径集合非空并保留 Finder 顺序。Feature 在菜单求值时把快照转换为功能专属的类型化 Command；跨进程只编码各 Handler 执行所需的最小字段，例如目标目录或选择集合。执行时可能变化的存在性、文件或目录类型、权限和具体目标规则仍由 Handler 读取。
 
 ## 命令执行与副作用
 
@@ -93,7 +93,7 @@ Finder 原始 `FIMenuKind`、`targetedURL()` 和 `selectedItemURLs()` 只存在�
 
 单目标全有或全无操作使用 `Result`；允许部分成功的批量操作使用包含成功项与问题集合的 Report。`Optional` 只表达正常缺席，例如菜单不显示。通用 Router 为每个已恢复命令建立独立 Task；具体功能只有出现真实顺序、容量或资源冲突时才增加局部调度策略。
 
-Router 还为每次执行提供惰性进度 reporter。普通 Handler 不需要创建进度状态；长任务在真实工作开始时声明确定总数，在功能定义的安全边界推进计数并选择是否响应协作取消。主应用只为持续超过显示阈值的任务维护共享非模态窗口，不因进度而串行化命令。
+Router 还为每次执行提供惰性进度 reporter。普通 Handler 不需要创建进度状态；当前所有进入进度中心的任务都支持协作取消，并在真实工作开始时声明确定总数、在功能定义的安全边界响应取消和推进计数。主应用只为持续超过显示阈值的任务维护共享非模态窗口，不因进度而串行化命令。
 
 图片压缩的设置领域值与可注入偏好存储位于 `ImageCompressionSettings.swift`，AppKit Prompt、窗口、表单和输入格式化位于 `ImageCompressionSettingsWindow.swift`。两者分别随设置语义和界面变化，不继续拆分；ImageIO 执行保持在图片压缩 Handler，直到出现第二个真实复用者。
 
@@ -142,7 +142,7 @@ EnhancedContextMenu/
 │   └── ContextCommands/
 │       ├── ContextCommandServer.swift             # 命令解码、恢复与路由
 │       ├── ContextCommandExecution.swift          # Handler 注册、恢复、Router 与 Task
-│       ├── ContextCommandProgress.swift           # 可选进度状态、协作取消与共享窗口
+│       ├── ContextCommandProgress.swift           # 惰性进度状态、协作取消与共享窗口
 │       ├── FileNaming.swift                       # 跨功能文件冲突命名规则
 │       ├── SystemError.swift                      # 系统错误快照与分类
 │       └── Features/
@@ -188,7 +188,7 @@ EnhancedContextMenu/
 ├── Tests/
 │   ├── CompositionExpectation.swift               # 测试期两端配对基线
 │   ├── EnhancedContextMenuTests/                  # 主应用、Shared 与 Handler 测试
-│   │   ├── App/ApplicationPresentationTests.swift # 配置会话状态转换测试
+│   │   ├── App/ApplicationInitialOpenSourceTests.swift # 首次打开来源判定测试
 │   │   ├── AppControl/LoginItemControllerTests.swift # 登录项状态与副作用边界测试
 │   │   └── ProjectTestDirectory.swift             # 项目内 fixture 边界
 │   ├── EnhancedContextMenuFinderExtensionTests/
@@ -219,17 +219,17 @@ EnhancedContextMenu/
 新增一个简单右键功能只需要：
 
 1. 在三端对应的 `Features/<功能>/` 增加 Command、Feature 和 Handler。
-2. 在 Command descriptor 中声明唯一 Feature ID、产品名称、图标和可选应用依赖。
+2. 在 Command descriptor 中声明唯一 Feature ID、产品名称与图标；依赖外部应用时使用 `.application(requirement)` 图标，由图标本身携带应用依赖。
 3. 在 Finder Composition 与 Execution Composition 各增加一行。
 4. 在对应 target 增加纯规则、契约和边界测试。
 
-同一功能需要多个菜单叶子时，在该 Feature 内声明 Action 子树和参数构造；配置与执行端仍只注册一次 Feature/Handler。稳定机制不增加产品功能分支。
+同一功能需要多个菜单叶子时，在该 Feature 内声明 `ContextMenuNode` Action 树和参数构造；配置与执行端仍只注册一次 Feature/Handler。稳定机制不增加产品功能分支。
 
 ## 验证边界
 
 - `./scripts/test.sh` 执行两个正式 XCTest target，并额外编译独立 Preview App target、验证其注册表可列出；Xcode Derived Data 位于 `.derivedData/`，单次测试工作目录和显式保留的结果位于 `.artifacts/scratch/tests/`。
 - `./scripts/test-integration.sh` 使用独立 Sender 验证已经运行的主应用能够接收一次真实进程单向命令并执行，以及在独立请求/响应连接上返回菜单配置；它不覆盖 Finder 点击或主进程缺席后的启动。
-- 生命周期单元测试验证普通启动、登录启动、配置会话开关和窗口关闭事件的状态转换；登录项测试验证系统状态到开关与批准提示的映射，不固定视觉参数。关闭按钮、`Command-W`、`Command-Q`、最小化、业务窗口、登录启动及强制结束后的恢复边界按 [`scripts/Main.md`](scripts/Main.md#生命周期人工验收) 人工验收。
+- 启动来源单元测试验证首次 Open Application 事件对用户打开与登录项打开的判定；登录项测试验证系统状态到开关与批准提示的映射，不固定视觉参数。配置会话、关闭按钮、`Command-W`、`Command-Q`、最小化、业务窗口、登录启动及强制结束后的恢复边界按 [`scripts/Main.md`](scripts/Main.md#生命周期人工验收) 人工验收。
 - `./scripts/preview-ui.sh <preview-id>` 在独立预览进程中使用假状态启动指定的真实界面，不执行对应业务命令或中断产品进程。
 - Finder Extension 源码变化后使用 `./scripts/run-debug.sh --refresh-finder`，并确认系统只登记项目 Debug 产物且两个进程各有一个实例。
 - 具体功能验收矩阵位于相应 Requirement 与 Technical 文档，不在本文件重复维护。

@@ -2,14 +2,11 @@ import Foundation
 
 /// 跨主应用和 Finder Extension 共享的不可变菜单配置值。
 nonisolated struct MenuConfiguration: Codable, Equatable, Sendable {
-    /// 当前持久化和传输格式版本。
-    static let currentSchemaVersion = 3
+    /// 当前持久化和传输格式版本；领域状态本身不保存该值。
+    static let currentSchemaVersion = MenuConfigurationEnvelope.currentSchemaVersion
 
     /// 所有功能使用产品默认可见性时的配置。
     static let standard = MenuConfiguration()
-
-    /// 生成该配置所使用的格式版本。
-    let schemaVersion: Int
 
     /// 产品是否向 Finder 贡献任何右键菜单项。
     private(set) var isEnabled: Bool
@@ -17,13 +14,11 @@ nonisolated struct MenuConfiguration: Codable, Equatable, Sendable {
     /// 偏离默认可见状态的功能稳定标识集合。
     private(set) var hiddenFeatureIDs: Set<String>
 
-    /// 创建指定格式版本、产品启用状态和隐藏功能集合的配置。
+    /// 创建产品启用状态和隐藏功能集合组成的有效领域配置。
     init(
-        schemaVersion: Int = currentSchemaVersion,
         isEnabled: Bool = true,
         hiddenFeatureIDs: Set<String> = []
     ) {
-        self.schemaVersion = schemaVersion
         self.isEnabled = isEnabled
         self.hiddenFeatureIDs = hiddenFeatureIDs
     }
@@ -56,7 +51,24 @@ nonisolated struct MenuConfiguration: Codable, Equatable, Sendable {
         }
     }
 
-    // MARK: - ==================== 纯函数：持久化格式迁移 ====================
+    /// 通过版本化信封恢复领域状态。
+    init(from decoder: Decoder) throws {
+        self = try MenuConfigurationEnvelope(from: decoder).configuration
+    }
+
+    /// 把领域状态包装为当前版本信封。
+    func encode(to encoder: Encoder) throws {
+        try MenuConfigurationEnvelope(configuration: self).encode(to: encoder)
+    }
+}
+
+/// 持久化与传输专用的版本信封；解码后只向业务层交付有效配置。
+nonisolated private struct MenuConfigurationEnvelope: Codable, Sendable {
+    /// 当前持久化和传输格式版本。
+    static let currentSchemaVersion = 3
+
+    /// 从当前或旧格式恢复出的有效领域状态。
+    let configuration: MenuConfiguration
 
     /// 配置持久化和传输使用的稳定字段名。
     private enum CodingKeys: String, CodingKey {
@@ -66,7 +78,12 @@ nonisolated struct MenuConfiguration: Codable, Equatable, Sendable {
         case visibilityOverrides
     }
 
-    /// 解码当前格式，并把旧格式中的关闭覆盖迁移为隐藏功能集合。
+    /// 使用当前领域状态创建待编码信封。
+    init(configuration: MenuConfiguration) {
+        self.configuration = configuration
+    }
+
+    /// 解码当前格式，并把旧格式中的关闭覆盖迁移为领域状态。
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         let decodedVersion = try container.decodeIfPresent(
@@ -76,36 +93,40 @@ nonisolated struct MenuConfiguration: Codable, Equatable, Sendable {
 
         switch decodedVersion {
         case Self.currentSchemaVersion:
-            isEnabled = try container.decode(
-                Bool.self,
-                forKey: .isEnabled
-            )
-            hiddenFeatureIDs = Set(
-                try container.decodeIfPresent(
-                    [String].self,
-                    forKey: .hiddenFeatureIDs
-                ) ?? []
+            configuration = MenuConfiguration(
+                isEnabled: try container.decode(
+                    Bool.self,
+                    forKey: .isEnabled
+                ),
+                hiddenFeatureIDs: Set(
+                    try container.decodeIfPresent(
+                        [String].self,
+                        forKey: .hiddenFeatureIDs
+                    ) ?? []
+                )
             )
 
         case 2:
-            isEnabled = true
-            hiddenFeatureIDs = Set(
-                try container.decodeIfPresent(
-                    [String].self,
-                    forKey: .hiddenFeatureIDs
-                ) ?? []
+            configuration = MenuConfiguration(
+                hiddenFeatureIDs: Set(
+                    try container.decodeIfPresent(
+                        [String].self,
+                        forKey: .hiddenFeatureIDs
+                    ) ?? []
+                )
             )
 
         case 1:
-            isEnabled = true
             let overrides = try container.decodeIfPresent(
                 [String: Bool].self,
                 forKey: .visibilityOverrides
             ) ?? [:]
-            hiddenFeatureIDs = Set(
-                overrides.compactMap { identifier, isVisible in
-                    isVisible ? nil : identifier
-                }
+            configuration = MenuConfiguration(
+                hiddenFeatureIDs: Set(
+                    overrides.compactMap { identifier, isVisible in
+                        isVisible ? nil : identifier
+                    }
+                )
             )
 
         default:
@@ -115,16 +136,17 @@ nonisolated struct MenuConfiguration: Codable, Equatable, Sendable {
                 debugDescription: "Unsupported menu configuration schema"
             )
         }
-
-        schemaVersion = Self.currentSchemaVersion
     }
 
     /// 始终编码为当前格式，并按稳定顺序写入隐藏功能标识。
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(Self.currentSchemaVersion, forKey: .schemaVersion)
-        try container.encode(isEnabled, forKey: .isEnabled)
-        try container.encode(hiddenFeatureIDs.sorted(), forKey: .hiddenFeatureIDs)
+        try container.encode(configuration.isEnabled, forKey: .isEnabled)
+        try container.encode(
+            configuration.hiddenFeatureIDs.sorted(),
+            forKey: .hiddenFeatureIDs
+        )
     }
 }
 
@@ -152,16 +174,7 @@ nonisolated enum MenuConfigurationChannel {
     /// - Parameter data: 编码后的配置数据。
     /// - Returns: 当前格式的配置；数据无效或版本不受支持时返回 `nil`。
     static func decodedConfiguration(from data: Data) -> MenuConfiguration? {
-        guard
-            let configuration = try? JSONDecoder().decode(
-                MenuConfiguration.self,
-                from: data
-            ),
-            configuration.schemaVersion == MenuConfiguration.currentSchemaVersion
-        else {
-            return nil
-        }
-        return configuration
+        try? JSONDecoder().decode(MenuConfiguration.self, from: data)
     }
 
     /// 只广播一次重新拉取提示，不发布配置正文。

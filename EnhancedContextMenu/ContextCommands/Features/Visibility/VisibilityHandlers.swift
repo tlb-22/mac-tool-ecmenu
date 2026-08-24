@@ -26,30 +26,15 @@ nonisolated struct VisibilityPlan: Equatable, Sendable {
 
     /// 不包含点号名称、保持 Finder 选择顺序的对象。
     let itemURLs: [URL]
-
-    /// 由文件名决定为隐藏、无需也不能通过属性显示的对象数量。
-    let skippedDotItemCount: Int
-}
-
-/// 单个目录或对象失败后采用的用户反馈类别。
-nonisolated enum VisibilityIssueKind: Equatable, Sendable {
-    /// 当前进程没有修改对象的权限；操作结束后显示汇总弹窗。
-    case permissionDenied
-
-    /// 对象位于只读文件系统；操作结束后显示汇总弹窗。
-    case readOnlyFileSystem
-
-    /// 目标失效或其他罕见系统失败；仅在没有可弹窗错误时播放提示音。
-    case fileSystem
 }
 
 /// 一项没有完成的隐藏属性操作。
-nonisolated struct VisibilityIssue: Error, Equatable, Sendable {
+nonisolated struct VisibilityIssue: Equatable, Sendable {
     /// 没有完成属性写入的对象。
     let itemURL: URL
 
     /// 决定弹窗或提示音的错误类别。
-    let kind: VisibilityIssueKind
+    let kind: FileSystemErrorKind
 
     /// 底层系统错误的稳定快照。
     let systemError: SystemErrorSnapshot
@@ -60,69 +45,54 @@ nonisolated struct VisibilityReport: Equatable, Sendable {
     /// 成功达到目标状态的普通名称对象数量。
     let succeededCount: Int
 
-    /// 点号名称对象数量；它们保持原名并被静默跳过。
-    let skippedDotItemCount: Int
-
     /// 所有失败项目；成功项目不回滚。
     let issues: [VisibilityIssue]
 }
 
-/// 隐藏或显示命令的最终类型化结果。
-nonisolated enum VisibilityOutcome: Equatable, Sendable {
-    /// Finder 快照无法解析命令要求的目标范围。
-    case targetUnavailable
-
-    /// 目标范围已处理，报告可以同时包含成功和失败项目。
-    case completed(VisibilityReport)
-}
-
 // MARK: - ==================== 主应用功能 Handler ====================
 
-/// 在主应用中执行并反馈隐藏命令。
+/// 把共享命令类型静态绑定到需要达到的隐藏状态。
+nonisolated protocol VisibilityCommand: ContextCommandPayload {
+    /// 命令携带的非空 Finder 选择。
+    var selection: FinderItemSelection { get }
+
+    /// 该命令要求的固定操作。
+    static var operation: VisibilityOperation { get }
+}
+
+extension HideItemsCommand: VisibilityCommand {
+    static var operation: VisibilityOperation { .hide }
+}
+
+extension ShowItemsCommand: VisibilityCommand {
+    static var operation: VisibilityOperation { .show }
+}
+
+/// 使用具体命令类型决定隐藏或显示的共享 Handler。
 @MainActor
-struct HideItemsHandler: ContextCommandHandling {
-    /// 在通用执行器执行隐藏属性管线，不直接呈现 UI。
+struct VisibilityHandler<Command: VisibilityCommand>: ContextCommandHandling {
+    /// 在通用执行器中逐项写入隐藏属性。
     @concurrent nonisolated func execute(
-        _ command: HideItemsCommand
-    ) async -> VisibilityOutcome {
+        _ command: Command
+    ) async -> VisibilityReport {
         VisibilityExecution.execute(
-            snapshot: command.finderContext,
-            operation: .hide
+            selection: command.selection,
+            operation: Command.operation
         )
     }
 
-    /// 在主线程统一呈现隐藏结果。
-    func present(_ outcome: VisibilityOutcome, requestID: UUID) {
+    /// 使用命令类型绑定的操作呈现统一反馈。
+    func present(_ report: VisibilityReport, requestID: UUID) {
         VisibilityFeedback.present(
-            outcome,
-            operation: .hide,
+            report,
+            operation: Command.operation,
             requestID: requestID
         )
     }
 }
 
-/// 在主应用中执行并反馈显示命令。
-@MainActor
-struct ShowItemsHandler: ContextCommandHandling {
-    /// 在通用执行器执行显示属性管线，不直接呈现 UI。
-    @concurrent nonisolated func execute(
-        _ command: ShowItemsCommand
-    ) async -> VisibilityOutcome {
-        VisibilityExecution.execute(
-            snapshot: command.finderContext,
-            operation: .show
-        )
-    }
-
-    /// 在主线程统一呈现显示结果。
-    func present(_ outcome: VisibilityOutcome, requestID: UUID) {
-        VisibilityFeedback.present(
-            outcome,
-            operation: .show,
-            requestID: requestID
-        )
-    }
-}
+typealias HideItemsHandler = VisibilityHandler<HideItemsCommand>
+typealias ShowItemsHandler = VisibilityHandler<ShowItemsCommand>
 
 // MARK: - ==================== 执行管线：副作用 - 纯函数 - 副作用 ====================
 
@@ -130,44 +100,26 @@ struct ShowItemsHandler: ContextCommandHandling {
 nonisolated enum VisibilityExecution {
     /// 顺序执行完整可见性操作；调用方负责执行隔离。
     static func execute(
-        snapshot: FinderContextSnapshot,
+        selection: FinderItemSelection,
         operation: VisibilityOperation
-    ) -> VisibilityOutcome {
-        guard let itemURLs = targetURLs(for: snapshot) else {
-            return .targetUnavailable
-        }
-
+    ) -> VisibilityReport {
         let plan = makePlan(
             operation: operation,
-            itemURLs: itemURLs
+            itemURLs: selection.urls
         )
-        return .completed(execute(plan))
+        return execute(plan)
     }
 
-    // MARK: - ==================== 纯函数：构造目标范围与执行计划 ====================
-
-    /// 只接受 Finder 明确选择的对象，拒绝目录空白处和侧边栏语义。
-    static func targetURLs(
-        for snapshot: FinderContextSnapshot
-    ) -> [URL]? {
-        switch snapshot {
-        case .items(let selection):
-            return selection.urls
-        case .container, .sidebar:
-            return nil
-        }
-    }
+    // MARK: - ==================== 纯函数：构造执行计划 ====================
 
     /// 过滤不能通过隐藏属性显示的点号名称，并形成最终执行计划。
     static func makePlan(
         operation: VisibilityOperation,
         itemURLs: [URL]
     ) -> VisibilityPlan {
-        let actionableURLs = itemURLs.filter { !isDotItem($0) }
         return VisibilityPlan(
             operation: operation,
-            itemURLs: actionableURLs,
-            skippedDotItemCount: itemURLs.count - actionableURLs.count
+            itemURLs: itemURLs.filter { !isDotItem($0) }
         )
     }
 
@@ -201,7 +153,6 @@ nonisolated enum VisibilityExecution {
 
         return VisibilityReport(
             succeededCount: succeededCount,
-            skippedDotItemCount: plan.skippedDotItemCount,
             issues: issues
         )
     }
@@ -209,20 +160,9 @@ nonisolated enum VisibilityExecution {
     /// 将系统错误映射为决定批量反馈策略的稳定问题。
     static func issue(for error: Error, itemURL: URL) -> VisibilityIssue {
         let systemError = SystemErrorSnapshot(capturing: error)
-        let kind: VisibilityIssueKind
-
-        switch FileSystemErrorKind(classifying: systemError) {
-        case .permissionDenied:
-            kind = .permissionDenied
-        case .readOnlyFileSystem:
-            kind = .readOnlyFileSystem
-        case .unavailable, .other:
-            kind = .fileSystem
-        }
-
         return VisibilityIssue(
             itemURL: itemURL,
-            kind: kind,
+            kind: FileSystemErrorKind(classifying: systemError),
             systemError: systemError
         )
     }
@@ -261,32 +201,26 @@ nonisolated enum VisibilityAlertContent {
 private enum VisibilityFeedback {
     /// 成功静默；权限和只读问题弹窗；其他失败只响一次提示音。
     static func present(
-        _ outcome: VisibilityOutcome,
+        _ report: VisibilityReport,
         operation: VisibilityOperation,
         requestID: UUID
     ) {
         VisibilityOutcomeLogger.log(
-            outcome,
+            report,
             operation: operation,
             requestID: requestID
         )
 
-        switch outcome {
-        case .targetUnavailable:
+        guard !report.issues.isEmpty else {
+            return
+        }
+        if let content = VisibilityAlertContent.make(
+            for: report,
+            operation: operation
+        ) {
+            CommandAlertPresenter.present(content)
+        } else {
             NSSound.beep()
-
-        case .completed(let report):
-            guard !report.issues.isEmpty else {
-                return
-            }
-            if let content = VisibilityAlertContent.make(
-                for: report,
-                operation: operation
-            ) {
-                CommandAlertPresenter.present(content)
-            } else {
-                NSSound.beep()
-            }
         }
     }
 }
@@ -300,27 +234,19 @@ private enum VisibilityOutcomeLogger {
     )
 
     static func log(
-        _ outcome: VisibilityOutcome,
+        _ report: VisibilityReport,
         operation: VisibilityOperation,
         requestID: UUID
     ) {
-        switch outcome {
-        case .targetUnavailable:
+        for issue in report.issues {
             logger.error(
-                "Could not resolve targets for \(operation.rawValue, privacy: .public) request \(requestID.uuidString, privacy: .public)"
+                "Visibility failure for \(operation.rawValue, privacy: .public) request \(requestID.uuidString, privacy: .public) at \(issue.itemURL.path, privacy: .private) [\(issue.systemError.domain, privacy: .public):\(issue.systemError.code, privacy: .public)]: \(issue.systemError.localizedDescription, privacy: .private)"
             )
-
-        case .completed(let report):
-            for issue in report.issues {
-                logger.error(
-                    "Visibility failure for \(operation.rawValue, privacy: .public) request \(requestID.uuidString, privacy: .public) at \(issue.itemURL.path, privacy: .private) [\(issue.systemError.domain, privacy: .public):\(issue.systemError.code, privacy: .public)]: \(issue.systemError.localizedDescription, privacy: .private)"
-                )
-            }
-            if report.issues.isEmpty {
-                logger.info(
-                    "Completed \(operation.rawValue, privacy: .public) request \(requestID.uuidString, privacy: .public) for \(report.succeededCount) items"
-                )
-            }
+        }
+        if report.issues.isEmpty {
+            logger.info(
+                "Completed \(operation.rawValue, privacy: .public) request \(requestID.uuidString, privacy: .public) for \(report.succeededCount) items"
+            )
         }
     }
 }

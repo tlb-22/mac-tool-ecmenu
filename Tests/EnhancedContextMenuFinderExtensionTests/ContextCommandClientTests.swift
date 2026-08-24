@@ -9,7 +9,9 @@ final class ContextCommandClientTests: XCTestCase {
         let transport = RecordingContextCommandTransport()
         let client = ContextCommandClient(transport: transport)
         let expected = CreateNewTextFileCommand(
-            finderContext: .container(path: "/test/parent")
+            directoryPath: try XCTUnwrap(
+                AbsoluteFilePath(path: "/test/parent")
+            )
         )
 
         client.send(expected)

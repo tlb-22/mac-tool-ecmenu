@@ -49,10 +49,7 @@ struct StatusPage: View {
     /// 系统当前报告的 Finder Extension 启用状态。
     @State private var isExtensionEnabled = FIFinderSyncController.isExtensionEnabled
 
-    /// Launch Services 当前能够定位的外部应用 bundle identifier。
-    @State private var availableApplicationIdentifiers: Set<String> = []
-
-    /// 已安装外部应用的图标，由系统边界读取后交给纯呈现层。
+    /// Launch Services 当前能够定位的外部应用及其系统图标。
     @State private var applicationIcons: [String: NSImage] = [:]
 
     /// 把持久化字符串转换为页面使用的有限分类。
@@ -77,7 +74,6 @@ struct StatusPage: View {
             loginItemState: loginItemController.state,
             descriptors: ExecutionComposition.handlers.descriptors,
             configuration: menuConfiguration.configuration,
-            availableApplicationIdentifiers: availableApplicationIdentifiers,
             applicationIcons: applicationIcons,
             setEnabled: { isEnabled in
                 menuConfiguration.setEnabled(isEnabled)
@@ -122,12 +118,11 @@ struct StatusPage: View {
 
     /// 重新读取所有命令声明的外部应用可用状态与图标。
     private func refreshExternalApplications() {
-        var identifiers: Set<String> = []
         var icons: [String: NSImage] = [:]
 
         for descriptor in ExecutionComposition.handlers.descriptors {
             guard
-                let application = descriptor.requiredApplication,
+                case .application(let application) = descriptor.icon,
                 let applicationURL = NSWorkspace.shared.urlForApplication(
                     withBundleIdentifier: application.bundleIdentifier
                 )
@@ -135,13 +130,11 @@ struct StatusPage: View {
                 continue
             }
 
-            identifiers.insert(application.bundleIdentifier)
             icons[application.bundleIdentifier] = NSWorkspace.shared.icon(
                 forFile: applicationURL.path
             )
         }
 
-        availableApplicationIdentifiers = identifiers
         applicationIcons = icons
     }
 }
@@ -284,10 +277,8 @@ struct StatusPageContent: View {
     /// 当前产品总开关与菜单可见性快照。
     let configuration: MenuConfiguration
 
-    /// Launch Services 当前可定位的外部应用 bundle identifier。
-    let availableApplicationIdentifiers: Set<String>
-
-    /// 已安装外部应用的系统图标，以 bundle identifier 索引。
+    /// Launch Services 当前可定位的外部应用图标，以 bundle identifier 索引。
+    /// 键的存在同时表达应用可用性，避免两份状态发生分歧。
     let applicationIcons: [String: NSImage]
 
     /// 用户更改产品总开关时的回调。
@@ -489,7 +480,7 @@ struct StatusPageContent: View {
         for descriptor: ContextCommandDescriptor
     ) -> some View {
         let isDependencyAvailable = descriptor.requiredApplication.map {
-            availableApplicationIdentifiers.contains($0.bundleIdentifier)
+            applicationIcons[$0.bundleIdentifier] != nil
         } ?? true
 
         return settingRow {
@@ -606,9 +597,8 @@ struct StatusPageContent: View {
                 emptyStatusIcon
             }
 
-        case .requiredApplication:
+        case .application(let application):
             if
-                let application = descriptor.requiredApplication,
                 let sourceImage = applicationIcons[application.bundleIdentifier],
                 let image = StatusPageIconRenderer.applicationIcon(
                     sourceImage

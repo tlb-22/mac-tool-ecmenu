@@ -21,17 +21,6 @@ private enum StatusPagePreviewParameters {
     /// 保持为空可以直观看到 iTerm2 缺失时，开启值被保留但控件不可操作。
     static let initiallyHiddenFeatureIDs: Set<String> = []
 
-    /// 需要在页面中显示为“已安装”的外部应用。
-    static let availableApplicationIdentifiers: Set<String> = {
-        guard
-            let application =
-                OpenInVSCodeCommand.descriptor.requiredApplication
-        else {
-            return []
-        }
-        return [application.bundleIdentifier]
-    }()
-
     /// 根据集中参数构造只存在于预览进程内的菜单配置。
     static var initialConfiguration: MenuConfiguration {
         MenuConfiguration(
@@ -42,18 +31,19 @@ private enum StatusPagePreviewParameters {
 
     /// 为预览中已安装的外部应用创建不依赖 Launch Services 的占位图标。
     static var applicationIcons: [String: NSImage] {
-        Dictionary(
-            uniqueKeysWithValues: availableApplicationIdentifiers.map {
-                identifier in
-                (
-                    identifier,
-                    NSImage(
-                        systemSymbolName: "app.fill",
-                        accessibilityDescription: nil
-                    ) ?? NSImage()
-                )
-            }
-        )
+        guard case .application(let application) =
+            OpenInVSCodeCommand.descriptor.icon
+        else {
+            preconditionFailure(
+                "VS Code preview command must require an application"
+            )
+        }
+        return [
+            application.bundleIdentifier: NSImage(
+                systemSymbolName: "app.fill",
+                accessibilityDescription: nil
+            ) ?? NSImage(),
+        ]
     }
 }
 
@@ -124,8 +114,6 @@ private struct StatusPagePreviewContent: View {
             loginItemState: loginItemState,
             descriptors: ExecutionComposition.handlers.descriptors,
             configuration: configuration,
-            availableApplicationIdentifiers:
-                StatusPagePreviewParameters.availableApplicationIdentifiers,
             applicationIcons: StatusPagePreviewParameters.applicationIcons,
             setEnabled: { isEnabled in
                 configuration.setEnabled(isEnabled)

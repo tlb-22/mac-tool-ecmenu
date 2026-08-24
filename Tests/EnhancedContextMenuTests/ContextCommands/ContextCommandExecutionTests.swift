@@ -18,8 +18,7 @@ final class ContextCommandExecutionTests: XCTestCase {
             state.begin(
                 requestID: requestID,
                 descriptor: descriptor,
-                totalUnitCount: 3,
-                allowsCancellation: true
+                totalUnitCount: 3
             )
         )
         XCTAssertTrue(state.visibleItems.isEmpty)
@@ -30,8 +29,7 @@ final class ContextCommandExecutionTests: XCTestCase {
                     id: "duplicate",
                     title: "重复任务"
                 ),
-                totalUnitCount: 3,
-                allowsCancellation: true
+                totalUnitCount: 3
             )
         )
 
@@ -48,38 +46,24 @@ final class ContextCommandExecutionTests: XCTestCase {
         XCTAssertTrue(state.items.isEmpty)
     }
 
-    /// 不支持取消的任务忽略取消动作，快速完成也不会进入可见集合。
-    func testProgressStateKeepsOptionalCapabilitiesIndependent() {
+    /// 空任务不进入进度状态，也不能产生取消状态。
+    func testProgressStateRejectsEmptyTask() {
         let requestID = UUID()
         var state = ContextCommandProgressState()
 
         XCTAssertFalse(
             state.begin(
-                requestID: UUID(),
+                requestID: requestID,
                 descriptor: progressDescriptor(
                     id: "empty",
                     title: "空任务"
                 ),
-                totalUnitCount: 0,
-                allowsCancellation: false
-            )
-        )
-        XCTAssertTrue(
-            state.begin(
-                requestID: requestID,
-                descriptor: progressDescriptor(
-                    id: "progress-only",
-                    title: "只报告进度"
-                ),
-                totalUnitCount: 2,
-                allowsCancellation: false
+                totalUnitCount: 0
             )
         )
         state.requestCancellation(requestID: requestID)
         XCTAssertFalse(state.isCancellationRequested(for: requestID))
-
-        state.finish(requestID: requestID)
-        XCTAssertTrue(state.visibleItems.isEmpty)
+        XCTAssertTrue(state.items.isEmpty)
     }
 
     /// 延迟任务在获得执行机会前结束时，不应触发任何渲染副作用。
@@ -97,8 +81,7 @@ final class ContextCommandExecutionTests: XCTestCase {
                 id: "fast",
                 title: "快速任务"
             ),
-            totalUnitCount: 1,
-            allowsCancellation: false
+            totalUnitCount: 1
         )
         center.advance(requestID: requestID)
         center.finish(requestID: requestID)
@@ -124,8 +107,7 @@ final class ContextCommandExecutionTests: XCTestCase {
                 id: "first",
                 title: "任务一"
             ),
-            totalUnitCount: 2,
-            allowsCancellation: true
+            totalUnitCount: 2
         )
         center.begin(
             requestID: secondID,
@@ -133,8 +115,7 @@ final class ContextCommandExecutionTests: XCTestCase {
                 id: "second",
                 title: "任务二"
             ),
-            totalUnitCount: 3,
-            allowsCancellation: false
+            totalUnitCount: 3
         )
         await waitUntil {
             renderedSnapshots.last?.map(\.requestID) == [firstID, secondID]
@@ -173,8 +154,7 @@ final class ContextCommandExecutionTests: XCTestCase {
                 id: "dismissed",
                 title: "已隐藏任务"
             ),
-            totalUnitCount: 2,
-            allowsCancellation: true
+            totalUnitCount: 2
         )
         await waitUntil {
             renderedSnapshots.last?.map(\.requestID) == [dismissedID]
@@ -191,8 +171,7 @@ final class ContextCommandExecutionTests: XCTestCase {
                 id: "later",
                 title: "后来任务"
             ),
-            totalUnitCount: 1,
-            allowsCancellation: false
+            totalUnitCount: 1
         )
         await waitUntil {
             renderedSnapshots.last?.map(\.requestID) == [laterID]

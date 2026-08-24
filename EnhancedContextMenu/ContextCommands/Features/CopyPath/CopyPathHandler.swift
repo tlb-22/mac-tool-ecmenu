@@ -39,10 +39,9 @@ struct CopyPathHandler: ContextCommandHandling {
     @concurrent nonisolated func execute(
         _ command: CopyPathCommand
     ) async -> CopyPathOutcome {
-        let snapshot = command.finderContext
-        let existingURLs = Self.readExistingURLs(for: snapshot)
+        let existingURLs = Self.readExistingURLs(for: command.paths)
         return Self.makePlan(
-            for: snapshot,
+            for: command,
             existingURLs: existingURLs
         )
     }
@@ -51,12 +50,11 @@ struct CopyPathHandler: ContextCommandHandling {
 
     /// 读取快照候选项当前是否仍然存在。
     private nonisolated static func readExistingURLs(
-        for snapshot: FinderContextSnapshot
+        for paths: [AbsoluteFilePath]
     ) -> Set<URL> {
         return Set(
-            snapshot.urls
+            paths.map(\.url)
                 .filter(fileSystemItemExists)
-                .map(\.standardizedFileURL)
         )
     }
 
@@ -68,25 +66,17 @@ struct CopyPathHandler: ContextCommandHandling {
 
     // MARK: - ==================== 纯函数：构造剪贴板计划 ====================
 
-    /// 根据 Finder 快照和边界事实选择有序路径集合。
+    /// 根据命令携带的有序绝对路径和执行期事实构造计划。
     nonisolated static func makePlan(
-        for snapshot: FinderContextSnapshot,
+        for command: CopyPathCommand,
         existingURLs: Set<URL>
     ) -> CopyPathOutcome {
         let normalizedExistingURLs = Set(
             existingURLs.map(\.standardizedFileURL)
         )
-        let candidates: [URL]
-
-        switch snapshot {
-        case .container(let path), .sidebar(let path):
-            candidates = [URL(fileURLWithPath: path)]
-        case .items(let selection):
-            candidates = selection.urls
-        }
+        let candidates = command.paths.map(\.url)
 
         let itemURLs = candidates
-            .map(\.standardizedFileURL)
             .filter { normalizedExistingURLs.contains($0) }
         guard !itemURLs.isEmpty, itemURLs.count == candidates.count else {
             return .failure(.targetUnavailable)

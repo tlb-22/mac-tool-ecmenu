@@ -111,17 +111,10 @@ final class MenuConfigurationReplica: NSObject {
     private func applyRefreshResult(
         _ result: Result<MenuConfiguration, Error>
     ) {
-        guard
-            case let .success(updated) = result,
-            updated.schemaVersion == MenuConfiguration.currentSchemaVersion
-        else {
+        guard case let .success(updated) = result else {
             if case let .failure(error) = result {
                 logger.error(
                     "Could not refresh menu configuration: \(error.localizedDescription, privacy: .public)"
-                )
-            } else {
-                logger.error(
-                    "Received an invalid menu configuration response"
                 )
             }
             return

@@ -16,9 +16,31 @@ nonisolated struct OpenInApplicationPlan: Equatable, Sendable {
     let application: ContextCommandApplicationRequirement
 }
 
+/// 执行期读取到的目标状态，不允许表达“不存在但同时是目录”。
+nonisolated enum OpenInApplicationTargetState: Equatable, Sendable {
+    /// 路径已经消失或断开的符号链接无法到达目标。
+    case unavailable
+
+    /// 路径当前指向普通文件。
+    case file
+
+    /// 路径当前指向目录；package 也属于此状态。
+    case directory
+
+    /// 判断执行期状态是否满足命令声明的目标种类。
+    func satisfies(_ targetKind: OpenInApplicationTargetKind) -> Bool {
+        switch (self, targetKind) {
+        case (.file, .item), (.directory, .item), (.directory, .directory):
+            return true
+        case (.unavailable, _), (.file, .directory):
+            return false
+        }
+    }
+}
+
 /// 外部应用打开命令需要反馈的稳定失败类型。
 nonisolated enum OpenInApplicationFailure: Error, Equatable, Sendable {
-    /// Finder 快照不是一个仍然有效的单一目标。
+    /// 命令目标在执行时已经消失或不再符合种类约束。
     case targetUnavailable
 
     /// Launch Services 无法定位命令声明的固定应用。
@@ -40,71 +62,43 @@ nonisolated enum OpenInApplicationOutcome: Equatable, Sendable {
     case failed(OpenInApplicationFailure)
 }
 
-// MARK: - ==================== 具体命令 Handler ====================
+// MARK: - ==================== 类型化命令 Handler ====================
 
-/// 在主应用中通过 Visual Studio Code 打开一个 Finder 目标。
+/// 由具体命令类型提供固定应用和目标约束的共享 Handler。
 @MainActor
-struct OpenInVSCodeHandler: ContextCommandHandling {
-    /// 执行单目标 VS Code 管线，并允许文件或目录。
+struct OpenInApplicationHandler<Command: OpenInApplicationCommand>:
+    ContextCommandHandling
+{
+    /// 执行命令类型完整声明的单目标外部应用管线。
     @concurrent nonisolated func execute(
-        _ command: OpenInVSCodeCommand
+        _ command: Command
     ) async -> OpenInApplicationOutcome {
-        await OpenInApplicationExecution.execute(
-            snapshot: command.finderContext,
-            descriptor: OpenInVSCodeCommand.descriptor,
-            requiresDirectory: false
-        )
+        await OpenInApplicationExecution.execute(command)
     }
 
-    /// 在主线程统一反馈 VS Code 打开结果。
+    /// 使用同一命令声明的产品名称呈现结果。
     func present(_ outcome: OpenInApplicationOutcome, requestID: UUID) {
         OpenInApplicationFeedback.present(
             outcome,
-            commandTitle: OpenInVSCodeCommand.descriptor.title,
+            commandTitle: Command.descriptor.title,
             requestID: requestID
         )
     }
 }
 
-/// 在主应用中让 iTerm2 进入一个 Finder 目录目标。
-@MainActor
-struct OpenInITerm2Handler: ContextCommandHandling {
-    /// 执行单目标 iTerm2 管线，并要求最终目标是目录。
-    @concurrent nonisolated func execute(
-        _ command: OpenInITerm2Command
-    ) async -> OpenInApplicationOutcome {
-        await OpenInApplicationExecution.execute(
-            snapshot: command.finderContext,
-            descriptor: OpenInITerm2Command.descriptor,
-            requiresDirectory: true
-        )
-    }
-
-    /// 在主线程统一反馈 iTerm2 打开结果。
-    func present(_ outcome: OpenInApplicationOutcome, requestID: UUID) {
-        OpenInApplicationFeedback.present(
-            outcome,
-            commandTitle: OpenInITerm2Command.descriptor.title,
-            requestID: requestID
-        )
-    }
-}
+typealias OpenInVSCodeHandler = OpenInApplicationHandler<OpenInVSCodeCommand>
+typealias OpenInITerm2Handler = OpenInApplicationHandler<OpenInITerm2Command>
 
 // MARK: - ==================== 执行管线：副作用 - 纯函数 - 副作用 ====================
 
 /// 组合文件系统事实、纯计划、Launch Services 定位和外部应用启动。
 nonisolated enum OpenInApplicationExecution {
     /// 执行一个由共享 Command 完整声明的外部应用打开命令。
-    static func execute(
-        snapshot: FinderContextSnapshot,
-        descriptor: ContextCommandDescriptor,
-        requiresDirectory: Bool
+    static func execute<Command: OpenInApplicationCommand>(
+        _ command: Command
     ) async -> OpenInApplicationOutcome {
-        let facts = readTargetFacts(for: snapshot)
-
-        guard let application = descriptor.requiredApplication else {
-            preconditionFailure("An external-application command must declare its application")
-        }
+        let facts = readTargetFacts(for: command.targetPath)
+        let application = Command.applicationRequirement
         let applicationURL = await MainActor.run {
             NSWorkspace.shared.urlForApplication(
                 withBundleIdentifier: application.bundleIdentifier
@@ -112,12 +106,9 @@ nonisolated enum OpenInApplicationExecution {
         }
 
         switch makePlan(
-            for: snapshot,
-            existingURLs: facts.existingURLs,
-            directoryURLs: facts.directoryURLs,
-            application: application,
-            applicationURL: applicationURL,
-            requiresDirectory: requiresDirectory
+            for: command,
+            targetState: facts,
+            applicationURL: applicationURL
         ) {
         case .success(let plan):
             return await launch(plan)
@@ -130,53 +121,36 @@ nonisolated enum OpenInApplicationExecution {
 
     /// 读取候选路径跟随符号链接后的存在性和目录类型。
     private static func readTargetFacts(
-        for snapshot: FinderContextSnapshot
-    ) -> (existingURLs: Set<URL>, directoryURLs: Set<URL>) {
-        var existingURLs: Set<URL> = []
-        var directoryURLs: Set<URL> = []
-
-        for url in snapshot.urls {
-            var isDirectory: ObjCBool = false
-            guard FileManager.default.fileExists(
-                atPath: url.path,
-                isDirectory: &isDirectory
-            ) else {
-                continue
-            }
-            let normalizedURL = url.standardizedFileURL
-            existingURLs.insert(normalizedURL)
-            if isDirectory.boolValue {
-                directoryURLs.insert(normalizedURL)
-            }
+        for path: AbsoluteFilePath
+    ) -> OpenInApplicationTargetState {
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(
+            atPath: path.path,
+            isDirectory: &isDirectory
+        ) else {
+            return .unavailable
         }
-        return (existingURLs, directoryURLs)
+        return isDirectory.boolValue ? .directory : .file
     }
 
     // MARK: - ==================== 纯函数：构造执行计划 ====================
 
-    /// 根据 Finder 快照、文件系统事实和应用位置构造唯一执行计划。
-    static func makePlan(
-        for snapshot: FinderContextSnapshot,
-        existingURLs: Set<URL>,
-        directoryURLs: Set<URL>,
-        application: ContextCommandApplicationRequirement,
-        applicationURL: URL?,
-        requiresDirectory: Bool
+    /// 重验命令目标和外部应用，构造唯一执行计划。
+    static func makePlan<Command: OpenInApplicationCommand>(
+        for command: Command,
+        targetState: OpenInApplicationTargetState,
+        applicationURL: URL?
     ) -> Result<OpenInApplicationPlan, OpenInApplicationFailure> {
-        guard let targetURL = OpenInApplicationTargetResolver.targetURL(
-            for: snapshot,
-            existingURLs: existingURLs,
-            directoryURLs: directoryURLs,
-            requiresDirectory: requiresDirectory
-        ) else {
+        guard targetState.satisfies(Command.targetKind) else {
             return .failure(.targetUnavailable)
         }
+        let application = Command.applicationRequirement
         guard let applicationURL else {
             return .failure(.applicationUnavailable(application))
         }
         return .success(
             OpenInApplicationPlan(
-                targetURL: targetURL,
+                targetURL: command.targetPath.url,
                 applicationURL: applicationURL.standardizedFileURL,
                 application: application
             )

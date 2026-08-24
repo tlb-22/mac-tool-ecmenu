@@ -11,15 +11,10 @@ final class CopyPathFeature: SingleActionContextMenuFeature {
         self.commandClient = commandClient
     }
 
-    // MARK: - ==================== 纯函数：菜单策略与命令构造 ====================
-
-    /// 在空白处、侧边栏或非空选择集合中显示命令。
-    func isAvailable(in context: FinderContextMenuEvaluationContext) -> Bool {
-        true
-    }
-
-    /// 使用当前菜单项在构建时绑定的 Finder 状态构造拷贝路径命令。
-    func command(for snapshot: FinderContextSnapshot) -> CopyPathCommand {
-        CopyPathCommand(finderContext: snapshot)
+    /// 把当前菜单的非空绝对路径集合固化到命令中。
+    func command(
+        in context: FinderContextMenuEvaluationContext
+    ) -> CopyPathCommand? {
+        CopyPathCommand(paths: context.snapshot.absolutePaths)
     }
 }

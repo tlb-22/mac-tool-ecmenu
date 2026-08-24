@@ -68,15 +68,12 @@ final class MenuConfigurationTests: XCTestCase {
             MenuConfigurationChannel.decodedConfiguration(from: legacyData)
         )
 
-        XCTAssertEqual(
-            migrated.schemaVersion,
-            MenuConfiguration.currentSchemaVersion
-        )
         XCTAssertTrue(migrated.isEnabled)
         XCTAssertEqual(
             migrated.hiddenFeatureIDs,
             ["new-text-file", "future-feature"]
         )
+        try assertCurrentSchemaWhenReencoded(migrated)
     }
 
     /// 已保存的 v1 可见性覆盖应迁移为当前隐藏功能集合。
@@ -92,12 +89,9 @@ final class MenuConfigurationTests: XCTestCase {
             MenuConfigurationChannel.decodedConfiguration(from: legacyData)
         )
 
-        XCTAssertEqual(
-            migrated.schemaVersion,
-            MenuConfiguration.currentSchemaVersion
-        )
         XCTAssertTrue(migrated.isEnabled)
         XCTAssertEqual(migrated.hiddenFeatureIDs, ["new-text-file"])
+        try assertCurrentSchemaWhenReencoded(migrated)
     }
 
     /// 不受支持的未来格式不得被误读为默认配置。
@@ -109,6 +103,22 @@ final class MenuConfigurationTests: XCTestCase {
 
         XCTAssertNil(
             MenuConfigurationChannel.decodedConfiguration(from: data)
+        )
+    }
+
+    /// 迁移后的领域状态再次保存时只产生当前版本信封。
+    private func assertCurrentSchemaWhenReencoded(
+        _ configuration: MenuConfiguration
+    ) throws {
+        let data = try XCTUnwrap(
+            MenuConfigurationChannel.encodedData(for: configuration)
+        )
+        let object = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: data) as? [String: Any]
+        )
+        XCTAssertEqual(
+            object["schemaVersion"] as? Int,
+            MenuConfiguration.currentSchemaVersion
         )
     }
 }

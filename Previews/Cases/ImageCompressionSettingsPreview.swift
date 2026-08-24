@@ -11,10 +11,13 @@ private enum ImageCompressionSettingsPreviewParameters {
 
     /// 根据集中参数构造只存在于预览进程内的初始设置。
     static var settings: ImageCompressionSettings {
-        ImageCompressionSettings(
+        guard let settings = ImageCompressionSettings(
             maximumWidth: maximumWidth,
             quality: quality
-        )
+        ) else {
+            preconditionFailure("Invalid image compression preview settings")
+        }
+        return settings
     }
 }
 

@@ -1,24 +1,6 @@
 import AppKit
 import FinderSync
 
-/// 把一次菜单构建时冻结的 Finder 语义绑定到对应 action tag。
-struct FinderContextMenuActionContext {
-    /// 需要执行的具体 Feature Action。
-    let actionID: FinderContextMenuActionID
-
-    /// Finder 请求该菜单时同步冻结的确定语义。
-    let snapshot: FinderContextSnapshot
-
-    /// 创建一份只属于单个菜单项的不可变 action 上下文。
-    init(
-        actionID: FinderContextMenuActionID,
-        snapshot: FinderContextSnapshot
-    ) {
-        self.actionID = actionID
-        self.snapshot = snapshot
-    }
-}
-
 /// 解释声明式布局、渲染 Finder 菜单并把 action 路由到增量功能。
 final class FinderContextMenuController {
     /// Finder 菜单图标使用的系统菜单字体。
@@ -44,7 +26,7 @@ final class FinderContextMenuController {
     )
 
     /// 跨连续菜单请求保留的最近 action 数量，避免未点击菜单无限积累。
-    private static let maximumRetainedActionContexts = 256
+    private static let maximumRetainedActions = 256
 
     /// 由 Finder Extension 拥有的菜单顺序、分组和层级声明。
     private let menu: FinderContextMenuDefinition
@@ -60,11 +42,8 @@ final class FinderContextMenuController {
         ContextCommandApplicationRequirement
     ) -> Bool
 
-    /// 按复合身份索引的具体菜单 Action 注册表。
-    private let actions: [FinderContextMenuActionID: AnyContextMenuAction]
-
-    /// 各菜单实例唯一 action tag 对应的具体 Action 和构建快照。
-    private var actionContextsByTag: [Int: FinderContextMenuActionContext] = [:]
+    /// 各菜单实例唯一 action tag 对应的已准备调用。
+    private var preparedActionsByTag: [Int: PreparedContextMenuAction] = [:]
 
     /// 按注册顺序保存尚未执行的 action tag，供有界淘汰使用。
     private var retainedActionTags: [Int] = []
@@ -97,7 +76,6 @@ final class FinderContextMenuController {
         self.isFeatureVisible = isFeatureVisible
         self.isMenuEnabled = isMenuEnabled
         self.isApplicationAvailable = isApplicationAvailable
-        actions = menu.actions
     }
 
     /// 把 Extension 配置副本适配为 Controller 使用的纯查询边界。
@@ -157,28 +135,31 @@ final class FinderContextMenuController {
         let evaluationContext = FinderContextMenuEvaluationContext(
             snapshot: snapshot
         )
-        let elements = ContextMenuLayoutResolver.visibleElements(
-            in: menu.layout,
-            isItemVisible: {
-                [isFeatureVisible, isApplicationAvailable, actions] item in
-                isFeatureVisible(item.id.featureID)
-                    && (item.requiredApplication.map(
-                        isApplicationAvailable
-                    ) ?? true)
-                    && actions[item.id]?.isAvailable(in: evaluationContext) == true
+        let nodes: [ContextMenuNode<PreparedContextMenuAction>] =
+            ContextMenuNodeResolver.compactMapItems(
+                in: menu.nodes
+            ) { [isFeatureVisible, isApplicationAvailable] action in
+                let descriptor = action.descriptor
+                guard isFeatureVisible(descriptor.id.featureID) else {
+                    return nil
+                }
+                guard descriptor.icon.applicationRequirement.map(
+                    isApplicationAvailable
+                ) ?? true else {
+                    return nil
+                }
+                return action.prepare(in: evaluationContext)
             }
-        )
-        guard !elements.isEmpty else {
+        guard !nodes.isEmpty else {
             return nil
         }
 
         let menu = NSMenu()
         menu.autoenablesItems = false
-        elements.forEach {
+        nodes.forEach {
             menu.addItem(
                 menuItem(
                     from: $0,
-                    context: evaluationContext,
                     action: action
                 )
             )
@@ -188,25 +169,20 @@ final class FinderContextMenuController {
 
     /// 递归把一个已经过滤和规范化的布局节点渲染为 AppKit 菜单项。
     private func menuItem(
-        from element: ContextMenuVisibleElement<FinderContextMenuActionDescriptor>,
-        context: FinderContextMenuEvaluationContext,
+        from node: ContextMenuNode<PreparedContextMenuAction>,
         action: Selector
     ) -> NSMenuItem {
-        switch element {
-        case .item(let definition):
+        switch node {
+        case .item(let preparedAction):
+            let descriptor = preparedAction.descriptor
             let menuItem = NSMenuItem(
-                title: definition.title,
+                title: descriptor.title,
                 action: action,
                 keyEquivalent: ""
             )
             menuItem.isEnabled = true
-            menuItem.tag = retainActionContext(
-                FinderContextMenuActionContext(
-                    actionID: definition.id,
-                    snapshot: context.snapshot
-                )
-            )
-            menuItem.image = menuIcon(for: definition)
+            menuItem.tag = retain(preparedAction)
+            menuItem.image = menuIcon(for: descriptor)
             return menuItem
 
         case .separator:
@@ -218,7 +194,7 @@ final class FinderContextMenuController {
             submenu.autoenablesItems = false
             children.forEach {
                 submenu.addItem(
-                    menuItem(from: $0, context: context, action: action)
+                    menuItem(from: $0, action: action)
                 )
             }
             parent.submenu = submenu
@@ -236,9 +212,8 @@ final class FinderContextMenuController {
         case .systemSymbol(let name):
             return systemSymbol(named: name)
 
-        case .requiredApplication:
+        case .application(let requirement):
             guard
-                let requirement = descriptor.requiredApplication,
                 let applicationURL = NSWorkspace.shared.urlForApplication(
                     withBundleIdentifier: requirement.bundleIdentifier
                 )
@@ -301,71 +276,66 @@ final class FinderContextMenuController {
 
     // MARK: - ==================== 副作用：路由 Finder 动作 ====================
 
-    /// 读取菜单项 tag 对应的构建快照，并交给对应的具体 Action。
+    /// 取出菜单项 tag 已经绑定的命令并直接投递。
     /// - Parameter menuItem: Finder 回传的菜单项。
     func perform(_ menuItem: NSMenuItem) {
         guard menuItem.isEnabled, menuItem.action != nil else {
             return
         }
 
-        guard
-            let actionContext = consumeActionContext(for: menuItem),
-            let action = actions[actionContext.actionID]
-        else {
+        guard let preparedAction = consumePreparedAction(for: menuItem) else {
             NSSound.beep()
             return
         }
 
-        action.perform(in: actionContext.snapshot)
+        preparedAction.perform()
     }
 
-    /// 为一个具体菜单项分配唯一 tag，并跨后续菜单请求保留其上下文。
+    /// 为一个具体菜单项分配唯一 tag，并保留已准备调用。
     ///
     /// Finder 可能在旧菜单 action 到达前请求另一种菜单。固定 Action tag
     /// 会让后一次请求覆盖前一个菜单的快照，因此 tag 必须属于菜单项实例。
-    /// - Parameter actionContext: 具体 Action 身份及其菜单构建快照。
+    /// - Parameter preparedAction: 菜单构建时已经冻结的调用。
     /// - Returns: Finder 可以原样回传的正整数 tag。
-    private func retainActionContext(
-        _ actionContext: FinderContextMenuActionContext
-    ) -> Int {
+    private func retain(_ preparedAction: PreparedContextMenuAction) -> Int {
         let tag = nextActionTag
         nextActionTag = tag == Int.max ? 1 : tag + 1
 
         precondition(
-            actionContextsByTag[tag] == nil,
-            "Finder action tag wrapped into a retained context"
+            preparedActionsByTag[tag] == nil,
+            "Finder action tag wrapped into a retained action"
         )
-        actionContextsByTag[tag] = actionContext
+        preparedActionsByTag[tag] = preparedAction
         retainedActionTags.append(tag)
 
-        while retainedActionTags.count > Self.maximumRetainedActionContexts {
+        while retainedActionTags.count > Self.maximumRetainedActions {
             let expiredTag = retainedActionTags.removeFirst()
-            actionContextsByTag.removeValue(forKey: expiredTag)
+            preparedActionsByTag.removeValue(forKey: expiredTag)
         }
         return tag
     }
 
-    /// 取出本次 action 的不可变上下文，并释放已经关闭菜单的路由记录。
+    /// 取出本次 action 的已准备调用，并释放路由记录。
     /// - Parameter menuItem: Finder 回传的具体菜单项。
-    /// - Returns: 该菜单项构建时绑定的 Action 和快照；tag 无效时为 `nil`。
-    private func consumeActionContext(
+    /// - Returns: 该菜单项构建时绑定的 Action；tag 无效时为 `nil`。
+    private func consumePreparedAction(
         for menuItem: NSMenuItem
-    ) -> FinderContextMenuActionContext? {
+    ) -> PreparedContextMenuAction? {
         let tag = menuItem.tag
-        guard let actionContext = actionContextsByTag.removeValue(forKey: tag) else {
+        guard let action = preparedActionsByTag.removeValue(forKey: tag) else {
             return nil
         }
         retainedActionTags.removeAll { $0 == tag }
-        return actionContext
+        return action
     }
 
-    /// 从 Finder 原样回传的唯一菜单项 tag 恢复 action 上下文。
+    /// 从 Finder 原样回传的唯一菜单项 tag 查询已准备调用。
     /// - Parameter menuItem: Finder 回传的菜单项。
-    /// - Returns: 当前菜单构建时注册的 Action 和快照；tag 无效时为 `nil`。
-    func actionContext(
+    /// - Returns: 当前菜单构建时注册的 Action；tag 无效时为 `nil`。
+    func preparedAction(
         for menuItem: NSMenuItem
-    ) -> FinderContextMenuActionContext? {
-        actionContextsByTag[menuItem.tag]
+    ) -> PreparedContextMenuAction? {
+        preparedActionsByTag[menuItem.tag]
     }
 }
 

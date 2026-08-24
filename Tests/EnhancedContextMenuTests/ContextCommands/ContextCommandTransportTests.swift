@@ -4,41 +4,73 @@ import XCTest
 
 /// 验证右键命令 wire、定向 IPC framing 与双向身份要求。
 final class ContextCommandTransportTests: XCTestCase {
-    func testTypedCommandEnvelopeRoundTrip() throws {
-        let expected = CreateNewTextFileCommand(
-            finderContext: .container(path: "/test/parent")
+    func testEveryConcreteCommandEnvelopeWireRoundTrips() throws {
+        let firstPath = try XCTUnwrap(
+            AbsoluteFilePath(path: "/test/first")
         )
-        let envelope = try ContextCommandEnvelope(expected)
+        let secondPath = try XCTUnwrap(
+            AbsoluteFilePath(path: "/test/second")
+        )
+        let selection = try XCTUnwrap(
+            FinderItemSelection(paths: [firstPath.path, secondPath.path])
+        )
 
-        XCTAssertEqual(envelope.featureID, CreateNewTextFileCommand.descriptor.id)
-        XCTAssertEqual(
-            envelope.decode(as: CreateNewTextFileCommand.self),
-            expected
+        try assertEnvelopeWireRoundTrip(
+            CreateNewTextFileCommand(directoryPath: firstPath)
+        )
+        try assertEnvelopeWireRoundTrip(
+            try XCTUnwrap(CopyPathCommand(paths: [firstPath, secondPath]))
+        )
+        try assertEnvelopeWireRoundTrip(
+            HideItemsCommand(selection: selection)
+        )
+        try assertEnvelopeWireRoundTrip(
+            ShowItemsCommand(selection: selection)
+        )
+        try assertEnvelopeWireRoundTrip(
+            CompressImagesCommand(selection: selection)
+        )
+        try assertEnvelopeWireRoundTrip(
+            OpenInVSCodeCommand(targetPath: firstPath)
+        )
+        try assertEnvelopeWireRoundTrip(
+            OpenInITerm2Command(targetPath: secondPath)
         )
     }
 
-    func testSemanticFinderContextValidationAndRoundTrip() throws {
+    func testInvalidCommandIdentityAndEmptyCopyPathWireAreRejected() throws {
+        XCTAssertThrowsError(
+            try JSONDecoder().decode(
+                CopyPathCommand.self,
+                from: Data("[]".utf8)
+            )
+        )
+        XCTAssertThrowsError(
+            try JSONDecoder().decode(
+                ContextCommandFeatureID.self,
+                from: Data(#"{"rawValue":""}"#.utf8)
+            )
+        )
+    }
+
+    func testAbsolutePathAndNonEmptySelectionValidationAndRoundTrip() throws {
+        XCTAssertNil(AbsoluteFilePath(path: "relative/path"))
         XCTAssertNil(FinderItemSelection(paths: []))
         XCTAssertNil(FinderItemSelection(paths: ["relative/path"]))
 
-        let expected = FinderContextSnapshot.items(
-            selection: try XCTUnwrap(
-                FinderItemSelection(paths: ["/test/first", "/test/second"])
-            )
+        let expected = try XCTUnwrap(
+            FinderItemSelection(paths: ["/test/first", "/test/second"])
         )
         let encoded = try JSONEncoder().encode(expected)
         XCTAssertEqual(
-            try JSONDecoder().decode(FinderContextSnapshot.self, from: encoded),
+            try JSONDecoder().decode(FinderItemSelection.self, from: encoded),
             expected
         )
 
-        let emptyItems = try JSONSerialization.data(withJSONObject: [
-            "kind": "items",
-            "paths": [],
-        ])
+        let emptyItems = try JSONEncoder().encode([String]())
         XCTAssertThrowsError(
             try JSONDecoder().decode(
-                FinderContextSnapshot.self,
+                FinderItemSelection.self,
                 from: emptyItems
             )
         )
@@ -46,7 +78,7 @@ final class ContextCommandTransportTests: XCTestCase {
 
     func testCommandRequestWireRoundTrip() throws {
         let request = try makeRequest()
-        XCTAssertEqual(request.schemaVersion, 5)
+        XCTAssertEqual(request.schemaVersion, 6)
         let wireRequest = ApplicationIPCRequest.contextCommand(request)
 
         XCTAssertEqual(
@@ -273,8 +305,34 @@ final class ContextCommandTransportTests: XCTestCase {
     ) throws -> ContextCommandRequest {
         try ContextCommandRequest(
             command: CreateNewTextFileCommand(
-                finderContext: .container(path: path)
+                directoryPath: try XCTUnwrap(AbsoluteFilePath(path: path))
             )
+        )
+    }
+
+    private func assertEnvelopeWireRoundTrip<Command>(
+        _ expected: Command,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) throws where Command: ContextCommandPayload & Equatable {
+        let envelope = try ContextCommandEnvelope(expected)
+        let wireEnvelope = try JSONDecoder().decode(
+            ContextCommandEnvelope.self,
+            from: JSONEncoder().encode(envelope)
+        )
+
+        XCTAssertEqual(wireEnvelope, envelope, file: file, line: line)
+        XCTAssertEqual(
+            wireEnvelope.featureID,
+            Command.descriptor.id,
+            file: file,
+            line: line
+        )
+        XCTAssertEqual(
+            wireEnvelope.decode(as: Command.self),
+            expected,
+            file: file,
+            line: line
         )
     }
 }

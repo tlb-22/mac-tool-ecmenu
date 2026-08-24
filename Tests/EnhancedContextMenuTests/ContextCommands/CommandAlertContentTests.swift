@@ -44,14 +44,12 @@ final class CommandAlertContentTests: XCTestCase {
         let secondURL = url("/private/test/secret/second.txt")
         let hideReport = VisibilityReport(
             succeededCount: 0,
-            skippedDotItemCount: 0,
             issues: [
                 visibilityIssue(at: firstURL, kind: .permissionDenied),
             ]
         )
         let showReport = VisibilityReport(
             succeededCount: 1,
-            skippedDotItemCount: 0,
             issues: [
                 visibilityIssue(at: firstURL, kind: .permissionDenied),
                 visibilityIssue(at: secondURL, kind: .readOnlyFileSystem),
@@ -93,7 +91,7 @@ final class CommandAlertContentTests: XCTestCase {
                 imageIssue(
                     at: outputURL,
                     stage: .fileDates,
-                    kind: .fileSystem
+                    kind: .other
                 ),
             ],
             wasCancelled: false
@@ -233,7 +231,7 @@ final class CommandAlertContentTests: XCTestCase {
     /// 构造单项隐藏或显示问题。
     private func visibilityIssue(
         at url: URL,
-        kind: VisibilityIssueKind
+        kind: FileSystemErrorKind
     ) -> VisibilityIssue {
         VisibilityIssue(
             itemURL: url,
@@ -246,7 +244,7 @@ final class CommandAlertContentTests: XCTestCase {
     private func imageIssue(
         at url: URL,
         stage: ImageCompressionIssueStage,
-        kind: ImageCompressionIssueKind
+        kind: FileSystemErrorKind
     ) -> ImageCompressionIssue {
         ImageCompressionIssue(
             itemURL: url,

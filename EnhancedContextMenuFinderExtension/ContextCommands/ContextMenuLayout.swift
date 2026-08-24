@@ -1,84 +1,97 @@
-/// 声明 Finder 右键菜单中可递归组合的通用布局节点。
-nonisolated indirect enum ContextMenuLayout<Item>: Equatable, Sendable
-where Item: Equatable & Sendable {
-    /// 引用一个增量菜单项，由运行时注册表解析其可用性和动作。
+/// Finder 右键菜单在声明、准备和渲染阶段共用的递归节点。
+nonisolated indirect enum ContextMenuNode<Item> {
+    /// 当前阶段携带的一个菜单叶子。
     case item(Item)
 
-    /// 在同级可见项目之间显示系统分隔线。
+    /// 在同级有效项目之间显示系统分隔线。
     case separator
 
     /// 使用固定产品标题折叠一组子节点。
-    case submenu(title: String, children: [ContextMenuLayout<Item>])
+    case submenu(title: String, children: [ContextMenuNode<Item>])
+
+    /// 按菜单顺序递归展开所有叶子。
+    var items: [Item] {
+        switch self {
+        case .item(let item):
+            return [item]
+        case .separator:
+            return []
+        case .submenu(_, let children):
+            return children.flatMap { $0.items }
+        }
+    }
+
+    /// 只替换叶子值，保留原始层级和分隔线。
+    func mapItems<MappedItem>(
+        _ transform: (Item) -> MappedItem
+    ) -> ContextMenuNode<MappedItem> {
+        switch self {
+        case .item(let item):
+            return .item(transform(item))
+        case .separator:
+            return .separator
+        case .submenu(let title, let children):
+            return .submenu(
+                title: title,
+                children: children.map { $0.mapItems(transform) }
+            )
+        }
+    }
 }
 
-/// 表示经过可见性过滤、可以直接渲染的 Finder 菜单节点。
-nonisolated indirect enum ContextMenuVisibleElement<Item>: Equatable, Sendable
-where Item: Equatable & Sendable {
-    /// 当前 Finder 上下文中可见的菜单项。
-    case item(Item)
+extension ContextMenuNode: Equatable where Item: Equatable {}
+extension ContextMenuNode: Sendable where Item: Sendable {}
 
-    /// 已规范化的同级分隔线。
-    case separator
-
-    /// 至少包含一个可见后代的子菜单。
-    case submenu(
-        title: String,
-        children: [ContextMenuVisibleElement<Item>]
-    )
-}
-
-/// 把声明式 Finder 菜单树解析为可直接渲染的规范化节点。
-enum ContextMenuLayoutResolver {
-    /// 根据菜单项可见性递归过滤布局，并删除无效分隔线和空子菜单。
+/// 在不改变菜单节点类型的前提下准备并规范化递归树。
+enum ContextMenuNodeResolver {
+    /// 递归转换可保留的叶子，删除空子菜单和无效分隔线。
     /// - Parameters:
-    ///   - layout: 未经 Finder 上下文过滤的声明式布局。
-    ///   - isItemVisible: 查询一个功能菜单项当前是否可见的纯回调。
-    /// - Returns: 可以直接渲染的规范化节点序列。
-    nonisolated static func visibleElements<Item>(
-        in layout: [ContextMenuLayout<Item>],
-        isItemVisible: (Item) -> Bool
-    ) -> [ContextMenuVisibleElement<Item>]
-    where Item: Equatable & Sendable {
-        let mapped: [ContextMenuVisibleElement<Item>?] = layout.map { node in
+    ///   - nodes: 当前阶段的菜单节点。
+    ///   - transform: 返回下一阶段叶子，或以 `nil` 过滤当前叶子。
+    /// - Returns: 保留原始顺序与层级的规范化节点。
+    nonisolated static func compactMapItems<Item, MappedItem>(
+        in nodes: [ContextMenuNode<Item>],
+        _ transform: (Item) -> MappedItem?
+    ) -> [ContextMenuNode<MappedItem>] {
+        let mapped = nodes.compactMap { node -> ContextMenuNode<MappedItem>? in
             switch node {
             case .item(let item):
-                return isItemVisible(item) ? .item(item) : nil
+                return transform(item).map(ContextMenuNode<MappedItem>.item)
 
             case .separator:
                 return .separator
 
             case .submenu(let title, let children):
-                let visibleChildren = visibleElements(
+                let mappedChildren = compactMapItems(
                     in: children,
-                    isItemVisible: isItemVisible
+                    transform
                 )
-                return visibleChildren.isEmpty
+                return mappedChildren.isEmpty
                     ? nil
-                    : .submenu(title: title, children: visibleChildren)
+                    : .submenu(title: title, children: mappedChildren)
             }
         }
 
-        return normalizedSeparators(in: mapped.compactMap { $0 })
+        return normalizedSeparators(in: mapped)
     }
 
     /// 删除开头、结尾和连续的分隔线。
     private nonisolated static func normalizedSeparators<Item>(
-        in elements: [ContextMenuVisibleElement<Item>]
-    ) -> [ContextMenuVisibleElement<Item>]
-    where Item: Equatable & Sendable {
-        var result: [ContextMenuVisibleElement<Item>] = []
+        in nodes: [ContextMenuNode<Item>]
+    ) -> [ContextMenuNode<Item>] {
+        var result: [ContextMenuNode<Item>] = []
 
-        for element in elements {
-            if case .separator = element {
+        for node in nodes {
+            if case .separator = node {
                 guard !result.isEmpty else {
                     continue
                 }
                 guard case .separator? = result.last else {
-                    result.append(element)
+                    result.append(node)
                     continue
                 }
             } else {
-                result.append(element)
+                result.append(node)
             }
         }
 

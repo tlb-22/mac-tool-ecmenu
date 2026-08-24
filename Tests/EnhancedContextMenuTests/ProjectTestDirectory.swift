@@ -67,7 +67,7 @@ nonisolated enum ProjectTestDirectory {
     }
 }
 
-private final class SocketNameAllocator: @unchecked Sendable {
+nonisolated private final class SocketNameAllocator: @unchecked Sendable {
     private let lock = NSLock()
     private var nextValue = 0
 

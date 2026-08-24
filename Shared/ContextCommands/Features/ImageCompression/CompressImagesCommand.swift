@@ -9,11 +9,11 @@ nonisolated struct CompressImagesCommand: ContextCommandPayload, Equatable {
         icon: .systemSymbol(name: "photo.badge.arrow.down")
     )
 
-    /// Extension 在 Finder 请求菜单时冻结的项目上下文。
-    let finderContext: FinderContextSnapshot
+    /// Extension 在 Finder 请求菜单时验证的非空图片选择。
+    let selection: FinderItemSelection
 
-    /// 创建携带指定 Finder 快照的图片压缩命令。
-    init(finderContext: FinderContextSnapshot) {
-        self.finderContext = finderContext
+    /// 创建携带指定项目选择的图片压缩命令。
+    init(selection: FinderItemSelection) {
+        self.selection = selection
     }
 }

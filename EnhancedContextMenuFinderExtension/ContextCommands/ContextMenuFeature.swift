@@ -2,6 +2,40 @@ import Foundation
 import FinderSync
 import OSLog
 
+/// Finder 触发右键菜单时的框架上下文种类。
+nonisolated enum FinderMenuContext: Sendable {
+    /// 在目录内容区域的空白位置打开菜单。
+    case container
+
+    /// 在一个或多个选中项目上打开菜单。
+    case items
+
+    /// 在 Finder 侧边栏项目上打开菜单。
+    case sidebar
+}
+
+/// Finder 请求菜单时已经解释完成、只在 Extension 内存活的语义快照。
+nonisolated enum FinderContextSnapshot: Equatable, Sendable {
+    /// 对当前可见目录本身执行空白区域命令。
+    case container(path: AbsoluteFilePath)
+
+    /// 对一个经过验证的非空 Finder 选择集合执行项目命令。
+    case items(selection: FinderItemSelection)
+
+    /// 对侧边栏所代表的目录执行命令。
+    case sidebar(path: AbsoluteFilePath)
+
+    /// 当前语义上下文中保持 Finder 顺序的强类型绝对路径。
+    var absolutePaths: [AbsoluteFilePath] {
+        switch self {
+        case .container(let path), .sidebar(let path):
+            return [path]
+        case .items(let selection):
+            return selection.absolutePaths
+        }
+    }
+}
+
 /// 集中读取并解释 FinderSync 的瞬时菜单状态。
 enum FinderContextReader {
     /// 在 Finder 菜单构建边界把原始目标字段解释为语义快照。
@@ -36,12 +70,13 @@ enum FinderContextReader {
     ) -> FinderContextSnapshot? {
         switch context {
         case .container:
-            guard let directoryURL = selectedURLs.first ?? targetedURL else {
+            guard
+                let directoryURL = selectedURLs.first ?? targetedURL,
+                let path = AbsoluteFilePath(url: directoryURL)
+            else {
                 return nil
             }
-            return .container(
-                path: directoryURL.standardizedFileURL.path
-            )
+            return .container(path: path)
 
         case .items:
             guard let selection = FinderItemSelection(urls: selectedURLs) else {
@@ -50,26 +85,15 @@ enum FinderContextReader {
             return .items(selection: selection)
 
         case .sidebar:
-            guard let directoryURL = targetedURL else {
+            guard
+                let directoryURL = targetedURL,
+                let path = AbsoluteFilePath(url: directoryURL)
+            else {
                 return nil
             }
-            return .sidebar(
-                path: directoryURL.standardizedFileURL.path
-            )
+            return .sidebar(path: path)
         }
     }
-}
-
-/// 一个可以声明 Finder 菜单树并构造类型化命令的增量右键功能。
-protocol ContextMenuFeature: AnyObject {
-    /// 当前 Feature 的所有 Action 共用的跨进程命令类型。
-    associatedtype Command: ContextCommandPayload
-
-    /// 向主应用投递当前功能命令的稳定客户端。
-    var commandClient: ContextCommandClient { get }
-
-    /// 当前 Feature 独立拥有的叶子 Action、顺序和递归层级。
-    var menu: ContextMenuFeatureMenu<Command> { get }
 }
 
 /// 一次 Finder 菜单构建独占的求值上下文。
@@ -110,37 +134,43 @@ final class FinderContextMenuEvaluationContext {
     }
 }
 
-/// 只有一个菜单 Action 的 Feature 使用的简洁协议。
-///
-/// 现有简单功能只需声明可用性和命令构造；默认实现会用共享
-/// Command descriptor 生成唯一 Action。需要多个参数化 Action 的 Feature
-/// 则直接遵循 `ContextMenuFeature` 并声明自己的 `menu`。
-protocol SingleActionContextMenuFeature: ContextMenuFeature {
-    /// 使用冻结快照和本次菜单共享事实判断功能是否出现。
-    func isAvailable(in context: FinderContextMenuEvaluationContext) -> Bool
+/// 可以声明 Finder 菜单树并构造类型化命令的增量功能。
+protocol ContextMenuFeature: AnyObject {
+    /// 当前 Feature 所有 Action 共用的跨进程命令类型。
+    associatedtype Command: ContextCommandPayload
 
-    /// 从菜单实例绑定的 Finder 快照构造类型化命令。
-    func command(for snapshot: FinderContextSnapshot) -> Command
+    /// 向主应用投递当前功能命令的客户端。
+    var commandClient: ContextCommandClient { get }
+
+    /// 当前 Feature 独立拥有的叶子、分隔线和子菜单。
+    var nodes: [ContextMenuNode<ContextMenuAction<Command>>] { get }
+}
+
+/// 只有一个菜单 Action 的 Feature 使用的简洁协议。
+/// 返回 `nil` 同时表示当前上下文不显示该命令。
+protocol SingleActionContextMenuFeature: ContextMenuFeature {
+    /// 在本次菜单上下文中准备可执行命令。
+    func command(
+        in context: FinderContextMenuEvaluationContext
+    ) -> Command?
 }
 
 extension SingleActionContextMenuFeature {
-    /// 从共享 descriptor 自动生成单一叶子，保持简单 Feature 的声明紧凑。
-    var menu: ContextMenuFeatureMenu<Command> {
+    /// 从共享 descriptor 自动生成单一叶子。
+    var nodes: [ContextMenuNode<ContextMenuAction<Command>>] {
         let descriptor = Command.descriptor
-        return ContextMenuFeatureMenu {
-            ContextMenuAction(
-                id: "primary",
-                title: descriptor.title,
-                icon: descriptor.icon,
-                requiredApplication: descriptor.requiredApplication,
-                isAvailable: { [self] context in
-                    isAvailable(in: context)
-                },
-                command: { [self] snapshot in
-                    command(for: snapshot)
-                }
-            )
-        }
+        return [
+            .item(
+                ContextMenuAction(
+                    id: "primary",
+                    title: descriptor.title,
+                    icon: descriptor.icon,
+                    command: { [self] context in
+                        command(in: context)
+                    }
+                )
+            ),
+        ]
     }
 }
 
@@ -175,9 +205,6 @@ nonisolated struct FinderContextMenuActionDescriptor: Equatable, Sendable {
 
     /// Finder 菜单叶子显示的图标来源。
     let icon: ContextCommandIcon
-
-    /// 图标或可用性判断依赖的固定应用；没有依赖时为 `nil`。
-    let requiredApplication: ContextCommandApplicationRequirement?
 }
 
 /// 一个 Feature 内声明的类型化菜单叶子。
@@ -191,180 +218,74 @@ struct ContextMenuAction<Command: ContextCommandPayload> {
     /// 菜单叶子的图标来源。
     let icon: ContextCommandIcon
 
-    /// 菜单叶子依赖的外部应用。
-    let requiredApplication: ContextCommandApplicationRequirement?
-
-    /// 依据冻结快照和本次菜单共享事实判断叶子是否出现。
-    let isAvailable: (FinderContextMenuEvaluationContext) -> Bool
-
-    /// 从冻结快照构造可以携带不同参数的同一种 Command。
-    let command: (FinderContextSnapshot) -> Command
+    /// 构造可执行命令；当前上下文不可用时返回 `nil`。
+    let command: (FinderContextMenuEvaluationContext) -> Command?
 
     /// 声明一个类型化菜单 Action。
     /// - Parameters:
     ///   - id: Feature 内保持稳定且唯一的局部标识。
     ///   - title: Finder 显示的叶子名称。
     ///   - icon: Finder 显示的图标来源。
-    ///   - requiredApplication: 图标或动作依赖的固定应用。
-    ///   - isAvailable: 当前上下文是否显示该叶子。
-    ///   - command: 从同一构建快照创建类型化命令，可写入 Action 参数。
+    ///   - command: 从本次求值上下文创建类型化命令。
     init(
         id: String,
         title: String,
         icon: ContextCommandIcon,
-        requiredApplication: ContextCommandApplicationRequirement? = nil,
-        isAvailable: @escaping (FinderContextMenuEvaluationContext) -> Bool = { _ in true },
-        command: @escaping (FinderContextSnapshot) -> Command
+        command: @escaping (FinderContextMenuEvaluationContext) -> Command?
     ) {
         precondition(!title.isEmpty)
         switch icon {
         case .systemSymbol(let name):
             precondition(!name.isEmpty)
-        case .requiredApplication:
-            precondition(requiredApplication != nil)
+        case .application:
+            break
         }
 
         self.id = ContextMenuActionLocalID(rawValue: id)
         self.title = title
         self.icon = icon
-        self.requiredApplication = requiredApplication
-        self.isAvailable = isAvailable
         self.command = command
     }
 }
 
-/// Feature 菜单 result builder 拼接布局和 Action 时使用的中间值。
-struct ContextMenuFeatureComponent<Command: ContextCommandPayload> {
-    /// 当前声明片段产生的递归局部布局。
-    let layout: [ContextMenuLayout<ContextMenuActionLocalID>]
+/// 菜单构建时已经冻结参数、可以直接调用的 Action。
+final class PreparedContextMenuAction {
+    /// Finder 渲染叶子所需的产品信息。
+    let descriptor: FinderContextMenuActionDescriptor
 
-    /// 当前声明片段按菜单顺序注册的类型化叶子。
-    let actions: [ContextMenuAction<Command>]
-}
+    /// 已经捕获类型化 Command 的单次投递行为。
+    private let performClosure: () -> Void
 
-/// 一个 Feature 独立拥有的声明式菜单树。
-struct ContextMenuFeatureMenu<Command: ContextCommandPayload> {
-    /// 引用具体 Action 局部身份的递归布局。
-    let layout: [ContextMenuLayout<ContextMenuActionLocalID>]
-
-    /// 按布局顺序保存的类型化 Action。
-    let actions: [ContextMenuAction<Command>]
-
-    /// 构造并验证一个 Feature 内的完整菜单树。
+    /// 绑定展示信息和准备好的调用。
     init(
-        @ContextMenuFeatureBuilder<Command> content: () -> ContextMenuFeatureComponent<Command>
+        descriptor: FinderContextMenuActionDescriptor,
+        perform: @escaping () -> Void
     ) {
-        let component = content()
-        let actionIDs = component.actions.map(\.id)
-        precondition(
-            !actionIDs.isEmpty,
-            "A Finder context-menu Feature must declare at least one Action"
-        )
-        precondition(
-            Set(actionIDs).count == actionIDs.count,
-            "A Finder context-menu Action was registered more than once in one Feature"
-        )
+        self.descriptor = descriptor
+        performClosure = perform
+    }
 
-        layout = component.layout
-        actions = component.actions
+    /// 投递菜单构建时已经准备好的命令。
+    func perform() {
+        performClosure()
     }
 }
 
-/// 在单个 Feature 中递归组合一组 Action。
-struct ContextMenuFeatureSubmenu<Command: ContextCommandPayload> {
-    /// 子菜单的固定产品标题。
-    let title: String
-
-    /// 子菜单内部的局部布局和类型化 Action。
-    let content: ContextMenuFeatureComponent<Command>
-
-    /// 使用同一类型化 builder 创建嵌套菜单。
-    init(
-        _ title: String,
-        @ContextMenuFeatureBuilder<Command> content: () -> ContextMenuFeatureComponent<Command>
-    ) {
-        precondition(!title.isEmpty)
-        self.title = title
-        self.content = content()
-    }
-}
-
-/// 把一个 Feature 的类型化 Action 组合为递归菜单声明。
-@resultBuilder
-enum ContextMenuFeatureBuilder<Command: ContextCommandPayload> {
-    /// result builder 的统一中间类型。
-    typealias Component = ContextMenuFeatureComponent<Command>
-
-    /// 一个具体 Action 同时贡献叶子布局和命令构造行为。
-    static func buildExpression(_ expression: ContextMenuAction<Command>) -> Component {
-        ContextMenuFeatureComponent(
-            layout: [.item(expression.id)],
-            actions: [expression]
-        )
-    }
-
-    /// 把系统分隔线加入 Feature 内部布局。
-    static func buildExpression(_: ContextMenuSeparator) -> Component {
-        ContextMenuFeatureComponent(layout: [.separator], actions: [])
-    }
-
-    /// 把 Feature 内部子菜单递归嵌入。
-    static func buildExpression(
-        _ expression: ContextMenuFeatureSubmenu<Command>
-    ) -> Component {
-        ContextMenuFeatureComponent(
-            layout: [
-                .submenu(
-                    title: expression.title,
-                    children: expression.content.layout
-                ),
-            ],
-            actions: expression.content.actions
-        )
-    }
-
-    /// 按书写顺序拼接同级布局和 Action。
-    static func buildBlock(_ components: Component...) -> Component {
-        ContextMenuFeatureComponent(
-            layout: components.flatMap(\.layout),
-            actions: components.flatMap(\.actions)
-        )
-    }
-
-    /// 支持根据产品编译条件省略一段 Action 声明。
-    static func buildOptional(_ component: Component?) -> Component {
-        component ?? ContextMenuFeatureComponent(layout: [], actions: [])
-    }
-
-    /// 支持声明中的第一个条件分支。
-    static func buildEither(first component: Component) -> Component {
-        component
-    }
-
-    /// 支持声明中的第二个条件分支。
-    static func buildEither(second component: Component) -> Component {
-        component
-    }
-
-    /// 支持以循环生成同级 Action。
-    static func buildArray(_ components: [Component]) -> Component {
-        ContextMenuFeatureComponent(
-            layout: components.flatMap(\.layout),
-            actions: components.flatMap(\.actions)
-        )
-    }
-}
-
-/// 隐藏具体 Command 类型，供稳定菜单运行时统一存储和调用一个 Action。
+/// 隐藏具体 Command 类型，供产品菜单树统一存储叶子。
 final class AnyContextMenuAction {
+    /// 菜单 Action 日志共用的稳定分类。
+    private static let logger = Logger(
+        subsystem: Bundle.main.bundleIdentifier ?? "EnhancedContextMenu",
+        category: "ContextCommandFeature"
+    )
+
     /// 具体叶子的完整身份和展示信息。
     let descriptor: FinderContextMenuActionDescriptor
 
-    /// 类型擦除后的 Finder 上下文可用性判断。
-    private let isAvailableClosure: (FinderContextMenuEvaluationContext) -> Bool
-
-    /// 类型擦除后的命令构造和发送行为。
-    private let performClosure: (FinderContextSnapshot) -> Void
+    /// 类型擦除后的命令准备行为。
+    private let prepareClosure: (
+        FinderContextMenuEvaluationContext
+    ) -> PreparedContextMenuAction?
 
     /// 为一个 Feature 的具体叶子绑定共享命令类型和投递客户端。
     init<Command: ContextCommandPayload>(
@@ -372,151 +293,57 @@ final class AnyContextMenuAction {
         featureID: ContextCommandFeatureID,
         commandClient: ContextCommandClient
     ) {
-        descriptor = FinderContextMenuActionDescriptor(
+        let descriptor = FinderContextMenuActionDescriptor(
             id: FinderContextMenuActionID(
                 featureID: featureID,
                 localID: action.id
             ),
             title: action.title,
-            icon: action.icon,
-            requiredApplication: action.requiredApplication
+            icon: action.icon
         )
-        isAvailableClosure = action.isAvailable
-        performClosure = { snapshot in
-            let logger = Logger(
-                subsystem: Bundle.main.bundleIdentifier ?? "EnhancedContextMenu",
-                category: "ContextCommandFeature"
-            )
-            logger.debug(
-                "Handling Finder action \(featureID.rawValue, privacy: .public)/\(action.id.rawValue, privacy: .public)"
-            )
-
-            commandClient.send(action.command(snapshot))
-        }
-    }
-
-    /// 调用具体 Action 的可用性判断。
-    func isAvailable(in context: FinderContextMenuEvaluationContext) -> Bool {
-        isAvailableClosure(context)
-    }
-
-    /// 构造并发送该具体 Action 的类型化命令。
-    func perform(in snapshot: FinderContextSnapshot) {
-        performClosure(snapshot)
-    }
-}
-
-/// 隐藏一个 Feature 的具体 Command 类型，并保留其功能级身份和菜单树。
-struct AnyContextMenuFeature {
-    /// 配置和主应用状态页使用的功能级 descriptor。
-    let descriptor: ContextCommandDescriptor
-
-    /// 引用完整 Action descriptor 的递归菜单布局。
-    let layout: [ContextMenuLayout<FinderContextMenuActionDescriptor>]
-
-    /// 当前 Feature 的全部类型擦除 Action。
-    let actions: [AnyContextMenuAction]
-
-    /// 把 Feature 的局部 Action 身份扩展为全局复合身份。
-    init<Feature: ContextMenuFeature>(_ feature: Feature) {
-        let featureDescriptor = Feature.Command.descriptor
-        let featureMenu = feature.menu
-        let erasedActions = featureMenu.actions.map {
-            AnyContextMenuAction(
-                $0,
-                featureID: featureDescriptor.id,
-                commandClient: feature.commandClient
-            )
-        }
-        let descriptorsByLocalID = Dictionary(
-            uniqueKeysWithValues: erasedActions.map {
-                ($0.descriptor.id.localID, $0.descriptor)
+        self.descriptor = descriptor
+        prepareClosure = { context in
+            guard let command = action.command(context) else {
+                return nil
             }
-        )
-
-        descriptor = featureDescriptor
-        layout = Self.eraseLayout(
-            featureMenu.layout,
-            descriptorsByLocalID: descriptorsByLocalID
-        )
-        actions = erasedActions
-    }
-
-    /// 递归把局部布局引用替换为可直接渲染的完整 Action descriptor。
-    private static func eraseLayout(
-        _ layout: [ContextMenuLayout<ContextMenuActionLocalID>],
-        descriptorsByLocalID: [
-            ContextMenuActionLocalID: FinderContextMenuActionDescriptor
-        ]
-    ) -> [ContextMenuLayout<FinderContextMenuActionDescriptor>] {
-        layout.map { node in
-            switch node {
-            case .item(let localID):
-                guard let descriptor = descriptorsByLocalID[localID] else {
-                    preconditionFailure("A Finder menu layout referenced an unknown Action")
-                }
-                return .item(descriptor)
-            case .separator:
-                return .separator
-            case .submenu(let title, let children):
-                return .submenu(
-                    title: title,
-                    children: eraseLayout(
-                        children,
-                        descriptorsByLocalID: descriptorsByLocalID
-                    )
+            return PreparedContextMenuAction(descriptor: descriptor) {
+                let actionName = "\(featureID.rawValue)/\(action.id.rawValue)"
+                Self.logger.debug(
+                    "Handling Finder action \(actionName, privacy: .public)"
                 )
+                commandClient.send(command)
             }
         }
     }
+
+    /// 在菜单构建时同时决定可见性并冻结命令。
+    func prepare(
+        in context: FinderContextMenuEvaluationContext
+    ) -> PreparedContextMenuAction? {
+        prepareClosure(context)
+    }
 }
 
-/// Finder 菜单 result builder 拼接布局和 Feature 时使用的中间值。
-struct FinderContextMenuComponent {
-    /// 当前声明片段产生的递归菜单节点。
-    let layout: [ContextMenuLayout<FinderContextMenuActionDescriptor>]
-
-    /// 当前声明片段按产品顺序注册的具体 Feature。
-    let features: [AnyContextMenuFeature]
-}
-
-/// 同时保存 Finder 布局、功能目录和具体 Action 的不可变产品声明。
+/// 保存 Finder 产品顺序、层级和可执行叶子的不可变声明。
 struct FinderContextMenuDefinition {
-    /// 保留 Finder 展示顺序和层级的递归布局。
-    let layout: [ContextMenuLayout<FinderContextMenuActionDescriptor>]
+    /// 产品声明和运行时准备共用的递归菜单树。
+    let nodes: [ContextMenuNode<AnyContextMenuAction>]
 
-    /// 按 Finder 产品顺序排列、每个 Feature 只出现一次的命令目录项。
-    let items: [ContextCommandDescriptor]
-
-    /// 按复合身份索引的具体 Finder Action 注册表。
-    let actions: [FinderContextMenuActionID: AnyContextMenuAction]
-
-    /// 使用一棵声明树同时构造布局、功能目录和 Action 注册表。
+    /// 使用一棵声明树构造并验证产品菜单。
     init(
-        @FinderContextMenuBuilder content: () -> FinderContextMenuComponent
+        @FinderContextMenuBuilder content: () -> [
+            ContextMenuNode<AnyContextMenuAction>
+        ]
     ) {
-        let component = content()
-        let descriptors = component.features.map(\.descriptor)
-        let featureIDs = descriptors.map(\.id)
-        precondition(
-            Set(featureIDs).count == featureIDs.count,
-            "A Finder context-menu Feature was registered more than once"
-        )
-
-        let registeredActions = component.features.flatMap(\.actions)
-        let actionIDs = registeredActions.map(\.descriptor.id)
+        let nodes = content()
+        let actionIDs = nodes
+            .flatMap { $0.items }
+            .map(\.descriptor.id)
         precondition(
             Set(actionIDs).count == actionIDs.count,
             "A Finder context-menu Action was registered more than once"
         )
-
-        layout = component.layout
-        items = descriptors
-        actions = Dictionary(
-            uniqueKeysWithValues: registeredActions.map {
-                ($0.descriptor.id, $0)
-            }
-        )
+        self.nodes = nodes
     }
 }
 
@@ -531,17 +358,19 @@ struct FinderContextMenuSubmenu {
     /// 子菜单的固定产品标题。
     let title: String
 
-    /// 子菜单内部同时生成的布局和 Feature。
-    let content: FinderContextMenuComponent
+    /// 子菜单内部的递归节点。
+    let nodes: [ContextMenuNode<AnyContextMenuAction>]
 
     /// 使用 Finder 产品 builder 创建嵌套菜单。
     init(
         _ title: String,
-        @FinderContextMenuBuilder content: () -> FinderContextMenuComponent
+        @FinderContextMenuBuilder content: () -> [
+            ContextMenuNode<AnyContextMenuAction>
+        ]
     ) {
         precondition(!title.isEmpty)
         self.title = title
-        self.content = content()
+        nodes = content()
     }
 }
 
@@ -549,67 +378,43 @@ struct FinderContextMenuSubmenu {
 @resultBuilder
 enum FinderContextMenuBuilder {
     /// result builder 的统一中间类型。
-    typealias Component = FinderContextMenuComponent
+    typealias Component = [ContextMenuNode<AnyContextMenuAction>]
 
     /// 一个具体 Feature 贡献自己的完整菜单子树和运行时 Action。
     static func buildExpression<Feature: ContextMenuFeature>(
         _ expression: Feature
     ) -> Component {
-        let feature = AnyContextMenuFeature(expression)
-        return FinderContextMenuComponent(
-            layout: feature.layout,
-            features: [feature]
+        let featureID = Feature.Command.descriptor.id
+        let nodes = expression.nodes.map { node in
+            node.mapItems { action in
+                AnyContextMenuAction(
+                    action,
+                    featureID: featureID,
+                    commandClient: expression.commandClient
+                )
+            }
+        }
+        precondition(
+            !nodes.flatMap({ $0.items }).isEmpty,
+            "A Finder context-menu Feature must declare at least one Action"
         )
+        return nodes
     }
 
     /// 把系统分隔线加入产品布局，不注册 Feature。
     static func buildExpression(_: ContextMenuSeparator) -> Component {
-        FinderContextMenuComponent(layout: [.separator], features: [])
+        [.separator]
     }
 
     /// 把一组完整 Feature 的子菜单递归嵌入产品布局。
     static func buildExpression(
         _ expression: FinderContextMenuSubmenu
     ) -> Component {
-        FinderContextMenuComponent(
-            layout: [
-                .submenu(
-                    title: expression.title,
-                    children: expression.content.layout
-                ),
-            ],
-            features: expression.content.features
-        )
+        [.submenu(title: expression.title, children: expression.nodes)]
     }
 
     /// 按书写顺序拼接同级布局和 Feature。
     static func buildBlock(_ components: Component...) -> Component {
-        FinderContextMenuComponent(
-            layout: components.flatMap(\.layout),
-            features: components.flatMap(\.features)
-        )
-    }
-
-    /// 支持根据产品编译条件省略一段声明。
-    static func buildOptional(_ component: Component?) -> Component {
-        component ?? FinderContextMenuComponent(layout: [], features: [])
-    }
-
-    /// 支持声明中的第一个条件分支。
-    static func buildEither(first component: Component) -> Component {
-        component
-    }
-
-    /// 支持声明中的第二个条件分支。
-    static func buildEither(second component: Component) -> Component {
-        component
-    }
-
-    /// 支持以循环生成同级 Feature。
-    static func buildArray(_ components: [Component]) -> Component {
-        FinderContextMenuComponent(
-            layout: components.flatMap(\.layout),
-            features: components.flatMap(\.features)
-        )
+        components.flatMap { $0 }
     }
 }

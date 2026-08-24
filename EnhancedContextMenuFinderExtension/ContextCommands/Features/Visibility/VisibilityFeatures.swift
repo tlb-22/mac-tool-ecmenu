@@ -102,19 +102,20 @@ final class HideItemsFeature: SingleActionContextMenuFeature {
         self.readSelectionFacts = readSelectionFacts
     }
 
-    /// 只在选择中至少一个普通对象当前可见时显示隐藏命令。
-    func isAvailable(in context: FinderContextMenuEvaluationContext) -> Bool {
+    /// 只为至少含一个可见普通对象的选择构造命令。
+    func command(
+        in context: FinderContextMenuEvaluationContext
+    ) -> HideItemsCommand? {
         guard case .items(let selection) = context.snapshot else {
-            return false
+            return nil
         }
-        return context.fact(VisibilitySelectionMenuFacts.self) {
+        let facts = context.fact(VisibilitySelectionMenuFacts.self) {
             readSelectionFacts(selection)
-        }.hasVisibleOrdinaryItem
-    }
-
-    /// 使用当前菜单项在构建时绑定的 Finder 状态构造隐藏命令。
-    func command(for snapshot: FinderContextSnapshot) -> HideItemsCommand {
-        HideItemsCommand(finderContext: snapshot)
+        }
+        guard facts.hasVisibleOrdinaryItem else {
+            return nil
+        }
+        return HideItemsCommand(selection: selection)
     }
 }
 
@@ -144,18 +145,19 @@ final class ShowItemsFeature: SingleActionContextMenuFeature {
         self.readSelectionFacts = readSelectionFacts
     }
 
-    /// 只在选择中至少一个普通对象当前隐藏时显示显示命令。
-    func isAvailable(in context: FinderContextMenuEvaluationContext) -> Bool {
+    /// 只为至少含一个隐藏普通对象的选择构造命令。
+    func command(
+        in context: FinderContextMenuEvaluationContext
+    ) -> ShowItemsCommand? {
         guard case .items(let selection) = context.snapshot else {
-            return false
+            return nil
         }
-        return context.fact(VisibilitySelectionMenuFacts.self) {
+        let facts = context.fact(VisibilitySelectionMenuFacts.self) {
             readSelectionFacts(selection)
-        }.hasHiddenOrdinaryItem
-    }
-
-    /// 使用当前菜单项在构建时绑定的 Finder 状态构造显示命令。
-    func command(for snapshot: FinderContextSnapshot) -> ShowItemsCommand {
-        ShowItemsCommand(finderContext: snapshot)
+        }
+        guard facts.hasHiddenOrdinaryItem else {
+            return nil
+        }
+        return ShowItemsCommand(selection: selection)
     }
 }

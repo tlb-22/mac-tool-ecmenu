@@ -12,9 +12,6 @@ private enum ContextCommandProgressPreviewParameters {
     /// 打开预览时每项任务已经处理的图片数。
     static let completedUnitCount = 94
 
-    /// 预览中的任务是否显示生产取消按钮。
-    static let allowsCancellation = true
-
     /// 预览无需等待生产环境的短任务隐藏阈值。
     static let displayDelay: Duration = .zero
 }
@@ -65,8 +62,7 @@ private final class ContextCommandProgressPreviewSession {
 
         for reporter in reporters {
             reporter.begin(
-                totalUnitCount: parameters.totalUnitCount,
-                allowsCancellation: parameters.allowsCancellation
+                totalUnitCount: parameters.totalUnitCount
             )
             for _ in 0..<parameters.completedUnitCount {
                 reporter.advance()

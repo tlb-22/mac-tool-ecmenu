@@ -28,13 +28,17 @@ final class CompressImagesFeature: SingleActionContextMenuFeature {
 
     // MARK: - ==================== 副作用：读取选择集合的文件类型 ====================
 
-    /// 仅在全部选中对象都是 ImageIO 声明支持的图片文件时显示菜单。
-    func isAvailable(in context: FinderContextMenuEvaluationContext) -> Bool {
+    /// 仅为全部都是 ImageIO 支持图片的选择构造命令。
+    func command(
+        in context: FinderContextMenuEvaluationContext
+    ) -> CompressImagesCommand? {
         guard case .items(let selection) = context.snapshot else {
-            return false
+            return nil
         }
-
-        return selection.urls.allSatisfy(Self.isSupportedImageFile)
+        guard selection.urls.allSatisfy(Self.isSupportedImageFile) else {
+            return nil
+        }
+        return CompressImagesCommand(selection: selection)
     }
 
     /// 读取单个 URL 的目录和内容类型，不在 Finder 菜单阶段解码图片。
@@ -58,10 +62,4 @@ final class CompressImagesFeature: SingleActionContextMenuFeature {
         }
     }
 
-    // MARK: - ==================== 纯函数：构造命令 ====================
-
-    /// 使用当前菜单项在构建时绑定的 Finder 状态构造图片压缩命令。
-    func command(for snapshot: FinderContextSnapshot) -> CompressImagesCommand {
-        CompressImagesCommand(finderContext: snapshot)
-    }
 }

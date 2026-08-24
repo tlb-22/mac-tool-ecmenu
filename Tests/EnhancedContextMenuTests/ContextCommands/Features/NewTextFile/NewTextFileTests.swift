@@ -3,72 +3,8 @@ import Foundation
 import XCTest
 @testable import EnhancedContextMenu
 
-/// 验证新建 TXT 的纯规划、命名规则和真实文件系统执行。
+/// 验证新建 TXT 的命名规则和真实文件系统执行。
 final class NewTextFileTests: XCTestCase {
-    /// container、items 与 sidebar 使用各自已经解释完成的语义目标。
-    func testFinderTargetResolution() {
-        let parent = url("/test/parent")
-        let child = url("/test/parent/child")
-        let deepChild = url("/test/parent/child/grandchild/leaf")
-        let siblingPrefix = url("/test/parent-other/child")
-        let file = url("/test/parent/file.txt")
-        let directories: Set<URL> = [parent, child, deepChild, siblingPrefix]
-
-        XCTAssertEqual(
-            resolve(.container(path: parent.path), directories)?.path,
-            parent.path
-        )
-        XCTAssertEqual(
-            resolve(.container(path: child.path), directories)?.path,
-            child.path
-        )
-        XCTAssertEqual(
-            resolve(.container(path: siblingPrefix.path), directories)?.path,
-            siblingPrefix.path
-        )
-        XCTAssertEqual(
-            resolve(items([child]), directories)?.path,
-            child.path
-        )
-        XCTAssertEqual(
-            resolve(items([file]), directories)?.path,
-            parent.path
-        )
-        XCTAssertNil(
-            resolve(items([file, child]), directories)
-        )
-        XCTAssertEqual(
-            resolve(.sidebar(path: child.path), directories)?.path,
-            child.path
-        )
-        XCTAssertNil(
-            resolve(.sidebar(path: file.path), directories)
-        )
-    }
-
-    /// 有效快照产生计划，含糊选择产生类型化目标失败。
-    func testPlanConstruction() {
-        let parent = url("/test/parent")
-        let deepChild = url("/test/parent/child/grandchild")
-        let containerSnapshot = FinderContextSnapshot.container(path: parent.path)
-
-        XCTAssertEqual(
-            try? CreateNewTextFileHandler.makePlan(
-                for: containerSnapshot,
-                directoryURLs: [parent, deepChild]
-            ).get(),
-            CreateNewTextFilePlan(directoryURL: parent)
-        )
-
-        let ambiguousSnapshot = items([parent, deepChild])
-        guard case .failure(.targetUnavailable) = CreateNewTextFileHandler.makePlan(
-            for: ambiguousSnapshot,
-            directoryURLs: [parent, deepChild]
-        ) else {
-            return XCTFail("An ambiguous selection must produce targetUnavailable")
-        }
-    }
-
     /// 候选序列应完整、惰性并遵守产品命名顺序。
     func testCandidateNaming() {
         let directory = url("/test/parent")
@@ -95,12 +31,15 @@ final class NewTextFileTests: XCTestCase {
         let fixture = try ProjectTestDirectory.makeUniqueDirectory()
         defer { try? FileManager.default.removeItem(at: fixture) }
         let handler = CreateNewTextFileHandler()
+        let directoryPath = try XCTUnwrap(AbsoluteFilePath(url: fixture))
         let command = CreateNewTextFileCommand(
-            finderContext: .container(path: fixture.path)
+            directoryPath: directoryPath
         )
 
         let first = try await handler.execute(command).get().fileURL
-        let second = try CreateNewTextFileHandler.createEmptyTextFile(in: fixture)
+        let second = try CreateNewTextFileHandler.createEmptyTextFile(
+            in: directoryPath
+        )
         XCTAssertEqual(first.lastPathComponent, "untitled.txt")
         XCTAssertEqual(second.lastPathComponent, "untitled_copy.txt")
         XCTAssertTrue(try Data(contentsOf: first).isEmpty)
@@ -108,7 +47,9 @@ final class NewTextFileTests: XCTestCase {
 
         let missingDirectory = fixture.appendingPathComponent("missing")
         let missingCommand = CreateNewTextFileCommand(
-            finderContext: .container(path: missingDirectory.path)
+            directoryPath: try XCTUnwrap(
+                AbsoluteFilePath(url: missingDirectory)
+            )
         )
         guard case .failure(.directoryUnavailable(let url, let error)) = await handler.execute(
             missingCommand
@@ -127,11 +68,14 @@ final class NewTextFileTests: XCTestCase {
         let occupiedContents = Data("existing contents".utf8)
         try occupiedContents.write(to: occupiedURL)
         let results = ConcurrentCreationResults()
+        let directoryPath = try XCTUnwrap(AbsoluteFilePath(url: fixture))
 
         DispatchQueue.concurrentPerform(iterations: 8) { _ in
             results.record(
                 Result {
-                    try CreateNewTextFileHandler.createEmptyTextFile(in: fixture)
+                    try CreateNewTextFileHandler.createEmptyTextFile(
+                        in: directoryPath
+                    )
                 }
             )
         }
@@ -145,28 +89,9 @@ final class NewTextFileTests: XCTestCase {
         )
     }
 
-    /// 调用纯目标解析器，简化场景断言。
-    private func resolve(
-        _ snapshot: FinderContextSnapshot,
-        _ directoryURLs: Set<URL>
-    ) -> URL? {
-        CreateNewTextFileHandler.targetDirectory(
-            for: snapshot,
-            directoryURLs: directoryURLs
-        )
-    }
-
     /// 创建标准化文件 URL。
     private func url(_ path: String) -> URL {
         URL(fileURLWithPath: path).standardizedFileURL
-    }
-
-    /// 构造测试使用的非空 Finder 项目语义。
-    private func items(_ urls: [URL]) -> FinderContextSnapshot {
-        guard let selection = FinderItemSelection(urls: urls) else {
-            preconditionFailure("A test item selection cannot be empty")
-        }
-        return .items(selection: selection)
     }
 }
 

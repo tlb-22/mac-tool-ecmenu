@@ -10,9 +10,17 @@ final class FinderCompositionTests: XCTestCase {
         let menu = FinderComposition.menu(
             commandClient: ContextCommandClient()
         )
+        let featureIDs = menu.nodes
+            .flatMap { $0.items }
+            .map { $0.descriptor.id.featureID.rawValue }
+            .reduce(into: [String]()) { result, featureID in
+                if !result.contains(featureID) {
+                    result.append(featureID)
+                }
+            }
 
         XCTAssertEqual(
-            menu.items.map(\.id.rawValue),
+            featureIDs,
             ProductContextCommandExpectation.featureIDs
         )
     }
@@ -25,34 +33,36 @@ final class FinderCompositionTests: XCTestCase {
             targetedURL: URL(fileURLWithPath: "/Users/example"),
             selectedURLs: []
         )
-        let selectedItem = FinderContextSnapshot.items(
-            selection: try XCTUnwrap(
-                FinderItemSelection(paths: ["/Users/example/file.txt"])
-            )
+        let selection = try XCTUnwrap(
+            FinderItemSelection(paths: ["/Users/example/file.txt"])
         )
+        let selectedItem = FinderContextSnapshot.items(selection: selection)
         let evaluationContext = FinderContextMenuEvaluationContext(
             snapshot: selectedItem
         )
 
         XCTAssertNil(emptyItems)
-        XCTAssertTrue(
-            CopyPathFeature(commandClient: client).isAvailable(
+        XCTAssertNotNil(
+            CopyPathFeature(commandClient: client).command(
                 in: evaluationContext
             )
         )
-        XCTAssertTrue(
+        XCTAssertNotNil(
             HideItemsFeature(
                 commandClient: client,
                 readSelectionFacts: { _ in
-                    self.visibilityFacts(isHiddenValues: [false])
+                    self.visibilityFacts(isHiddenValues: [false, true])
                 }
-            ).isAvailable(in: evaluationContext)
+            ).command(in: evaluationContext)
         )
         XCTAssertEqual(
-            ShowItemsFeature(commandClient: client)
-                .command(for: selectedItem)
-                .finderContext,
-            selectedItem
+            ShowItemsFeature(
+                commandClient: client,
+                readSelectionFacts: { _ in
+                    self.visibilityFacts(isHiddenValues: [false, true])
+                }
+            ).command(in: evaluationContext)?.selection,
+            selection
         )
     }
 
@@ -148,8 +158,8 @@ final class FinderCompositionTests: XCTestCase {
     /// 空白处和侧边栏不显示可见性命令，也不读取选择事实。
     func testVisibilityContainerAndSidebarAreOmitted() {
         let snapshots: [FinderContextSnapshot] = [
-            .container(path: "/Users/example/folder"),
-            .sidebar(path: "/Users/example/folder"),
+            .container(path: absolutePath("/Users/example/folder")),
+            .sidebar(path: absolutePath("/Users/example/folder")),
         ]
         var readCount = 0
         let controller = visibilityController(
@@ -272,7 +282,9 @@ final class FinderCompositionTests: XCTestCase {
         let directoryPath = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .path
-        let snapshot = FinderContextSnapshot.container(path: directoryPath)
+        let snapshot = FinderContextSnapshot.container(
+            path: absolutePath(directoryPath)
+        )
         let client = ContextCommandClient()
 
         let unavailableController = FinderContextMenuController(
@@ -331,7 +343,7 @@ final class FinderCompositionTests: XCTestCase {
                 targetedURL: residualSelection,
                 selectedURLs: [visibleDirectory]
             ),
-            .container(path: visibleDirectory.standardizedFileURL.path)
+            .container(path: absolutePath(visibleDirectory.path))
         )
         XCTAssertEqual(
             FinderContextReader.snapshot(
@@ -339,7 +351,7 @@ final class FinderCompositionTests: XCTestCase {
                 targetedURL: visibleDirectory,
                 selectedURLs: [residualSelection]
             ),
-            .sidebar(path: visibleDirectory.standardizedFileURL.path)
+            .sidebar(path: absolutePath(visibleDirectory.path))
         )
         XCTAssertNil(
             FinderContextReader.snapshot(
@@ -350,15 +362,18 @@ final class FinderCompositionTests: XCTestCase {
         )
     }
 
-    /// 每个 action 应保留生成所属菜单时的快照，而不是点击后重新读取 Finder。
+    /// 每个 action 应投递菜单构建时已经准备好的命令。
     func testRenderedActionsKeepMenuBuildSnapshot() throws {
         let snapshot = FinderContextSnapshot.container(
-            path: "/visible/through-alias/current"
+            path: absolutePath("/visible/through-alias/current")
         )
+        let transport = RecordingContextCommandTransport()
         let controller = FinderContextMenuController(
-            menu: FinderComposition.menu(
-                commandClient: ContextCommandClient()
-            ),
+            menu: FinderContextMenuDefinition {
+                CopyPathFeature(
+                    commandClient: ContextCommandClient(transport: transport)
+                )
+            },
             isFeatureVisible: { _ in true }
         )
 
@@ -368,28 +383,36 @@ final class FinderCompositionTests: XCTestCase {
                 action: #selector(NSApplication.terminate(_:))
             )
         )
-        let actionContexts = renderedMenu.items.compactMap {
-            controller.actionContext(for: $0)
-        }
+        let menuItem = try XCTUnwrap(renderedMenu.items.first)
 
-        XCTAssertFalse(actionContexts.isEmpty)
-        XCTAssertTrue(actionContexts.allSatisfy { $0.snapshot == snapshot })
+        XCTAssertNotNil(controller.preparedAction(for: menuItem))
+        controller.perform(menuItem)
+
+        let request = try XCTUnwrap(transport.recordedRequests.first)
+        let command = try XCTUnwrap(
+            request.command.decode(as: CopyPathCommand.self)
+        )
+        XCTAssertEqual(command.paths, snapshot.absolutePaths)
+        XCTAssertNil(controller.preparedAction(for: menuItem))
     }
 
     /// 后续菜单请求不得把旧空白菜单 action 改写为残余选中项语义。
     func testContainerActionSurvivesLaterItemsMenuBuild() throws {
+        let containerPath = absolutePath("/clicked-background")
         let containerSnapshot = FinderContextSnapshot.container(
-            path: "/clicked-background"
+            path: containerPath
         )
-        let itemsSnapshot = FinderContextSnapshot.items(
-            selection: try XCTUnwrap(
-                FinderItemSelection(paths: ["/residual-selected-folder"])
-            )
+        let selection = try XCTUnwrap(
+            FinderItemSelection(paths: ["/residual-selected-folder"])
         )
+        let itemsSnapshot = FinderContextSnapshot.items(selection: selection)
+        let transport = RecordingContextCommandTransport()
         let controller = FinderContextMenuController(
-            menu: FinderComposition.menu(
-                commandClient: ContextCommandClient()
-            ),
+            menu: FinderContextMenuDefinition {
+                CopyPathFeature(
+                    commandClient: ContextCommandClient(transport: transport)
+                )
+            },
             isFeatureVisible: { _ in true }
         )
 
@@ -400,7 +423,7 @@ final class FinderCompositionTests: XCTestCase {
             )
         )
         let containerItem = try XCTUnwrap(
-            containerMenu.items.first { $0.title == "新建 TXT" }
+            containerMenu.items.first { $0.title == "拷贝路径" }
         )
 
         let itemsMenu = try XCTUnwrap(
@@ -410,37 +433,48 @@ final class FinderCompositionTests: XCTestCase {
             )
         )
         let itemsItem = try XCTUnwrap(
-            itemsMenu.items.first { $0.title == "新建 TXT" }
+            itemsMenu.items.first { $0.title == "拷贝路径" }
         )
 
         XCTAssertNotEqual(containerItem.tag, itemsItem.tag)
+        controller.perform(containerItem)
+        controller.perform(itemsItem)
+
+        let commands = transport.recordedRequests.compactMap {
+            $0.command.decode(as: CopyPathCommand.self)
+        }
         XCTAssertEqual(
-            controller.actionContext(for: containerItem)?.snapshot,
-            containerSnapshot
-        )
-        XCTAssertEqual(
-            controller.actionContext(for: itemsItem)?.snapshot,
-            itemsSnapshot
+            commands.map(\.paths),
+            [[containerPath], selection.absolutePaths]
         )
     }
 
     /// 一个 Feature 可以声明递归子菜单，并让同一种 Command 携带不同参数。
     func testFeatureCanContributeParameterizedSubmenuActions() throws {
+        let transport = RecordingContextCommandTransport()
         let feature = TestParameterizedFeature(
-            commandClient: ContextCommandClient()
+            commandClient: ContextCommandClient(transport: transport)
         )
-        let snapshot = FinderContextSnapshot.container(path: "/test")
-        let typedActions = feature.menu.actions
+        let snapshot = FinderContextSnapshot.container(
+            path: absolutePath("/test")
+        )
+        let context = FinderContextMenuEvaluationContext(snapshot: snapshot)
+        let typedActions = feature.nodes.flatMap { $0.items }
 
         XCTAssertEqual(
-            typedActions.map { $0.command(snapshot).format },
+            typedActions.compactMap { $0.command(context)?.format },
             [.png, .jpeg]
         )
 
         let definition = FinderContextMenuDefinition { feature }
         XCTAssertEqual(
-            definition.items.map(\.id),
-            [TestParameterizedCommand.descriptor.id]
+            definition.nodes
+                .flatMap { $0.items }
+                .map { $0.descriptor.id.featureID },
+            [
+                TestParameterizedCommand.descriptor.id,
+                TestParameterizedCommand.descriptor.id,
+            ]
         )
 
         let controller = FinderContextMenuController(
@@ -457,14 +491,18 @@ final class FinderCompositionTests: XCTestCase {
         XCTAssertEqual(submenu.items.map(\.title), ["PNG", "JPEG"])
         XCTAssertEqual(
             submenu.items.compactMap {
-                controller.actionContext(for: $0)?.actionID.localID.rawValue
+                controller.preparedAction(for: $0)?
+                    .descriptor.id.localID.rawValue
             },
             ["png", "jpeg"]
         )
+        submenu.items.forEach { controller.perform($0) }
+        let commands = transport.recordedRequests.compactMap {
+            $0.command.decode(as: TestParameterizedCommand.self)
+        }
+        XCTAssertEqual(commands.map(\.format), [.png, .jpeg])
         XCTAssertTrue(
-            submenu.items.allSatisfy {
-                controller.actionContext(for: $0)?.snapshot == snapshot
-            }
+            commands.allSatisfy { $0.targetPath == snapshot.absolutePaths.first }
         )
     }
 
@@ -479,7 +517,7 @@ final class FinderCompositionTests: XCTestCase {
         )
         let menu = try XCTUnwrap(
             controller.menu(
-                for: .container(path: "/test"),
+                for: .container(path: absolutePath("/test")),
                 action: #selector(NSApplication.terminate(_:))
             )
         )
@@ -506,7 +544,9 @@ final class FinderCompositionTests: XCTestCase {
         let feature = TestAvailabilityFeature(
             commandClient: ContextCommandClient()
         )
-        let snapshot = FinderContextSnapshot.container(path: "/test")
+        let snapshot = FinderContextSnapshot.container(
+            path: absolutePath("/test")
+        )
         let controller = FinderContextMenuController(
             menu: FinderContextMenuDefinition { feature },
             isFeatureVisible: { _ in true }
@@ -529,8 +569,9 @@ final class FinderCompositionTests: XCTestCase {
         XCTAssertNotNil(enabledItem.action)
         XCTAssertEqual(enabledItem.tag, 1)
         XCTAssertEqual(
-            controller.actionContext(for: enabledItem)?.snapshot,
-            snapshot
+            controller.preparedAction(for: enabledItem)?
+                .descriptor.id.localID.rawValue,
+            "enabled"
         )
     }
 
@@ -594,6 +635,14 @@ final class FinderCompositionTests: XCTestCase {
             }
         )
     }
+
+    /// 把测试中的绝对路径字面量转为已验证值。
+    private func absolutePath(_ rawValue: String) -> AbsoluteFilePath {
+        guard let path = AbsoluteFilePath(path: rawValue) else {
+            preconditionFailure("Test path must be absolute")
+        }
+        return path
+    }
 }
 
 /// 仅用于证明同一命令类型可以承载不同菜单 Action 参数。
@@ -608,8 +657,8 @@ private struct TestParameterizedCommand: ContextCommandPayload, Equatable {
     /// 具体叶子写入的目标格式参数。
     let format: TestFormat
 
-    /// Action 构建时绑定的语义快照。
-    let finderContext: FinderContextSnapshot
+    /// Action 构建时绑定的目标。
+    let targetPath: AbsoluteFilePath
 }
 
 /// 参数化测试命令支持的两个示例值。
@@ -632,33 +681,52 @@ private final class TestParameterizedFeature: ContextMenuFeature {
     }
 
     /// 用一个功能级子菜单集中声明所有参数化 Action。
-    var menu: ContextMenuFeatureMenu<TestParameterizedCommand> {
-        ContextMenuFeatureMenu {
-            ContextMenuFeatureSubmenu("转换格式") {
-                ContextMenuAction(
-                    id: "png",
-                    title: "PNG",
-                    icon: .systemSymbol(name: "photo"),
-                    command: {
-                        TestParameterizedCommand(
-                            format: .png,
-                            finderContext: $0
+    var nodes: [ContextMenuNode<ContextMenuAction<TestParameterizedCommand>>] {
+        [
+            .submenu(
+                title: "转换格式",
+                children: [
+                    .item(
+                        ContextMenuAction(
+                            id: "png",
+                            title: "PNG",
+                            icon: .systemSymbol(name: "photo"),
+                            command: { context in
+                                guard let targetPath = context.snapshot
+                                    .absolutePaths.first
+                                else {
+                                    return nil
+                                }
+                                return TestParameterizedCommand(
+                                    format: .png,
+                                    targetPath: targetPath
+                                )
+                            }
                         )
-                    }
-                )
-                ContextMenuAction(
-                    id: "jpeg",
-                    title: "JPEG",
-                    icon: .systemSymbol(name: "photo.badge.arrow.down"),
-                    command: {
-                        TestParameterizedCommand(
-                            format: .jpeg,
-                            finderContext: $0
+                    ),
+                    .item(
+                        ContextMenuAction(
+                            id: "jpeg",
+                            title: "JPEG",
+                            icon: .systemSymbol(
+                                name: "photo.badge.arrow.down"
+                            ),
+                            command: { context in
+                                guard let targetPath = context.snapshot
+                                    .absolutePaths.first
+                                else {
+                                    return nil
+                                }
+                                return TestParameterizedCommand(
+                                    format: .jpeg,
+                                    targetPath: targetPath
+                                )
+                            }
                         )
-                    }
-                )
-            }
-        }
+                    ),
+                ]
+            ),
+        ]
     }
 }
 
@@ -671,8 +739,13 @@ private struct TestAvailabilityCommand: ContextCommandPayload, Equatable {
         icon: .systemSymbol(name: "checkmark.circle")
     )
 
-    /// Action 构建时绑定的语义快照。
-    let finderContext: FinderContextSnapshot
+    /// 使测试命令保持非空的简单负载。
+    let marker: Bool
+
+    /// 创建可投递的测试命令。
+    init(marker: Bool = true) {
+        self.marker = marker
+    }
 }
 
 /// 声明两层子菜单、两个不可用叶子和一个可用叶子的测试 Feature。
@@ -689,32 +762,71 @@ private final class TestAvailabilityFeature: ContextMenuFeature {
     }
 
     /// 构造可以验证递归 AppKit 菜单行为的声明树。
-    var menu: ContextMenuFeatureMenu<TestAvailabilityCommand> {
-        ContextMenuFeatureMenu {
-            ContextMenuFeatureSubmenu("第一层") {
-                ContextMenuAction(
-                    id: "unavailable-one",
-                    title: "不可用一",
-                    icon: .systemSymbol(name: "xmark.circle"),
-                    isAvailable: { _ in false },
-                    command: TestAvailabilityCommand.init(finderContext:)
-                )
-                ContextMenuAction(
-                    id: "unavailable-two",
-                    title: "不可用二",
-                    icon: .systemSymbol(name: "xmark.circle"),
-                    isAvailable: { _ in false },
-                    command: TestAvailabilityCommand.init(finderContext:)
-                )
-                ContextMenuFeatureSubmenu("第二层") {
-                    ContextMenuAction(
-                        id: "enabled",
-                        title: "启用",
-                        icon: .systemSymbol(name: "checkmark.circle"),
-                        command: TestAvailabilityCommand.init(finderContext:)
-                    )
-                }
-            }
-        }
+    var nodes: [ContextMenuNode<ContextMenuAction<TestAvailabilityCommand>>] {
+        [
+            .submenu(
+                title: "第一层",
+                children: [
+                    .item(
+                        ContextMenuAction(
+                            id: "unavailable-one",
+                            title: "不可用一",
+                            icon: .systemSymbol(name: "xmark.circle"),
+                            command: { _ in nil }
+                        )
+                    ),
+                    .item(
+                        ContextMenuAction(
+                            id: "unavailable-two",
+                            title: "不可用二",
+                            icon: .systemSymbol(name: "xmark.circle"),
+                            command: { _ in nil }
+                        )
+                    ),
+                    .submenu(
+                        title: "第二层",
+                        children: [
+                            .item(
+                                ContextMenuAction(
+                                    id: "enabled",
+                                    title: "启用",
+                                    icon: .systemSymbol(
+                                        name: "checkmark.circle"
+                                    ),
+                                    command: { _ in
+                                        TestAvailabilityCommand()
+                                    }
+                                )
+                            ),
+                        ]
+                    ),
+                ]
+            ),
+        ]
+    }
+}
+
+/// 记录 Controller 点击投递的命令，用于验证准备绑定。
+nonisolated private final class RecordingContextCommandTransport:
+    ContextCommandSending,
+    @unchecked Sendable
+{
+    private let lock = NSLock()
+    private var requests: [ContextCommandRequest] = []
+
+    var recordedRequests: [ContextCommandRequest] {
+        lock.lock()
+        defer { lock.unlock() }
+        return requests
+    }
+
+    func send(
+        _ request: ContextCommandRequest,
+        completion: @escaping @Sendable (Result<Void, Error>) -> Void
+    ) {
+        lock.lock()
+        requests.append(request)
+        lock.unlock()
+        completion(.success(()))
     }
 }
