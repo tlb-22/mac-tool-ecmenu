@@ -204,8 +204,8 @@ cd "$project_root"
 
 log "Resolving Release build settings."
 if ! DEVELOPER_DIR="$developer_directory" xcodebuild \
-    -project EnhancedContextMenu.xcodeproj \
-    -scheme EnhancedContextMenu \
+    -project ECMenu.xcodeproj \
+    -scheme ECMenu \
     -configuration Release \
     -destination "$destination" \
     -derivedDataPath "$derived_data_path" \
@@ -301,8 +301,8 @@ mkdir -p "$release_directory"
 
 log "Archiving ECMenu $release_version ($release_build)."
 if ! DEVELOPER_DIR="$developer_directory" xcodebuild \
-    -project EnhancedContextMenu.xcodeproj \
-    -scheme EnhancedContextMenu \
+    -project ECMenu.xcodeproj \
+    -scheme ECMenu \
     -configuration Release \
     -destination "$destination" \
     -derivedDataPath "$derived_data_path" \
@@ -349,7 +349,7 @@ forbidden_product="$(
     find "$archive_path" \
         \( -name '*.xctest' \
         -o -name '*.xctest.dSYM' \
-        -o -name 'EnhancedContextMenuPreviews.app' \
+        -o -name 'ECMenuPreviews.app' \
         -o -name 'ContextCommandSender' \
         -o -name 'ContextCommandSender.dSYM' \) \
         -print -quit

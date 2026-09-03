@@ -6,8 +6,8 @@ readonly script_directory="${0:A:h}"
 readonly project_root="${script_directory:h}"
 readonly derived_data_path="$project_root/.derivedData"
 readonly run_timestamp="$(date '+%Y%m%d-%H%M%S')"
-readonly app_path="$derived_data_path/Build/Products/Debug/EnhancedContextMenuPreviews.app"
-readonly preview_executable="$app_path/Contents/MacOS/EnhancedContextMenuPreviews"
+readonly app_path="$derived_data_path/Build/Products/Debug/ECMenuPreviews.app"
+readonly preview_executable="$app_path/Contents/MacOS/ECMenuPreviews"
 readonly log_directory="$project_root/.artifacts/scratch/logs"
 readonly build_log="$log_directory/$run_timestamp-preview-ui-$$.log"
 readonly developer_directory="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
@@ -87,8 +87,8 @@ mkdir -p "$log_directory"
 cd "$project_root"
 
 if DEVELOPER_DIR="$developer_directory" xcodebuild \
-    -project EnhancedContextMenu.xcodeproj \
-    -scheme EnhancedContextMenuPreviews \
+    -project ECMenu.xcodeproj \
+    -scheme ECMenuPreviews \
     -configuration Debug \
     -destination "$destination" \
     -derivedDataPath "$derived_data_path" \

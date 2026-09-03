@@ -8,8 +8,8 @@ readonly design_directory="$project_root/design/AppIcon"
 readonly compose_script="$design_directory/compose.sh"
 readonly generated_icon_package="$design_directory/output/ApplicationIcon.icon"
 readonly generated_settings_icon="$design_directory/output/Preview/SettingsAppIcon.svg"
-readonly target_icon_package="$project_root/EnhancedContextMenu/ApplicationIcon.icon"
-readonly target_settings_directory="$project_root/EnhancedContextMenu/Assets.xcassets/SettingsAppIcon.imageset"
+readonly target_icon_package="$project_root/ECMenu/ApplicationIcon.icon"
+readonly target_settings_directory="$project_root/ECMenu/Assets.xcassets/SettingsAppIcon.imageset"
 readonly target_settings_icon="$target_settings_directory/SettingsAppIcon.svg"
 
 fail() {

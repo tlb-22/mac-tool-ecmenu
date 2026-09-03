@@ -422,8 +422,8 @@ mkdir -p "$log_directory"
 cd "$project_root"
 
 if DEVELOPER_DIR="$developer_directory" xcodebuild \
-    -project EnhancedContextMenu.xcodeproj \
-    -scheme EnhancedContextMenu \
+    -project ECMenu.xcodeproj \
+    -scheme ECMenu \
     -configuration Debug \
     -destination "$destination" \
     -derivedDataPath "$derived_data_path" \
@@ -438,8 +438,8 @@ fi
 
 if debug_build_settings="$(
     DEVELOPER_DIR="$developer_directory" xcodebuild \
-        -project EnhancedContextMenu.xcodeproj \
-        -scheme EnhancedContextMenu \
+        -project ECMenu.xcodeproj \
+        -scheme ECMenu \
         -configuration Debug \
         -destination "$destination" \
         -derivedDataPath "$derived_data_path" \
@@ -453,7 +453,7 @@ fi
 readonly expected_app_wrapper_name="$(
     print -r -- "$debug_build_settings" \
         | ecmenu_target_build_setting_value \
-            EnhancedContextMenu \
+            ECMenu \
             FULL_PRODUCT_NAME
 )"
 if [[ -z "$expected_app_wrapper_name" ]]; then

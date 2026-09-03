@@ -10,8 +10,8 @@ readonly log_directory="$project_root/.artifacts/scratch/logs"
 readonly test_log="$log_directory/$run_timestamp-test-$$.log"
 readonly preview_build_log="$log_directory/$run_timestamp-preview-build-$$.log"
 readonly test_artifact_directory="$project_root/.artifacts/scratch/tests/$run_timestamp-xctest-$$"
-readonly result_bundle_path="$test_artifact_directory/EnhancedContextMenu.xcresult"
-readonly preview_executable="$derived_data_path/Build/Products/Debug/EnhancedContextMenuPreviews.app/Contents/MacOS/EnhancedContextMenuPreviews"
+readonly result_bundle_path="$test_artifact_directory/ECMenu.xcresult"
+readonly preview_executable="$derived_data_path/Build/Products/Debug/ECMenuPreviews.app/Contents/MacOS/ECMenuPreviews"
 readonly developer_directory="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
 readonly destination="${XCODE_DESTINATION:-platform=macOS,arch=arm64}"
 
@@ -19,8 +19,8 @@ mkdir -p "$log_directory" "$test_artifact_directory"
 cd "$project_root"
 
 if DEVELOPER_DIR="$developer_directory" xcodebuild \
-    -project EnhancedContextMenu.xcodeproj \
-    -scheme EnhancedContextMenu \
+    -project ECMenu.xcodeproj \
+    -scheme ECMenu \
     -configuration Debug \
     -destination "$destination" \
     -derivedDataPath "$derived_data_path" \
@@ -35,8 +35,8 @@ else
 fi
 
 if DEVELOPER_DIR="$developer_directory" xcodebuild \
-    -project EnhancedContextMenu.xcodeproj \
-    -scheme EnhancedContextMenuPreviews \
+    -project ECMenu.xcodeproj \
+    -scheme ECMenuPreviews \
     -configuration Debug \
     -destination "$destination" \
     -derivedDataPath "$derived_data_path" \

@@ -61,7 +61,7 @@ if ! "$script_directory/run-debug.sh" --refresh-finder >>"$integration_log" 2>&1
 fi
 
 if ! DEVELOPER_DIR="$developer_directory" xcodebuild \
-    -project EnhancedContextMenu.xcodeproj \
+    -project ECMenu.xcodeproj \
     -scheme ContextCommandSender \
     -configuration Debug \
     -destination "$destination" \
@@ -72,8 +72,8 @@ fi
 
 if ! debug_build_settings="$(
     DEVELOPER_DIR="$developer_directory" xcodebuild \
-        -project EnhancedContextMenu.xcodeproj \
-        -scheme EnhancedContextMenu \
+        -project ECMenu.xcodeproj \
+        -scheme ECMenu \
         -configuration Debug \
         -destination "$destination" \
         -derivedDataPath "$derived_data_path" \
@@ -84,7 +84,7 @@ fi
 readonly expected_app_wrapper_name="$(
     print -r -- "$debug_build_settings" \
         | ecmenu_target_build_setting_value \
-            EnhancedContextMenu \
+            ECMenu \
             FULL_PRODUCT_NAME
 )"
 if [[ -z "$expected_app_wrapper_name" ]]; then

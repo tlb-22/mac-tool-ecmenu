@@ -2,19 +2,37 @@
 
 本目录记录无法从单个源码位置可靠恢复的知识：外部 API 契约、已经验证的系统行为、跨进程与权限边界，以及这些事实所约束的设计选择。产品行为和验收边界以 [Requirements](../Requirements/Main.md) 为准；具体控制流、类型结构和文件职责由源码、文档注释与测试表达。
 
-涉及平台行为时，文档明确区分 Apple SDK 契约、项目观察、推断和项目设计。具体实现以源码和测试为唯一来源，技术文档只提供理解所需的导航。
+涉及平台行为时，文档明确区分 Apple SDK 契约、项目观察、推断和项目设计。
 
-## 平台与系统边界
+## 项目结构
 
-- [Finder 集成边界](FinderIntegration.md)：菜单上下文 API、快照生命周期、菜单过滤、监听范围、外置卷、结果选择与 Extension 状态。
-- [进程、交付与权限边界](ExecutionArchitecture.md)：主应用与 Finder Extension 的职责、认证后单次命令投递、命令进度的平台证据与界面预览边界、信任边界和文件访问权限。
-- [菜单可见性配置](MenuConfiguration.md)：配置模型、主应用所有权与 Extension 本地副本。
-- [应用图标交付](AppIconDelivery.md)：系统遮罩契约、旧式图标自动适配观察与 Icon Composer 分层交付边界。
+顶层目录按运行目标和所有权划分；下列结构只记录稳定职责，不枚举具体源码文件：
 
-## 功能技术决策
+```text
+ECMenu/                         主应用
+├── App/                        进程与配置会话生命周期
+├── Settings/                   设置界面与系统适配器
+├── MenuConfiguration/          配置真相源
+├── IPC/                        应用侧进程边界
+└── ContextCommands/            命令执行与用户反馈
+ECMenuFinderExtension/          Finder Extension
+├── App/                        Extension 生命周期
+├── MenuConfiguration/          配置只读副本
+├── IPC/                        请求发送
+└── ContextMenu/                Finder 上下文与菜单构建
+ECMenuShared/                   两个产品目标的共享契约与无场景原语
+Tests/                          单元测试、集成测试与独立界面预览
+design/AppIcon/                 应用图标设计源与生成产物
+scripts/                        构建、运行、测试与交付入口
+spec/                           当前需求、技术知识与未来提案
+```
 
-- [新建 TXT](NewTextFile.md)：不覆盖写入的 SDK 契约与并发观察，以及 Finder 自动选择的边界。
-- [拷贝路径](CopyPath.md)：路径对象存在性和系统剪贴板表示。
-- [隐藏项目 / 显示项目](Visibility.md)：菜单生成条件、隐藏属性、点号名称与符号链接。
-- [进入外部应用](OpenInApplications.md)：文件系统目标语义与 Launch Services 边界。
-- [压缩图片](ImageCompression.md)：ImageIO 能力判断、参数窗口并发、进度、安全取消边界与图像转换语义。
+右键功能分别在 `ECMenuShared/ContextCommands/Features/<功能>/`、`ECMenuFinderExtension/ContextMenu/Features/<功能>/` 和 `ECMenu/ContextCommands/Features/<功能>/` 保存共享契约、Finder Feature 与主应用 Handler。`ContextMenuComposition` 和 `ContextCommandComposition` 分别注册调用端与执行端能力；共享目标不维护第三份独立的产品注册表或执行编排。
+
+## 导航
+
+- [运行时](Runtime/Main.md)：进程职责、应用生命周期、IPC、命令执行、进度与配置同步。
+- [平台边界](Platform/Main.md)：macOS 与 Finder API 契约、项目实测和文件访问约束。
+- [交付边界](Delivery/Main.md)：构建身份、环境隔离和应用图标交付。
+- [功能技术决策](Features/Main.md)：各业务能力依赖的平台 API 与不可由单个源码位置恢复的约束。
+- [界面预览目标](PreviewTarget.md)：独立 Preview target 与生产代码的边界。

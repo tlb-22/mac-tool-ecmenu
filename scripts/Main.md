@@ -1,6 +1,6 @@
 # 开发脚本
 
-脚本从自身位置解析项目根目录。`.derivedData/` 只作为 Xcode Derived Data；脚本日志、测试工作目录、临时探针和视觉检查分别写入 `.artifacts/scratch/{logs,tests,probes,previews}/`。scratch 中每次运行的文件或目录使用 `YYYYMMDD-HHMMSS-<purpose>-<pid>` 命名，可在没有相关任务运行时整体清理；需要重复执行的测试、诊断入口和界面预览分别保存在 `Tests/`、`scripts/` 和 `Previews/`。
+脚本从自身位置解析项目根目录。`.derivedData/` 只作为 Xcode Derived Data；脚本日志、测试工作目录、临时探针和视觉检查分别写入 `.artifacts/scratch/{logs,tests,probes,previews}/`。scratch 中每次运行的文件或目录使用 `YYYYMMDD-HHMMSS-<purpose>-<pid>` 命名，可在没有相关任务运行时整体清理；需要重复执行的测试与界面预览保存在 `Tests/`，诊断入口保存在 `scripts/`。
 
 正式发布产物写入 `.artifacts/releases/<version>+<build>/`，已有非空版本目录不得被静默覆盖。`design/AppIcon/output/Preview/` 是图标设计源包自己的可重建预览输出，不属于运行时 scratch。
 
@@ -34,7 +34,7 @@ Finder Extension 源码变化、菜单消失或扩展没有加载时使用：
 ./scripts/test.sh
 ```
 
-成功时输出通过数量，并验证独立 Preview target 可编译、声明式注册表可列出。完整日志写入 `.artifacts/scratch/logs/` 中带时间的单次文件；测试 result bundle 位于 `.artifacts/scratch/tests/YYYYMMDD-HHMMSS-xctest-<pid>/EnhancedContextMenu.xcresult`，其他测试 fixture 也只存在于对应的单次目录。失败时脚本输出对应日志尾部。
+成功时输出通过数量，并验证独立 Preview target 可编译、声明式注册表可列出。完整日志写入 `.artifacts/scratch/logs/` 中带时间的单次文件；测试 result bundle 位于 `.artifacts/scratch/tests/YYYYMMDD-HHMMSS-xctest-<pid>/ECMenu.xcresult`，其他测试 fixture 也只存在于对应的单次目录。失败时脚本输出对应日志尾部。
 
 ## 跨进程集成测试
 
@@ -101,7 +101,7 @@ Archive 和打包不改变本机的 Extension 启用状态。Debug 与 Release �
 ./scripts/preview-ui.sh --list
 ```
 
-该命令构建并启动独立的 `EnhancedContextMenuPreviews` macOS 应用。三个入口分别显示可调数量的并发任务进度、主程序状态页和压缩图片设置窗口；它们复用生产界面，只注入合成状态，不读写图片、持久化设置或执行右键命令。预览代码位于根级 `Previews/`，每个 Case 在文件开头集中保存任务数量等可调参数，并由声明式 Composition 统一注册。
+该命令构建并启动独立的 `ECMenuPreviews` macOS 应用。三个入口分别显示可调数量的并发任务进度、主程序状态页和压缩图片设置窗口；它们复用生产界面，只注入合成状态，不读写图片、持久化设置或执行右键命令。预览代码位于 `Tests/ECMenuPreviews/`，每个 Case 在文件开头集中保存任务数量等可调参数，并由声明式 Composition 统一注册。
 
 `preview-ui.sh` 只替换独立预览进程，不结束主应用或刷新 Finder Extension；日常主应用运行继续使用 `run-debug.sh`。Xcode 构建产物保存在 `.derivedData/`，完整构建日志位于 `.artifacts/scratch/logs/`；临时截图或视觉检查结果位于 `.artifacts/scratch/previews/`。
 
