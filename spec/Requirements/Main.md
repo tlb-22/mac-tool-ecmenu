@@ -11,6 +11,7 @@ ECMenu 是一个轻量的 macOS Finder 右键扩展，面向个人日常开发�
 ## 文档导航
 
 - [功能](Features/Main.md)：当前功能集合及各功能的行为与验收边界。
+- [语言](Localization.md)：支持的语言、选择规则与本地化边界。
 - [Finder 菜单](FinderMenu.md)：菜单结构、顺序与通用显示规则。
 - [命令行为](CommandBehavior.md)：命令执行和错误反馈的共同语义。
 - [命令进度](CommandProgress.md)：长时间命令共享的进度界面与交互。

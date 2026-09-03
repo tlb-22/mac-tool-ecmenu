@@ -1,3 +1,5 @@
+import Foundation
+
 /// Finder 右键菜单在声明、准备和渲染阶段共用的递归节点。
 nonisolated indirect enum ContextMenuNode<Item> {
     /// 当前阶段携带的一个菜单叶子。
@@ -7,7 +9,10 @@ nonisolated indirect enum ContextMenuNode<Item> {
     case separator
 
     /// 使用固定产品标题折叠一组子节点。
-    case submenu(title: String, children: [ContextMenuNode<Item>])
+    case submenu(
+        title: LocalizedStringResource,
+        children: [ContextMenuNode<Item>]
+    )
 
     /// 按菜单顺序递归展开所有叶子。
     var items: [Item] {

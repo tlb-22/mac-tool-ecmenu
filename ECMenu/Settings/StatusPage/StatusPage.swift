@@ -14,12 +14,20 @@ enum StatusPagePane: String, CaseIterable, Identifiable {
     var id: Self { self }
 
     /// 面向用户显示的分类名称。
-    var title: String {
+    var title: LocalizedStringResource {
         switch self {
         case .general:
-            "通用"
+            LocalizedStringResource(
+                "statusPage.pane.general",
+                defaultValue: "General",
+                comment: "Title of the general settings pane"
+            )
         case .contextMenu:
-            "右键菜单"
+            LocalizedStringResource(
+                "statusPage.pane.contextMenu",
+                defaultValue: "Context Menu",
+                comment: "Title of the Finder context-menu settings pane"
+            )
         }
     }
 
@@ -324,7 +332,7 @@ struct StatusPageContent: View {
                     )
                     .accessibilityLabel(displayName)
 
-                Text("V\(version)")
+                Text(verbatim: "V\(version)")
                     .foregroundStyle(.secondary)
             }
             .padding(.vertical, StatusPageStyle.contentPadding)
@@ -369,11 +377,22 @@ struct StatusPageContent: View {
 
     /// 显示产品总开关与两个必要的系统设置入口。
     private var generalSettings: some View {
-        VStack(spacing: StatusPageStyle.sectionSpacing) {
+        let enableTitle = LocalizedStringResource(
+            "statusPage.general.enableApplication",
+            defaultValue: "Enable \(displayName)",
+            comment: "Label for the switch that enables the application's Finder commands"
+        )
+        let openAtLoginTitle = LocalizedStringResource(
+            "statusPage.general.openAtLogin",
+            defaultValue: "Open at Login",
+            comment: "Label for the switch that starts the application at login"
+        )
+
+        return VStack(spacing: StatusPageStyle.sectionSpacing) {
             GroupBox {
                 VStack(spacing: 0) {
                     settingRow {
-                        settingLabel("启用 \(displayName)") {
+                        settingLabel(enableTitle) {
                             systemRowIcon("power")
                         }
                         .foregroundStyle(
@@ -383,7 +402,7 @@ struct StatusPageContent: View {
                         )
                     } trailing: {
                         compactToggle(
-                            "启用 \(displayName)",
+                            enableTitle,
                             isOn: Binding(
                                 get: { configuration.isEnabled },
                                 set: setEnabled
@@ -395,7 +414,7 @@ struct StatusPageContent: View {
                     Divider()
 
                     settingRow {
-                        settingLabel("登录时打开") {
+                        settingLabel(openAtLoginTitle) {
                             systemRowIcon("person")
                         }
                     } trailing: {
@@ -407,7 +426,7 @@ struct StatusPageContent: View {
                             }
 
                             compactToggle(
-                                "登录时打开",
+                                openAtLoginTitle,
                                 isOn: Binding(
                                     get: { loginItemState.isRequested },
                                     set: setLoginItemRequested
@@ -422,14 +441,26 @@ struct StatusPageContent: View {
             GroupBox {
                 VStack(spacing: 0) {
                     settingRow {
-                        settingLabel("Finder 扩展") {
+                        settingLabel(
+                            LocalizedStringResource(
+                                "statusPage.general.finderExtension",
+                                defaultValue: "Finder Extension",
+                                comment: "Label for the Finder Extension settings row"
+                            )
+                        ) {
                             systemRowIcon("puzzlepiece.extension")
                             .foregroundStyle(
                                 isExtensionEnabled ? .green : .secondary
                             )
                         }
                     } trailing: {
-                        Button("设置...") {
+                        Button(
+                            LocalizedStringResource(
+                                "statusPage.general.settings",
+                                defaultValue: "Settings…",
+                                comment: "Button that opens a related pane in System Settings"
+                            )
+                        ) {
                             manageExtension()
                         }
                     }
@@ -437,11 +468,23 @@ struct StatusPageContent: View {
                     Divider()
 
                     settingRow {
-                        settingLabel("完全磁盘访问") {
+                        settingLabel(
+                            LocalizedStringResource(
+                                "statusPage.general.fullDiskAccess",
+                                defaultValue: "Full Disk Access",
+                                comment: "Label for the Full Disk Access settings row"
+                            )
+                        ) {
                             systemRowIcon("folder.badge.person.crop")
                         }
                     } trailing: {
-                        Button("设置...") {
+                        Button(
+                            LocalizedStringResource(
+                                "statusPage.general.settings",
+                                defaultValue: "Settings…",
+                                comment: "Button that opens a related pane in System Settings"
+                            )
+                        ) {
                             openFullDiskAccessSettings()
                         }
                     }
@@ -482,6 +525,22 @@ struct StatusPageContent: View {
         let isDependencyAvailable = descriptor.requiredApplication.map {
             applicationIcons[$0.bundleIdentifier] != nil
         } ?? true
+        let visibilityTitle = LocalizedStringResource(
+            "statusPage.contextMenu.showCommand",
+            defaultValue: "Show \(descriptor.title)",
+            comment: "Accessibility label for a switch that shows a command in Finder"
+        )
+        let dependencyStatus = isDependencyAvailable
+            ? LocalizedStringResource(
+                "statusPage.contextMenu.installed",
+                defaultValue: "Installed",
+                comment: "Status of a required external application"
+            )
+            : LocalizedStringResource(
+                "statusPage.contextMenu.notInstalled",
+                defaultValue: "Not Installed",
+                comment: "Status of a missing required external application"
+            )
 
         return settingRow {
             settingLabel(descriptor.title) {
@@ -493,7 +552,7 @@ struct StatusPageContent: View {
         } trailing: {
             HStack(spacing: StatusPageStyle.rowSpacing) {
                 if descriptor.requiredApplication != nil {
-                    Text(isDependencyAvailable ? "已安装" : "未安装")
+                    Text(dependencyStatus)
                         .font(.caption)
                         .foregroundStyle(
                             isDependencyAvailable ? .green : .secondary
@@ -501,7 +560,7 @@ struct StatusPageContent: View {
                 }
 
                 compactToggle(
-                    "显示\(descriptor.title)",
+                    visibilityTitle,
                     isOn: Binding(
                         get: { configuration.isVisible(descriptor.id) },
                         set: { isVisible in
@@ -537,7 +596,7 @@ struct StatusPageContent: View {
     /// 使用固定图标槽位构造设置行左侧标签。
     @ViewBuilder
     private func settingLabel<Icon: View>(
-        _ title: String,
+        _ title: LocalizedStringResource,
         @ViewBuilder icon: () -> Icon
     ) -> some View {
         HStack(spacing: StatusPageStyle.rowSpacing) {
@@ -548,7 +607,7 @@ struct StatusPageContent: View {
 
     /// 构造状态页统一使用的小型开关。
     private func compactToggle(
-        _ accessibilityTitle: String,
+        _ accessibilityTitle: LocalizedStringResource,
         isOn: Binding<Bool>
     ) -> some View {
         Toggle(accessibilityTitle, isOn: isOn)

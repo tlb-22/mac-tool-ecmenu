@@ -80,7 +80,7 @@ struct OpenInApplicationHandler<Command: OpenInApplicationCommand>:
     func present(_ outcome: OpenInApplicationOutcome, requestID: UUID) {
         OpenInApplicationFeedback.present(
             outcome,
-            commandTitle: Command.descriptor.title,
+            applicationName: Command.applicationRequirement.displayName,
             requestID: requestID
         )
     }
@@ -194,12 +194,21 @@ nonisolated enum OpenInApplicationExecution {
 nonisolated enum OpenInApplicationAlertContent {
     static func make(
         for outcome: OpenInApplicationOutcome,
-        commandTitle: String
+        applicationName: String,
+        locale: Locale = .current
     ) -> CommandAlertContent? {
         guard case .failed = outcome else {
             return nil
         }
-        return CommandAlertContent(body: "无法\(commandTitle)。")
+        let body = String(
+            localized: LocalizedStringResource(
+                "alert.openInApplication.failed",
+                defaultValue: "Couldn’t open in \(applicationName).",
+                locale: locale,
+                comment: "A selected item could not be opened in the named external application"
+            )
+        )
+        return CommandAlertContent(body: body, locale: locale)
     }
 }
 
@@ -210,13 +219,13 @@ nonisolated enum OpenInApplicationAlertContent {
 private enum OpenInApplicationFeedback {
     static func present(
         _ outcome: OpenInApplicationOutcome,
-        commandTitle: String,
+        applicationName: String,
         requestID: UUID
     ) {
         OpenInApplicationOutcomeLogger.log(outcome, requestID: requestID)
         if let content = OpenInApplicationAlertContent.make(
             for: outcome,
-            commandTitle: commandTitle
+            applicationName: applicationName
         ) {
             CommandAlertPresenter.present(content)
         }

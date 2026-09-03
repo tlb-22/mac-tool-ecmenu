@@ -111,6 +111,8 @@ final class ContextMenuCompositionTests: XCTestCase {
 
     /// 选中项只显示能够改变至少一个普通对象状态的命令。
     func testVisibilityItemsAreFilteredByState() throws {
+        let hideTitle = localizedTitle(HideItemsCommand.descriptor)
+        let showTitle = localizedTitle(ShowItemsCommand.descriptor)
         let snapshot = FinderContextSnapshot.items(
             selection: try XCTUnwrap(
                 FinderItemSelection(paths: ["/Users/example/item"])
@@ -122,15 +124,15 @@ final class ContextMenuCompositionTests: XCTestCase {
         )] = [
             (
                 facts: visibilityFacts(isHiddenValues: [false]),
-                expectedTitles: ["隐藏项目"]
+                expectedTitles: [hideTitle]
             ),
             (
                 facts: visibilityFacts(isHiddenValues: [true]),
-                expectedTitles: ["显示项目"]
+                expectedTitles: [showTitle]
             ),
             (
                 facts: visibilityFacts(isHiddenValues: [false, true]),
-                expectedTitles: ["隐藏项目", "显示项目"]
+                expectedTitles: [hideTitle, showTitle]
             ),
             (
                 facts: visibilityFacts(isHiddenValues: [nil]),
@@ -215,6 +217,8 @@ final class ContextMenuCompositionTests: XCTestCase {
 
     /// 两个可见性功能的独立配置开关应只删除对应菜单项。
     func testVisibilityConfigurationFiltersCommandsIndependently() throws {
+        let hideTitle = localizedTitle(HideItemsCommand.descriptor)
+        let showTitle = localizedTitle(ShowItemsCommand.descriptor)
         let snapshot = FinderContextSnapshot.items(
             selection: try XCTUnwrap(
                 FinderItemSelection(paths: ["/Users/example/item"])
@@ -225,8 +229,8 @@ final class ContextMenuCompositionTests: XCTestCase {
             hiddenFeatureID: ContextCommandFeatureID,
             expectedTitles: [String]
         )] = [
-            (HideItemsCommand.descriptor.id, ["显示项目"]),
-            (ShowItemsCommand.descriptor.id, ["隐藏项目"]),
+            (HideItemsCommand.descriptor.id, [showTitle]),
+            (ShowItemsCommand.descriptor.id, [hideTitle]),
         ]
 
         for testCase in cases {
@@ -327,7 +331,10 @@ final class ContextMenuCompositionTests: XCTestCase {
 
         XCTAssertEqual(
             availableMenu.items.map(\.title),
-            ["进入 Visual Studio Code", "进入 iTerm2"]
+            [
+                localizedTitle(OpenInVSCodeCommand.descriptor),
+                localizedTitle(OpenInITerm2Command.descriptor),
+            ]
         )
         XCTAssertTrue(availableMenu.items.allSatisfy(\.isEnabled))
     }
@@ -421,7 +428,9 @@ final class ContextMenuCompositionTests: XCTestCase {
             )
         )
         let containerItem = try XCTUnwrap(
-            containerMenu.items.first { $0.title == "拷贝路径" }
+            containerMenu.items.first {
+                $0.title == localizedTitle(CopyPathCommand.descriptor)
+            }
         )
 
         let itemsMenu = try XCTUnwrap(
@@ -431,7 +440,9 @@ final class ContextMenuCompositionTests: XCTestCase {
             )
         )
         let itemsItem = try XCTUnwrap(
-            itemsMenu.items.first { $0.title == "拷贝路径" }
+            itemsMenu.items.first {
+                $0.title == localizedTitle(CopyPathCommand.descriptor)
+            }
         )
 
         XCTAssertNotEqual(containerItem.tag, itemsItem.tag)
@@ -640,6 +651,13 @@ final class ContextMenuCompositionTests: XCTestCase {
             preconditionFailure("Test path must be absolute")
         }
         return path
+    }
+
+    /// 使用 Finder 生产渲染边界相同的规则取得当前语言标题。
+    private func localizedTitle(
+        _ descriptor: ContextCommandDescriptor
+    ) -> String {
+        String(localized: descriptor.title)
     }
 }
 

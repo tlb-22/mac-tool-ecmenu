@@ -1,0 +1,132 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "command.compressImages" : {
+      "comment" : "Finder command that compresses the selected images",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Compress Images"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "压缩图片"
+          }
+        }
+      }
+    },
+    "command.copyPath" : {
+      "comment" : "Finder command that copies the selected paths",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copy Path"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "拷贝路径"
+          }
+        }
+      }
+    },
+    "command.hideItems" : {
+      "comment" : "Finder command that hides the selected items",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hide Items"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "隐藏项目"
+          }
+        }
+      }
+    },
+    "command.newTextFile" : {
+      "comment" : "Finder command that creates an empty TXT file",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "New TXT File"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新建 TXT"
+          }
+        }
+      }
+    },
+    "command.openInITerm2" : {
+      "comment" : "Finder command that opens the target directory in iTerm2",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open in iTerm2"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "进入 iTerm2"
+          }
+        }
+      }
+    },
+    "command.openInVisualStudioCode" : {
+      "comment" : "Finder command that opens the target in Visual Studio Code",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open in Visual Studio Code"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "进入 Visual Studio Code"
+          }
+        }
+      }
+    },
+    "command.showItems" : {
+      "comment" : "Finder command that reveals the selected hidden items",
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show Items"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示项目"
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}

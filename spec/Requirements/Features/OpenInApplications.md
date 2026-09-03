@@ -1,10 +1,10 @@
 # 进入外部应用
 
-产品固定提供 `进入 Visual Studio Code` 和 `进入 iTerm2` 两个独立命令。
+产品固定提供 `Open in Visual Studio Code` / `进入 Visual Studio Code` 和 `Open in iTerm2` / `进入 iTerm2` 两个独立命令。
 
 ## 菜单与目标
 
-| Finder 上下文 | `进入 Visual Studio Code` | `进入 iTerm2` |
+| Finder 上下文 | Visual Studio Code 命令 | iTerm2 命令 |
 |---|---|---|
 | 目录空白处 | 将当前目录作为项目打开 | 以当前目录作为工作目录打开窗口 |
 | 侧边栏中的文件夹 | 将该文件夹作为项目打开 | 以该文件夹作为工作目录打开窗口 |
@@ -24,11 +24,6 @@ Visual Studio Code 是否新建或复用窗口由其自身设置决定。iTerm2 
 
 ## 失败行为
 
-菜单显示后应用被移除、目标失效、应用无法启动或目标无法打开时显示错误弹窗，正文固定为对应命令：
-
-```text
-无法进入 Visual Studio Code。
-无法进入 iTerm2。
-```
+菜单显示后应用被移除、目标失效、应用无法启动或目标无法打开时显示本地化错误弹窗，正文说明对应应用无法打开目标。
 
 应用定位和启动方式见[进入外部应用](../../Technical/Features/OpenInApplications.md)。

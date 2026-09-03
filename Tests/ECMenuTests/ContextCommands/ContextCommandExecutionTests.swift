@@ -269,7 +269,7 @@ final class ContextCommandExecutionTests: XCTestCase {
 /// 为进度状态测试创建完整但互不冲突的命令描述。
 private func progressDescriptor(
     id: String,
-    title: String,
+    title: LocalizedStringResource,
     symbolName: String = "gearshape"
 ) -> ContextCommandDescriptor {
     ContextCommandDescriptor(

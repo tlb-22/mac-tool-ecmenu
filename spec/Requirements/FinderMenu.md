@@ -6,13 +6,15 @@
 
 菜单按以下顺序排列，命令之间不插入分隔线：
 
-1. `新建 TXT`
-2. `拷贝路径`
-3. `隐藏项目`
-4. `显示项目`
-5. `压缩图片`
-6. `进入 Visual Studio Code`
-7. `进入 iTerm2`
+| 顺序 | 英文 | 简体中文 |
+|---|---|---|
+| 1 | `New TXT File` | `新建 TXT` |
+| 2 | `Copy Path` | `拷贝路径` |
+| 3 | `Hide Items` | `隐藏项目` |
+| 4 | `Show Items` | `显示项目` |
+| 5 | `Compress Images` | `压缩图片` |
+| 6 | `Open in Visual Studio Code` | `进入 Visual Studio Code` |
+| 7 | `Open in iTerm2` | `进入 iTerm2` |
 
 每个命令使用固定且符合功能语义的图标；同一命令在 Finder 菜单、状态页和进度窗口中使用一致的名称与图标。
 

@@ -23,18 +23,6 @@ final class ContextCommandCompositionTests: XCTestCase {
             ]
         )
         XCTAssertEqual(
-            ContextCommandComposition.handlers.descriptors.map(\.title),
-            [
-                "新建 TXT",
-                "拷贝路径",
-                "隐藏项目",
-                "显示项目",
-                "压缩图片",
-                "进入 Visual Studio Code",
-                "进入 iTerm2",
-            ]
-        )
-        XCTAssertEqual(
             ContextCommandComposition.handlers.descriptors.map(\.icon),
             [
                 .systemSymbol(name: "text.document"),

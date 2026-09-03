@@ -26,7 +26,10 @@ final class LoginItemControllerTests: XCTestCase {
         XCTAssertTrue(enabled.isRequested)
         XCTAssertNil(enabled.pendingApprovalTitle)
         XCTAssertTrue(requiresApproval.isRequested)
-        XCTAssertEqual(requiresApproval.pendingApprovalTitle, "未批准")
+        XCTAssertEqual(
+            requiresApproval.pendingApprovalTitle?.key,
+            "statusPage.general.loginItem.notApproved"
+        )
     }
 
     /// 状态查询找不到主应用登录项时仍显示关闭，不伪装为已登记。

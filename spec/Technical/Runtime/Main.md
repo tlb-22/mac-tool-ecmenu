@@ -21,6 +21,7 @@ Finder 事件
 ## 导航
 
 - [应用生命周期](ApplicationLifecycle.md)：配置会话、后台宿主、登录项与恢复边界。
+- [本地化](Localization.md)：主应用与 Finder Extension 的资源所有权和语言解析边界。
 - [IPC](IPC.md)：点对点投递、认证、framing 与失败语义。
 - [命令执行](CommandExecution.md)：Feature、Action、Handler、并发与副作用隔离。
 - [命令进度](CommandProgress.md)：进度的平台边界、窗口所有权和取消契约。

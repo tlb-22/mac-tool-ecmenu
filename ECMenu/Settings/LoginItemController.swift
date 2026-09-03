@@ -28,10 +28,14 @@ enum LoginItemRegistrationState: Equatable, Sendable {
     }
 
     /// 尚需用户处理时显示的状态文字；其他状态保持界面简洁。
-    var pendingApprovalTitle: String? {
+    var pendingApprovalTitle: LocalizedStringResource? {
         switch self {
         case .requiresApproval:
-            "未批准"
+            LocalizedStringResource(
+                "statusPage.general.loginItem.notApproved",
+                defaultValue: "Not Approved",
+                comment: "Status shown when the login item awaits system approval"
+            )
         case .notRegistered, .enabled, .notFound:
             nil
         }

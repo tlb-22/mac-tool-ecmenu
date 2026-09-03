@@ -1,0 +1,888 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "alert.command.confirm": {
+      "comment": "Dismisses a context-command error alert",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OK"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "好"
+          }
+        }
+      }
+    },
+    "alert.command.title": {
+      "comment": "Title shared by context-command error alerts",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Operation Couldn’t Be Completed"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "操作未完成"
+          }
+        }
+      }
+    },
+    "alert.imageCompression.fileDates.all.counted": {
+      "comment": "All processed images have date-attribute problems",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The images were compressed, but the date attributes of %lld images couldn’t be updated."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "图片已压缩但遇到问题：%lld 张图片的时间属性写入失败。"
+          }
+        }
+      }
+    },
+    "alert.imageCompression.fileDates.all.named": {
+      "comment": "The named image was compressed, but its dates could not be updated",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“%@” was compressed, but its date attributes couldn’t be updated."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "图片已压缩但遇到问题：“%@”的时间属性写入失败。"
+          }
+        }
+      }
+    },
+    "alert.imageCompression.fileDates.partial.counted": {
+      "comment": "Some processed images have date-attribute problems",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Some images were compressed, but the date attributes of %lld images couldn’t be updated."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "部分图片已压缩但遇到问题：%lld 张图片的时间属性写入失败。"
+          }
+        }
+      }
+    },
+    "alert.imageCompression.fileDates.partial.named": {
+      "comment": "The named image has a date-attribute problem while other images completed normally",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Some images were compressed, but the date attributes of “%@” couldn’t be updated."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "部分图片已压缩但遇到问题：“%@”的时间属性写入失败。"
+          }
+        }
+      }
+    },
+    "alert.imageCompression.writePermission.all.counted": {
+      "comment": "No selected images could be compressed",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn’t compress the selected images because %lld images aren’t writable."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法压缩图片：%lld 张图片没有写入权限。"
+          }
+        }
+      }
+    },
+    "alert.imageCompression.writePermission.all.named": {
+      "comment": "The named image could not be compressed",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn’t compress “%@” because it isn’t writable."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法压缩图片：“%@”没有写入权限。"
+          }
+        }
+      }
+    },
+    "alert.imageCompression.writePermission.partial.counted": {
+      "comment": "Some selected images could not be compressed",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Some images couldn’t be compressed because %lld images aren’t writable."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法压缩部分图片：%lld 张图片没有写入权限。"
+          }
+        }
+      }
+    },
+    "alert.imageCompression.writePermission.partial.named": {
+      "comment": "The named image could not be compressed while other images succeeded",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Some images couldn’t be compressed because “%@” isn’t writable."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法压缩部分图片：“%@”没有写入权限。"
+          }
+        }
+      }
+    },
+    "alert.newTextFile.writePermission.named": {
+      "comment": "A TXT file could not be created in the named directory",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn’t create a TXT file because “%@” isn’t writable."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法新建 TXT：“%@”没有写入权限。"
+          }
+        }
+      }
+    },
+    "alert.openInApplication.failed": {
+      "comment": "A selected item could not be opened in the named application",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn’t open in %@."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法进入 %@。"
+          }
+        }
+      }
+    },
+    "alert.visibility.hide.all.counted": {
+      "comment": "No selected items could be hidden",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn’t hide the selected items because %lld items aren’t writable."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法隐藏项目：%lld 个项目没有写入权限。"
+          }
+        }
+      }
+    },
+    "alert.visibility.hide.all.named": {
+      "comment": "The named selected item could not be hidden",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn’t hide “%@” because it isn’t writable."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法隐藏项目：“%@”没有写入权限。"
+          }
+        }
+      }
+    },
+    "alert.visibility.hide.partial.counted": {
+      "comment": "Some selected items could not be hidden",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Some items couldn’t be hidden because %lld items aren’t writable."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法隐藏部分项目：%lld 个项目没有写入权限。"
+          }
+        }
+      }
+    },
+    "alert.visibility.hide.partial.named": {
+      "comment": "The named item could not be hidden while other items succeeded",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Some items couldn’t be hidden because “%@” isn’t writable."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法隐藏部分项目：“%@”没有写入权限。"
+          }
+        }
+      }
+    },
+    "alert.visibility.show.all.counted": {
+      "comment": "No selected items could be shown",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn’t show the selected items because %lld items aren’t writable."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法显示项目：%lld 个项目没有写入权限。"
+          }
+        }
+      }
+    },
+    "alert.visibility.show.all.named": {
+      "comment": "The named selected item could not be shown",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn’t show “%@” because it isn’t writable."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法显示项目：“%@”没有写入权限。"
+          }
+        }
+      }
+    },
+    "alert.visibility.show.partial.counted": {
+      "comment": "Some selected items could not be shown",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Some items couldn’t be shown because %lld items aren’t writable."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法显示部分项目：%lld 个项目没有写入权限。"
+          }
+        }
+      }
+    },
+    "alert.visibility.show.partial.named": {
+      "comment": "The named item could not be shown while other items succeeded",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Some items couldn’t be shown because “%@” isn’t writable."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法显示部分项目：“%@”没有写入权限。"
+          }
+        }
+      }
+    },
+    "app.menu.closeWindow": {
+      "comment": "Application menu command that closes the active window",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Close Window"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "关闭窗口"
+          }
+        }
+      }
+    },
+    "app.menu.quit": {
+      "comment": "Application menu command that leaves the settings interface",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quit %@"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "退出 %@"
+          }
+        }
+      }
+    },
+    "command.compressImages": {
+      "comment": "Finder command that compresses the selected images",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Compress Images"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "压缩图片"
+          }
+        }
+      }
+    },
+    "command.copyPath": {
+      "comment": "Finder command that copies the selected paths",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy Path"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "拷贝路径"
+          }
+        }
+      }
+    },
+    "command.hideItems": {
+      "comment": "Finder command that hides the selected items",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hide Items"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "隐藏项目"
+          }
+        }
+      }
+    },
+    "command.newTextFile": {
+      "comment": "Finder command that creates an empty TXT file",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New TXT File"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新建 TXT"
+          }
+        }
+      }
+    },
+    "command.openInITerm2": {
+      "comment": "Finder command that opens the target directory in iTerm2",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open in iTerm2"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "进入 iTerm2"
+          }
+        }
+      }
+    },
+    "command.openInVisualStudioCode": {
+      "comment": "Finder command that opens the target in Visual Studio Code",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open in Visual Studio Code"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "进入 Visual Studio Code"
+          }
+        }
+      }
+    },
+    "command.showItems": {
+      "comment": "Finder command that reveals the selected hidden items",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show Items"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "显示项目"
+          }
+        }
+      }
+    },
+    "common.cancel": {
+      "comment": "Button that cancels the current operation",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancel"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "取消"
+          }
+        }
+      }
+    },
+    "common.settings": {
+      "comment": "Button or menu item that opens settings",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Settings…"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "设置…"
+          }
+        }
+      }
+    },
+    "imageCompression.action.compress": {
+      "comment": "Button that starts image compression",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Compress"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "压缩"
+          }
+        }
+      }
+    },
+    "imageCompression.field.jpgQuality": {
+      "comment": "Label for the JPG quality slider",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "JPG Quality:"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "JPG质量："
+          }
+        }
+      }
+    },
+    "imageCompression.field.targetWidth": {
+      "comment": "Label for the target-width input field",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Target Width:"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "目标宽度："
+          }
+        }
+      }
+    },
+    "imageCompression.unit.pixels": {
+      "comment": "Unit shown after the target-width value",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "pixels"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "像素"
+          }
+        }
+      }
+    },
+    "imageCompression.validation.positiveInteger": {
+      "comment": "Input validation message for the target-width field",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enter a positive integer."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请输入正整数。"
+          }
+        }
+      }
+    },
+    "imageCompression.validation.targetWidth": {
+      "comment": "Validation message shown below the compression form",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enter a positive integer."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "目标宽度必须是正整数。"
+          }
+        }
+      }
+    },
+    "progress.cancelling": {
+      "comment": "Tooltip shown after cancellation has been requested",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancelling…"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在取消…"
+          }
+        }
+      }
+    },
+    "statusPage.contextMenu.installed": {
+      "comment": "Status of a required external application",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Installed"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已安装"
+          }
+        }
+      }
+    },
+    "statusPage.contextMenu.notInstalled": {
+      "comment": "Status of a missing required external application",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not Installed"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未安装"
+          }
+        }
+      }
+    },
+    "statusPage.contextMenu.showCommand": {
+      "comment": "Accessibility label for a switch that shows a Finder command",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show %@"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "显示%@"
+          }
+        }
+      }
+    },
+    "statusPage.general.enableApplication": {
+      "comment": "Label for the switch that enables the application",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enable %@"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "启用 %@"
+          }
+        }
+      }
+    },
+    "statusPage.general.finderExtension": {
+      "comment": "Label for the Finder Extension settings row",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Finder Extension"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Finder 扩展"
+          }
+        }
+      }
+    },
+    "statusPage.general.fullDiskAccess": {
+      "comment": "Label for the Full Disk Access settings row",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Full Disk Access"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "完全磁盘访问"
+          }
+        }
+      }
+    },
+    "statusPage.general.loginItem.notApproved": {
+      "comment": "Status shown when the login item awaits system approval",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not Approved"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未批准"
+          }
+        }
+      }
+    },
+    "statusPage.general.openAtLogin": {
+      "comment": "Label for the login-item switch",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open at Login"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "登录时打开"
+          }
+        }
+      }
+    },
+    "statusPage.general.settings": {
+      "comment": "Button that opens a related pane in System Settings",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Settings…"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "设置..."
+          }
+        }
+      }
+    },
+    "statusPage.pane.contextMenu": {
+      "comment": "Title of the Finder context-menu settings pane",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Context Menu"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "右键菜单"
+          }
+        }
+      }
+    },
+    "statusPage.pane.general": {
+      "comment": "Title of the general settings pane",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "General"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "通用"
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}

@@ -13,21 +13,39 @@ struct ECMenuApp: App {
         }
         .commands {
             CommandGroup(replacing: .appSettings) {
-                Button("设置…") {
+                Button(
+                    LocalizedStringResource(
+                        "common.settings",
+                        defaultValue: "Settings…",
+                        comment: "Button or menu item that opens settings"
+                    )
+                ) {
                     appDelegate.showConfiguration()
                 }
                 .keyboardShortcut(",", modifiers: .command)
             }
 
             CommandGroup(before: .windowSize) {
-                Button("关闭窗口") {
+                Button(
+                    LocalizedStringResource(
+                        "app.menu.closeWindow",
+                        defaultValue: "Close Window",
+                        comment: "Application menu command that closes the active window"
+                    )
+                ) {
                     appDelegate.closeActiveWindow()
                 }
                 .keyboardShortcut("w", modifiers: .command)
             }
 
             CommandGroup(replacing: .appTermination) {
-                Button("退出 \(ApplicationMetadata.displayName)") {
+                Button(
+                    LocalizedStringResource(
+                        "app.menu.quit",
+                        defaultValue: "Quit \(ApplicationMetadata.displayName)",
+                        comment: "Application menu command that leaves the settings interface"
+                    )
+                ) {
                     appDelegate.hideConfiguration()
                 }
                 .keyboardShortcut("q", modifiers: .command)

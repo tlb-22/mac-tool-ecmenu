@@ -1,3 +1,5 @@
+import Foundation
+
 /// 跨配置、传输和两个进程稳定标识一个右键命令。
 nonisolated struct ContextCommandFeatureID: Codable, Hashable, Sendable {
     /// 持久化和跨进程协议使用的稳定字符串。
@@ -42,8 +44,8 @@ nonisolated struct ContextCommandDescriptor: Equatable, Sendable {
     /// 持久化菜单可见性使用的稳定命令标识。
     let id: ContextCommandFeatureID
 
-    /// Finder 菜单和主应用状态页共用的产品名称。
-    let title: String
+    /// Finder 菜单和主应用状态页共用的本地化产品名称。
+    let title: LocalizedStringResource
 
     /// Finder 菜单使用的固定图标声明。
     let icon: ContextCommandIcon
@@ -60,10 +62,10 @@ nonisolated struct ContextCommandDescriptor: Equatable, Sendable {
     ///   - icon: Finder 菜单使用的图标来源。
     init(
         id: String,
-        title: String,
+        title: LocalizedStringResource,
         icon: ContextCommandIcon
     ) {
-        precondition(!title.isEmpty)
+        precondition(!title.key.isEmpty)
         switch icon {
         case .systemSymbol(let name):
             precondition(!name.isEmpty)

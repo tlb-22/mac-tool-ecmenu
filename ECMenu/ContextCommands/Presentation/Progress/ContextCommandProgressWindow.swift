@@ -544,9 +544,10 @@ private final class ContextCommandProgressRowView: NSView {
     func apply(_ item: ContextCommandProgressItem) {
         if appliedDescriptor != item.descriptor {
             appliedDescriptor = item.descriptor
-            titleLabel.stringValue = item.descriptor.title
+            let localizedTitle = String(localized: item.descriptor.title)
+            titleLabel.stringValue = localizedTitle
             iconImageView.image = iconResolver.image(for: item.descriptor)
-            iconImageView.setAccessibilityLabel(item.descriptor.title)
+            iconImageView.setAccessibilityLabel(localizedTitle)
         }
         progressBar.apply(
             completedUnitCount: item.completedUnitCount,
@@ -554,7 +555,18 @@ private final class ContextCommandProgressRowView: NSView {
         )
         countLabel.stringValue = "\(item.completedUnitCount) / \(item.totalUnitCount)"
         cancelButton.isEnabled = !item.isCancellationRequested
-        cancelButton.toolTip = item.isCancellationRequested ? "正在取消…" : "取消"
+        let cancelToolTip = item.isCancellationRequested
+            ? LocalizedStringResource(
+                "progress.cancelling",
+                defaultValue: "Cancelling…",
+                comment: "Tooltip shown after cancellation has been requested"
+            )
+            : LocalizedStringResource(
+                "common.cancel",
+                defaultValue: "Cancel",
+                comment: "Button that cancels the current operation"
+            )
+        cancelButton.toolTip = String(localized: cancelToolTip)
     }
 
     /// 让任务行明确占满共享纵向容器，而不依赖 Stack 的固有尺寸。
@@ -595,7 +607,11 @@ private final class ContextCommandProgressRowView: NSView {
 
         let cancelImage = NSImage(
             systemSymbolName: "xmark.circle.fill",
-            accessibilityDescription: "取消"
+            accessibilityDescription: String(
+                localized: "common.cancel",
+                defaultValue: "Cancel",
+                comment: "Button that cancels the current operation"
+            )
         )
         cancelButton.image = cancelImage?.withSymbolConfiguration(
             NSImage.SymbolConfiguration(

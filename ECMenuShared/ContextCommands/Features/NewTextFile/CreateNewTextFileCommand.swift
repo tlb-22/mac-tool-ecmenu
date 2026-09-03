@@ -5,7 +5,11 @@ nonisolated struct CreateNewTextFileCommand: ContextCommandPayload, Equatable {
     /// 新建 TXT 命令唯一一份稳定身份、产品名称与菜单图标。
     static let descriptor = ContextCommandDescriptor(
         id: "new-text-file",
-        title: "新建 TXT",
+        title: LocalizedStringResource(
+            "command.newTextFile",
+            defaultValue: "New TXT File",
+            comment: "Finder command that creates an empty TXT file"
+        ),
         icon: .systemSymbol(name: "text.document")
     )
 

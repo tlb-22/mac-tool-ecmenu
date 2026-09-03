@@ -519,8 +519,15 @@ struct CompressImagesHandler: ContextCommandHandling {
 
 /// 把压缩失败与已经生成 JPG 后的时间属性问题分别汇总。
 nonisolated enum ImageCompressionAlertContent {
+    /// 区分问题是否只影响已处理图片中的一部分。
+    private enum IssueScope {
+        case all
+        case partial
+    }
+
     static func make(
-        for report: ImageCompressionReport
+        for report: ImageCompressionReport,
+        locale: Locale = .current
     ) -> CommandAlertContent? {
         let compressionIssues = report.issues.filter {
             $0.stage != .fileDates
@@ -532,32 +539,123 @@ nonisolated enum ImageCompressionAlertContent {
         var lines: [String] = []
         if !compressionIssues.isEmpty {
             let subject = CommandAlertText.subject(
-                for: compressionIssues.map(\.itemURL),
-                countedAs: "张图片"
+                for: compressionIssues.map(\.itemURL)
             )
-            let scope = report.outputURLs.isEmpty ? "" : "部分"
+            let scope: IssueScope = report.outputURLs.isEmpty ? .all : .partial
             lines.append(
-                "无法压缩\(scope)图片：\(subject)没有写入权限。"
+                compressionWritePermissionBody(
+                    scope: scope,
+                    subject: subject,
+                    locale: locale
+                )
             )
         }
 
         if !fileDateIssues.isEmpty {
             let subject = CommandAlertText.subject(
-                for: fileDateIssues.map(\.itemURL),
-                countedAs: "张图片"
+                for: fileDateIssues.map(\.itemURL)
             )
             let fatalIssueCount = report.issues.count - fileDateIssues.count
             let processedCount = report.outputURLs.count + fatalIssueCount
-            let scope = fileDateIssues.count < processedCount ? "部分" : ""
+            let scope: IssueScope = fileDateIssues.count < processedCount
+                ? .partial
+                : .all
             lines.append(
-                "\(scope)图片已压缩但遇到问题：\(subject)的时间属性写入失败。"
+                fileDateBody(
+                    scope: scope,
+                    subject: subject,
+                    locale: locale
+                )
             )
         }
 
         guard !lines.isEmpty else {
             return nil
         }
-        return CommandAlertContent(body: lines.joined(separator: "\n"))
+        return CommandAlertContent(
+            body: lines.joined(separator: "\n"),
+            locale: locale
+        )
+    }
+
+    /// 压缩写入权限问题按完整句式覆盖全部/部分和名称/数量。
+    private static func compressionWritePermissionBody(
+        scope: IssueScope,
+        subject: CommandAlertSubject,
+        locale: Locale
+    ) -> String {
+        let resource: LocalizedStringResource
+        switch (scope, subject) {
+        case (.all, .named(let name)):
+            resource = LocalizedStringResource(
+                "alert.imageCompression.writePermission.all.named",
+                defaultValue: "Couldn’t compress “\(name)” because it isn’t writable.",
+                locale: locale,
+                comment: "The named selected image could not be compressed because it is not writable"
+            )
+        case (.all, .counted(let count)):
+            resource = LocalizedStringResource(
+                "alert.imageCompression.writePermission.all.counted",
+                defaultValue: "Couldn’t compress the selected images because \(count) images aren’t writable.",
+                locale: locale,
+                comment: "No selected images could be compressed; the argument is the number of unwritable images"
+            )
+        case (.partial, .named(let name)):
+            resource = LocalizedStringResource(
+                "alert.imageCompression.writePermission.partial.named",
+                defaultValue: "Some images couldn’t be compressed because “\(name)” isn’t writable.",
+                locale: locale,
+                comment: "Other selected images were compressed, but the named image is not writable"
+            )
+        case (.partial, .counted(let count)):
+            resource = LocalizedStringResource(
+                "alert.imageCompression.writePermission.partial.counted",
+                defaultValue: "Some images couldn’t be compressed because \(count) images aren’t writable.",
+                locale: locale,
+                comment: "Other selected images were compressed; the argument is the number of unwritable images"
+            )
+        }
+        return String(localized: resource)
+    }
+
+    /// 已写出 JPG 的时间属性问题按完整句式覆盖全部/部分和名称/数量。
+    private static func fileDateBody(
+        scope: IssueScope,
+        subject: CommandAlertSubject,
+        locale: Locale
+    ) -> String {
+        let resource: LocalizedStringResource
+        switch (scope, subject) {
+        case (.all, .named(let name)):
+            resource = LocalizedStringResource(
+                "alert.imageCompression.fileDates.all.named",
+                defaultValue: "“\(name)” was compressed, but its date attributes couldn’t be updated.",
+                locale: locale,
+                comment: "The named image was compressed, but its creation and modification dates could not be updated"
+            )
+        case (.all, .counted(let count)):
+            resource = LocalizedStringResource(
+                "alert.imageCompression.fileDates.all.counted",
+                defaultValue: "The images were compressed, but the date attributes of \(count) images couldn’t be updated.",
+                locale: locale,
+                comment: "All processed images have date-attribute problems; the argument is the affected image count"
+            )
+        case (.partial, .named(let name)):
+            resource = LocalizedStringResource(
+                "alert.imageCompression.fileDates.partial.named",
+                defaultValue: "Some images were compressed, but the date attributes of “\(name)” couldn’t be updated.",
+                locale: locale,
+                comment: "Other images completed normally, but the named compressed image has a date-attribute problem"
+            )
+        case (.partial, .counted(let count)):
+            resource = LocalizedStringResource(
+                "alert.imageCompression.fileDates.partial.counted",
+                defaultValue: "Some images were compressed, but the date attributes of \(count) images couldn’t be updated.",
+                locale: locale,
+                comment: "Other images completed normally; the argument is the number of compressed images with date-attribute problems"
+            )
+        }
+        return String(localized: resource)
     }
 }
 

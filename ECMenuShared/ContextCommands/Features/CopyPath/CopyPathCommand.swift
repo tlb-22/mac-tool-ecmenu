@@ -5,7 +5,11 @@ nonisolated struct CopyPathCommand: ContextCommandPayload, Equatable {
     /// 拷贝路径命令唯一一份稳定身份、产品名称与菜单图标。
     static let descriptor = ContextCommandDescriptor(
         id: "copy-path",
-        title: "拷贝路径",
+        title: LocalizedStringResource(
+            "command.copyPath",
+            defaultValue: "Copy Path",
+            comment: "Finder command that copies the selected paths"
+        ),
         icon: .systemSymbol(
             name: "point.bottomleft.forward.to.point.topright.scurvepath"
         )

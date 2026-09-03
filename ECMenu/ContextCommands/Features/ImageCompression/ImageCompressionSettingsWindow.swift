@@ -1,6 +1,13 @@
 import AppKit
 import Foundation
 
+/// 测试与辅助技术识别设置窗口控件时使用的稳定身份。
+enum ImageCompressionSettingsControlIdentifier {
+    static let confirmButton = NSUserInterfaceItemIdentifier(
+        "image-compression-confirm"
+    )
+}
+
 // MARK: - ==================== 窗口布局 ====================
 
 /// 保存不能从系统控件固有尺寸直接推导的窗口布局偏好。
@@ -61,7 +68,11 @@ final class PositiveIntegerFormatter: Formatter {
         errorDescription error: AutoreleasingUnsafeMutablePointer<NSString?>?
     ) -> Bool {
         guard let value = Self.positiveInteger(from: string) else {
-            error?.pointee = "请输入正整数。"
+            error?.pointee = String(
+                localized: "imageCompression.validation.positiveInteger",
+                defaultValue: "Enter a positive integer.",
+                comment: "Input validation message for the target-width field"
+            ) as NSString
             return false
         }
 
@@ -79,7 +90,11 @@ final class PositiveIntegerFormatter: Formatter {
             return true
         }
         guard Self.positiveInteger(from: partialString) != nil else {
-            error?.pointee = "请输入正整数。"
+            error?.pointee = String(
+                localized: "imageCompression.validation.positiveInteger",
+                defaultValue: "Enter a positive integer.",
+                comment: "Input validation message for the target-width field"
+            ) as NSString
             return false
         }
         return true
@@ -187,7 +202,11 @@ final class ImageCompressionSettingsWindowController:
     ) {
         formView = ImageCompressionSettingsFormView(settings: settings)
         validationLabel = NSTextField(
-            labelWithString: "目标宽度必须是正整数。"
+            labelWithString: String(
+                localized: "imageCompression.validation.targetWidth",
+                defaultValue: "Enter a positive integer.",
+                comment: "Validation message shown below the compression form"
+            )
         )
         self.completion = completion
 
@@ -203,7 +222,7 @@ final class ImageCompressionSettingsWindowController:
             backing: .buffered,
             defer: false
         )
-        window.title = "压缩图片"
+        window.title = String(localized: CompressImagesCommand.descriptor.title)
         window.isReleasedWhenClosed = false
         window.isRestorable = false
         window.standardWindowButton(.zoomButton)?.isEnabled = false
@@ -250,17 +269,27 @@ final class ImageCompressionSettingsWindowController:
         validationLabel.isHidden = true
 
         let cancelButton = NSButton(
-            title: "取消",
+            title: String(
+                localized: "common.cancel",
+                defaultValue: "Cancel",
+                comment: "Button that cancels the current operation"
+            ),
             target: self,
             action: #selector(cancel(_:))
         )
         cancelButton.keyEquivalent = "\u{1b}"
 
         let compressButton = NSButton(
-            title: "压缩",
+            title: String(
+                localized: "imageCompression.action.compress",
+                defaultValue: "Compress",
+                comment: "Button that starts image compression"
+            ),
             target: self,
             action: #selector(confirm(_:))
         )
+        compressButton.identifier =
+            ImageCompressionSettingsControlIdentifier.confirmButton
         compressButton.keyEquivalent = "\r"
 
         let buttonStack = NSStackView(
@@ -422,10 +451,20 @@ private final class ImageCompressionSettingsFormView: NSView {
         maximumWidthField.formatter = PositiveIntegerFormatter()
 
         let maximumWidthLabel = NSTextField(
-            labelWithString: "目标宽度："
+            labelWithString: String(
+                localized: "imageCompression.field.targetWidth",
+                defaultValue: "Target Width:",
+                comment: "Label for the target-width input field"
+            )
         )
 
-        let qualityLabel = NSTextField(labelWithString: "JPG质量：")
+        let qualityLabel = NSTextField(
+            labelWithString: String(
+                localized: "imageCompression.field.jpgQuality",
+                defaultValue: "JPG Quality:",
+                comment: "Label for the JPG quality slider"
+            )
+        )
         qualitySlider.numberOfTickMarks = ImageCompressionQualityScale.tickCount
         qualitySlider.allowsTickMarkValuesOnly = true
         qualitySlider.target = self
@@ -440,7 +479,13 @@ private final class ImageCompressionSettingsFormView: NSView {
         qualityControls.setContentHuggingPriority(.defaultLow, for: .horizontal)
         qualitySlider.setContentHuggingPriority(.defaultLow, for: .horizontal)
 
-        let maximumWidthUnitLabel = NSTextField(labelWithString: "像素")
+        let maximumWidthUnitLabel = NSTextField(
+            labelWithString: String(
+                localized: "imageCompression.unit.pixels",
+                defaultValue: "pixels",
+                comment: "Unit shown after the target-width value"
+            )
+        )
         let maximumWidthSpacer = NSView()
         maximumWidthSpacer.setContentHuggingPriority(
             .defaultLow,

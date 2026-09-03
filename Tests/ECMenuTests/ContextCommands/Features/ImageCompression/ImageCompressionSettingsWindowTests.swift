@@ -275,7 +275,7 @@ final class ImageCompressionSettingsWindowTests: XCTestCase {
         )
     }
 
-    /// 查找触发确认路径的压缩按钮。
+    /// 通过稳定控件身份查找确认按钮，不依赖本地化标题或窗口状态。
     private func compressButton(
         in controller: ImageCompressionSettingsWindowController
     ) throws -> NSButton {
@@ -283,8 +283,11 @@ final class ImageCompressionSettingsWindowTests: XCTestCase {
             descendant(
                 of: NSButton.self,
                 in: controller.window?.contentView
-            ) { $0.title == "压缩" },
-            "没有找到压缩按钮"
+            ) {
+                $0.identifier
+                    == ImageCompressionSettingsControlIdentifier.confirmButton
+            },
+            "没有找到确认按钮"
         )
     }
 

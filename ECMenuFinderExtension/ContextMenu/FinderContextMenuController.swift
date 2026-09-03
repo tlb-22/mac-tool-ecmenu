@@ -1,5 +1,6 @@
 import AppKit
 import FinderSync
+import Foundation
 
 /// 解释声明式布局、渲染 Finder 菜单并把 action 路由到增量功能。
 final class FinderContextMenuController {
@@ -176,7 +177,7 @@ final class FinderContextMenuController {
         case .item(let preparedAction):
             let descriptor = preparedAction.descriptor
             let menuItem = NSMenuItem(
-                title: descriptor.title,
+                title: String(localized: descriptor.title),
                 action: action,
                 keyEquivalent: ""
             )
@@ -189,8 +190,13 @@ final class FinderContextMenuController {
             return .separator()
 
         case .submenu(let title, let children):
-            let parent = NSMenuItem(title: title, action: nil, keyEquivalent: "")
-            let submenu = NSMenu(title: title)
+            let localizedTitle = String(localized: title)
+            let parent = NSMenuItem(
+                title: localizedTitle,
+                action: nil,
+                keyEquivalent: ""
+            )
+            let submenu = NSMenu(title: localizedTitle)
             submenu.autoenablesItems = false
             children.forEach {
                 submenu.addItem(

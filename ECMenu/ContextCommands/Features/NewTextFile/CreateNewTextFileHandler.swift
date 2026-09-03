@@ -191,7 +191,8 @@ struct CreateNewTextFileHandler: ContextCommandHandling {
 /// 只把用户可处理的文件系统失败转换为统一文案。
 nonisolated enum CreateNewTextFileAlertContent {
     static func make(
-        for failure: CreateNewTextFileFailure
+        for failure: CreateNewTextFileFailure,
+        locale: Locale = .current
     ) -> CommandAlertContent? {
         switch failure.kind {
         case .permissionDenied, .readOnlyFileSystem:
@@ -200,12 +201,21 @@ nonisolated enum CreateNewTextFileAlertContent {
             return nil
         }
 
-        let subject = CommandAlertText.subject(
-            for: [failure.directoryURL],
-            countedAs: "个目录"
+        let subject = CommandAlertText.subject(for: [failure.directoryURL])
+        guard case .named(let directoryName) = subject else {
+            preconditionFailure("A new text file has exactly one destination directory")
+        }
+        let body = String(
+            localized: LocalizedStringResource(
+                "alert.newTextFile.writePermission.named",
+                defaultValue: "Couldn’t create a TXT file because “\(directoryName)” isn’t writable.",
+                locale: locale,
+                comment: "A TXT file could not be created in the named directory because it is not writable"
+            )
         )
         return CommandAlertContent(
-            body: "无法新建 TXT：\(subject)没有写入权限。"
+            body: body,
+            locale: locale
         )
     }
 }

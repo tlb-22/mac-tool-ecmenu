@@ -201,7 +201,7 @@ nonisolated struct FinderContextMenuActionDescriptor: Equatable, Sendable {
     let id: FinderContextMenuActionID
 
     /// Finder 菜单叶子显示的名称。
-    let title: String
+    let title: LocalizedStringResource
 
     /// Finder 菜单叶子显示的图标来源。
     let icon: ContextCommandIcon
@@ -213,7 +213,7 @@ struct ContextMenuAction<Command: ContextCommandPayload> {
     let id: ContextMenuActionLocalID
 
     /// 菜单叶子的产品名称。
-    let title: String
+    let title: LocalizedStringResource
 
     /// 菜单叶子的图标来源。
     let icon: ContextCommandIcon
@@ -229,11 +229,11 @@ struct ContextMenuAction<Command: ContextCommandPayload> {
     ///   - command: 从本次求值上下文创建类型化命令。
     init(
         id: String,
-        title: String,
+        title: LocalizedStringResource,
         icon: ContextCommandIcon,
         command: @escaping (FinderContextMenuEvaluationContext) -> Command?
     ) {
-        precondition(!title.isEmpty)
+        precondition(!title.key.isEmpty)
         switch icon {
         case .systemSymbol(let name):
             precondition(!name.isEmpty)
@@ -356,19 +356,19 @@ struct ContextMenuSeparator {
 /// 在 Finder 产品声明树中递归组合一组完整 Feature。
 struct FinderContextMenuSubmenu {
     /// 子菜单的固定产品标题。
-    let title: String
+    let title: LocalizedStringResource
 
     /// 子菜单内部的递归节点。
     let nodes: [ContextMenuNode<AnyContextMenuAction>]
 
     /// 使用 Finder 产品 builder 创建嵌套菜单。
     init(
-        _ title: String,
+        _ title: LocalizedStringResource,
         @FinderContextMenuBuilder content: () -> [
             ContextMenuNode<AnyContextMenuAction>
         ]
     ) {
-        precondition(!title.isEmpty)
+        precondition(!title.key.isEmpty)
         self.title = title
         nodes = content()
     }

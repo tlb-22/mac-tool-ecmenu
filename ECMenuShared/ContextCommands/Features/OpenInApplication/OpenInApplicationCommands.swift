@@ -30,7 +30,7 @@ nonisolated struct OpenInApplicationCommandDefinition: Equatable, Sendable {
     private let featureID: ContextCommandFeatureID
 
     /// Finder 菜单和主应用界面共用的产品名称。
-    private let title: String
+    private let title: LocalizedStringResource
 
     /// Launch Services 需要定位的固定应用。
     let applicationRequirement: ContextCommandApplicationRequirement
@@ -50,11 +50,11 @@ nonisolated struct OpenInApplicationCommandDefinition: Equatable, Sendable {
     /// 创建一个图标与执行依赖不可能分歧的外部应用声明。
     init(
         id: String,
-        title: String,
+        title: LocalizedStringResource,
         applicationRequirement: ContextCommandApplicationRequirement,
         targetKind: OpenInApplicationTargetKind
     ) {
-        precondition(!title.isEmpty)
+        precondition(!title.key.isEmpty)
         featureID = ContextCommandFeatureID(rawValue: id)
         self.title = title
         self.applicationRequirement = applicationRequirement
@@ -84,7 +84,11 @@ nonisolated struct OpenInVSCodeCommand: OpenInApplicationCommand, Equatable {
     /// VS Code 命令的单一产品与执行声明。
     static let definition = OpenInApplicationCommandDefinition(
         id: "open-in-vscode",
-        title: "进入 Visual Studio Code",
+        title: LocalizedStringResource(
+            "command.openInVisualStudioCode",
+            defaultValue: "Open in Visual Studio Code",
+            comment: "Finder command that opens the target in Visual Studio Code"
+        ),
         applicationRequirement: ContextCommandApplicationRequirement(
             bundleIdentifier: "com.microsoft.VSCode",
             displayName: "Visual Studio Code"
@@ -106,7 +110,11 @@ nonisolated struct OpenInITerm2Command: OpenInApplicationCommand, Equatable {
     /// iTerm2 命令的单一产品与执行声明。
     static let definition = OpenInApplicationCommandDefinition(
         id: "open-in-iterm2",
-        title: "进入 iTerm2",
+        title: LocalizedStringResource(
+            "command.openInITerm2",
+            defaultValue: "Open in iTerm2",
+            comment: "Finder command that opens the target directory in iTerm2"
+        ),
         applicationRequirement: ContextCommandApplicationRequirement(
             bundleIdentifier: "com.googlecode.iterm2",
             displayName: "iTerm2"

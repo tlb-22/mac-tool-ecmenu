@@ -5,7 +5,11 @@ nonisolated struct CompressImagesCommand: ContextCommandPayload, Equatable {
     /// 压缩图片命令唯一一份稳定身份、产品名称与菜单图标。
     static let descriptor = ContextCommandDescriptor(
         id: "compress-images",
-        title: "压缩图片",
+        title: LocalizedStringResource(
+            "command.compressImages",
+            defaultValue: "Compress Images",
+            comment: "Finder command that compresses the selected images"
+        ),
         icon: .systemSymbol(name: "photo.badge.arrow.down")
     )
 

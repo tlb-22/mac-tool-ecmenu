@@ -4,10 +4,20 @@ import XCTest
 
 /// 验证命令错误弹窗的纯文案合约，不触发真实 `NSAlert`。
 final class CommandAlertContentTests: XCTestCase {
+    private let english = Locale(identifier: "en")
+    private let simplifiedChinese = Locale(identifier: "zh-Hans")
+
     /// 所有命令错误内容共用一个稳定标题。
     func testFixedTitle() {
         XCTAssertEqual(
-            CommandAlertContent(body: "测试正文").title,
+            CommandAlertContent(body: "Test body", locale: english).title,
+            "Operation Couldn’t Be Completed"
+        )
+        XCTAssertEqual(
+            CommandAlertContent(
+                body: "测试正文",
+                locale: simplifiedChinese
+            ).title,
             "操作未完成"
         )
     }
@@ -20,7 +30,8 @@ final class CommandAlertContentTests: XCTestCase {
                 for: CreateNewTextFileFailure(
                     directoryURL: directoryURL,
                     systemError: diagnosticError(kind: .permissionDenied)
-                )
+                ),
+                locale: simplifiedChinese
             )
         )
         let readOnlyContent = try XCTUnwrap(
@@ -28,7 +39,8 @@ final class CommandAlertContentTests: XCTestCase {
                 for: CreateNewTextFileFailure(
                     directoryURL: directoryURL,
                     systemError: diagnosticError(kind: .readOnlyFileSystem)
-                )
+                ),
+                locale: simplifiedChinese
             )
         )
 
@@ -36,8 +48,21 @@ final class CommandAlertContentTests: XCTestCase {
         XCTAssertEqual(
             permissionContent,
             CommandAlertContent(
-                body: "无法新建 TXT：“文稿”没有写入权限。"
+                body: "无法新建 TXT：“文稿”没有写入权限。",
+                locale: simplifiedChinese
             )
+        )
+        XCTAssertEqual(
+            try XCTUnwrap(
+                CreateNewTextFileAlertContent.make(
+                    for: CreateNewTextFileFailure(
+                        directoryURL: directoryURL,
+                        systemError: diagnosticError(kind: .permissionDenied)
+                    ),
+                    locale: english
+                )
+            ).body,
+            "Couldn’t create a TXT file because “文稿” isn’t writable."
         )
         XCTAssertFalse(permissionContent.body.contains(directoryURL.path))
         XCTAssertFalse(permissionContent.body.contains(Self.diagnosticMarker))
@@ -65,7 +90,8 @@ final class CommandAlertContentTests: XCTestCase {
             try XCTUnwrap(
                 VisibilityAlertContent.make(
                     for: hideReport,
-                    operation: .hide
+                    operation: .hide,
+                    locale: simplifiedChinese
                 )
             ).body,
             "无法隐藏项目：“first.txt”没有写入权限。"
@@ -74,10 +100,31 @@ final class CommandAlertContentTests: XCTestCase {
             try XCTUnwrap(
                 VisibilityAlertContent.make(
                     for: showReport,
-                    operation: .show
+                    operation: .show,
+                    locale: simplifiedChinese
                 )
             ).body,
             "无法显示部分项目：2 个项目没有写入权限。"
+        )
+        XCTAssertEqual(
+            try XCTUnwrap(
+                VisibilityAlertContent.make(
+                    for: hideReport,
+                    operation: .hide,
+                    locale: english
+                )
+            ).body,
+            "Couldn’t hide “first.txt” because it isn’t writable."
+        )
+        XCTAssertEqual(
+            try XCTUnwrap(
+                VisibilityAlertContent.make(
+                    for: showReport,
+                    operation: .show,
+                    locale: english
+                )
+            ).body,
+            "Some items couldn’t be shown because 2 items aren’t writable."
         )
     }
 
@@ -104,7 +151,10 @@ final class CommandAlertContentTests: XCTestCase {
 
         XCTAssertEqual(
             try XCTUnwrap(
-                ImageCompressionAlertContent.make(for: mixedReport)
+                ImageCompressionAlertContent.make(
+                    for: mixedReport,
+                    locale: simplifiedChinese
+                )
             ).body,
             "无法压缩部分图片：“a.png”没有写入权限。\n"
                 + "部分图片已压缩但遇到问题：“b.jpg”的时间属性写入失败。"
@@ -128,9 +178,22 @@ final class CommandAlertContentTests: XCTestCase {
         )
         XCTAssertEqual(
             try XCTUnwrap(
-                ImageCompressionAlertContent.make(for: countedReport)
+                ImageCompressionAlertContent.make(
+                    for: countedReport,
+                    locale: simplifiedChinese
+                )
             ).body,
             "无法压缩图片：2 张图片没有写入权限。"
+        )
+        XCTAssertEqual(
+            try XCTUnwrap(
+                ImageCompressionAlertContent.make(
+                    for: mixedReport,
+                    locale: english
+                )
+            ).body,
+            "Some images couldn’t be compressed because “a.png” isn’t writable.\n"
+                + "Some images were compressed, but the date attributes of “b.jpg” couldn’t be updated."
         )
     }
 
@@ -150,7 +213,10 @@ final class CommandAlertContentTests: XCTestCase {
         )
         XCTAssertEqual(
             try XCTUnwrap(
-                ImageCompressionAlertContent.make(for: onlyFileDateIssue)
+                ImageCompressionAlertContent.make(
+                    for: onlyFileDateIssue,
+                    locale: simplifiedChinese
+                )
             ).body,
             "图片已压缩但遇到问题：“dated.jpg”的时间属性写入失败。"
         )
@@ -169,7 +235,10 @@ final class CommandAlertContentTests: XCTestCase {
         )
         XCTAssertEqual(
             try XCTUnwrap(
-                ImageCompressionAlertContent.make(for: partialFileDateIssue)
+                ImageCompressionAlertContent.make(
+                    for: partialFileDateIssue,
+                    locale: simplifiedChinese
+                )
             ).body,
             "部分图片已压缩但遇到问题：“dated.jpg”的时间属性写入失败。"
         )
@@ -194,27 +263,42 @@ final class CommandAlertContentTests: XCTestCase {
                 .failed(.applicationUnavailable(application)),
                 .failed(.launchFailed(plan, diagnosticError())),
             ]
-            let expected = CommandAlertContent(
-                body: "无法\(descriptor.title)。"
+            let expectedChinese = CommandAlertContent(
+                body: "无法进入 \(application.displayName)。",
+                locale: simplifiedChinese
+            )
+            let expectedEnglish = CommandAlertContent(
+                body: "Couldn’t open in \(application.displayName).",
+                locale: english
             )
 
             for outcome in failedOutcomes {
                 XCTAssertEqual(
                     OpenInApplicationAlertContent.make(
                         for: outcome,
-                        commandTitle: descriptor.title
+                        applicationName: application.displayName,
+                        locale: simplifiedChinese
                     ),
-                    expected
+                    expectedChinese
+                )
+                XCTAssertEqual(
+                    OpenInApplicationAlertContent.make(
+                        for: outcome,
+                        applicationName: application.displayName,
+                        locale: english
+                    ),
+                    expectedEnglish
                 )
             }
             XCTAssertNil(
                 OpenInApplicationAlertContent.make(
                     for: .succeeded(plan),
-                    commandTitle: descriptor.title
+                    applicationName: application.displayName,
+                    locale: english
                 )
             )
-            XCTAssertFalse(expected.body.contains(plan.targetURL.path))
-            XCTAssertFalse(expected.body.contains(Self.diagnosticMarker))
+            XCTAssertFalse(expectedChinese.body.contains(plan.targetURL.path))
+            XCTAssertFalse(expectedChinese.body.contains(Self.diagnosticMarker))
         }
     }
 
