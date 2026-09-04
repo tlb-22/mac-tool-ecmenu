@@ -95,15 +95,30 @@ Archive 和打包不改变本机的 Extension 启用状态。Debug 与 Release �
 ## 界面预览
 
 ```bash
-./scripts/preview-ui.sh context-command-progress
-./scripts/preview-ui.sh status-page
+./scripts/preview-ui.sh status-page-general
+./scripts/preview-ui.sh status-page-context-menu
 ./scripts/preview-ui.sh image-compression-settings
+./scripts/preview-ui.sh image-compression-settings-validation-error
+./scripts/preview-ui.sh context-command-progress-single
+./scripts/preview-ui.sh context-command-progress-multiple
+./scripts/preview-ui.sh status-page-general --language en
+./scripts/preview-ui.sh status-page-general --language zh-Hans
 ./scripts/preview-ui.sh --list
 ```
 
-该命令构建并启动独立的 `ECMenuPreviews` macOS 应用。三个入口分别显示可调数量的并发任务进度、主程序状态页和压缩图片设置窗口；它们复用生产界面，只注入合成状态，不读写图片、持久化设置或执行右键命令。预览代码位于 `Tests/ECMenuPreviews/`，每个 Case 在文件开头集中保存任务数量等可调参数，并由声明式 Composition 统一注册。
+该命令构建并启动独立的 `ECMenuPreviews` macOS 应用。六个入口分别固定呈现通用设置、右键菜单设置、压缩设置正常与验证错误、单任务与多任务进度；它们复用生产界面，只注入合成状态，不读写图片、持久化设置或执行右键命令。`--language en` 与 `--language zh-Hans` 通过当前预览进程的 `AppleLanguages` 参数检查对应语言；省略参数时跟随系统语言。`--list` 仍只列出可用 Preview ID。
+
+预览代码位于 `Tests/ECMenuPreviews/`，每个 Case 在文件开头集中保存任务数量等可调参数，并由声明式 Composition 统一注册。
 
 `preview-ui.sh` 只替换独立预览进程，不结束主应用或刷新 Finder Extension；日常主应用运行继续使用 `run-debug.sh`。Xcode 构建产物保存在 `.derivedData/`，完整构建日志位于 `.artifacts/scratch/logs/`；临时截图或视觉检查结果位于 `.artifacts/scratch/previews/`。
+
+一次生成全部 Preview 的中英文窗口截图：
+
+```bash
+./scripts/capture-previews.sh
+```
+
+该脚本只构建一次，并从 Preview 注册表读取场景，依次运行“全部场景 × 英文/简体中文”。每个 Preview 进程先自行激活目标窗口；窗口成为 key window、完成布局且尺寸稳定后，脚本才按窗口编号截图，并在截图完成后确认捕获期间没有失焦。失焦图片会被删除且本次运行失败。批量截图与交互预览互斥运行；截图和运行日志分别写入带本次时间与进程号的 `.artifacts/scratch/previews/` 与 `.artifacts/scratch/logs/` 目录。截图依赖运行脚本的终端具有“屏幕与系统音频录制”权限，不使用辅助功能权限。
 
 ## 应用图标
 

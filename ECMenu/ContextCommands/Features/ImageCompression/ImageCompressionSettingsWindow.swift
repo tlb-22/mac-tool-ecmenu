@@ -6,6 +6,9 @@ enum ImageCompressionSettingsControlIdentifier {
     static let confirmButton = NSUserInterfaceItemIdentifier(
         "image-compression-confirm"
     )
+    static let validationLabel = NSUserInterfaceItemIdentifier(
+        "image-compression-validation"
+    )
 }
 
 // MARK: - ==================== 窗口布局 ====================
@@ -258,13 +261,16 @@ final class ImageCompressionSettingsWindowController:
         finish(with: nil, closeWindow: true)
     }
 
-    /// 构造参数表单、分割线和单行底部操作区。
+    /// 构造参数表单、分割线及验证信息与按钮同排的底部操作区。
     private func configureContent() {
         let contentView = NSView()
         validationLabel.textColor = .systemRed
         validationLabel.font = .systemFont(
             ofSize: NSFont.smallSystemFontSize
         )
+        validationLabel.identifier =
+            ImageCompressionSettingsControlIdentifier.validationLabel
+        validationLabel.alignment = .left
         validationLabel.lineBreakMode = .byTruncatingTail
         validationLabel.isHidden = true
 
@@ -303,7 +309,6 @@ final class ImageCompressionSettingsWindowController:
 
         let footerSpacer = NSView()
         footerSpacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
-
         let footerStack = NSStackView(
             views: [validationLabel, footerSpacer, buttonStack]
         )

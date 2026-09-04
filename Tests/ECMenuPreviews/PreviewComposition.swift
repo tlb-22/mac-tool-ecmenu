@@ -3,8 +3,13 @@
 enum PreviewComposition {
     /// 新增一个预览主题时，只在这里注册一行。
     static let previews = [
-        ApplicationPreviewDefinition(ContextCommandProgressPreview.self),
-        ApplicationPreviewDefinition(StatusPagePreview.self),
+        ApplicationPreviewDefinition(StatusPageGeneralPreview.self),
+        ApplicationPreviewDefinition(StatusPageContextMenuPreview.self),
         ApplicationPreviewDefinition(ImageCompressionSettingsPreview.self),
+        ApplicationPreviewDefinition(
+            ImageCompressionSettingsValidationErrorPreview.self
+        ),
+        ApplicationPreviewDefinition(ContextCommandProgressSinglePreview.self),
+        ApplicationPreviewDefinition(ContextCommandProgressMultiplePreview.self),
     ]
 }

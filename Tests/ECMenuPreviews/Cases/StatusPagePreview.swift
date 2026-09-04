@@ -4,9 +4,6 @@ import SwiftUI
 /// 集中保存主程序设置页预览中需要反复手动调整的场景参数。
 @MainActor
 private enum StatusPagePreviewParameters {
-    /// 预览首次显示的设置分类。
-    static let initiallySelectedPane = StatusPagePane.general
-
     /// 产品总开关的初始状态。
     static let isEnabled = true
 
@@ -47,15 +44,27 @@ private enum StatusPagePreviewParameters {
     }
 }
 
-/// 使用生产 `StatusPageContent` 检查主程序设置页。
+/// 使用生产 `StatusPageContent` 检查通用设置页。
 @MainActor
-enum StatusPagePreview: ApplicationPreview {
+enum StatusPageGeneralPreview: ApplicationPreview {
     /// `preview-ui.sh` 使用的稳定预览标识。
-    static let id = "status-page"
+    static let id = "status-page-general"
 
     /// 注入固定状态和内存菜单配置，不访问任何系统设置或偏好存储。
     static func present() -> AnyObject {
-        StatusPagePreviewSession()
+        StatusPagePreviewSession(selectedPane: .general)
+    }
+}
+
+/// 使用生产 `StatusPageContent` 检查右键菜单设置页。
+@MainActor
+enum StatusPageContextMenuPreview: ApplicationPreview {
+    /// `preview-ui.sh` 使用的稳定预览标识。
+    static let id = "status-page-context-menu"
+
+    /// 注入固定状态和内存菜单配置，不访问任何系统设置或偏好存储。
+    static func present() -> AnyObject {
+        StatusPagePreviewSession(selectedPane: .contextMenu)
     }
 }
 
@@ -66,8 +75,8 @@ private final class StatusPagePreviewSession {
     private let windowController: NSWindowController
 
     /// 用纯状态页面构造自适应内容窗口并立即呈现。
-    init() {
-        let content = StatusPagePreviewContent()
+    init(selectedPane: StatusPagePane) {
+        let content = StatusPagePreviewContent(selectedPane: selectedPane)
         let hostingController = NSHostingController(rootView: content)
         let window = NSWindow(contentViewController: hostingController)
         window.title = ApplicationMetadata.displayName
@@ -92,8 +101,7 @@ private final class StatusPagePreviewSession {
 @MainActor
 private struct StatusPagePreviewContent: View {
     /// 当前预览会话内的页面选择，不写入产品偏好。
-    @State private var selectedPane =
-        StatusPagePreviewParameters.initiallySelectedPane
+    @State private var selectedPane: StatusPagePane
 
     /// 当前预览会话内的菜单可见性，不读取也不写入产品偏好。
     @State private var configuration =
@@ -102,6 +110,11 @@ private struct StatusPagePreviewContent: View {
     /// 当前预览会话内的登录项状态，不访问 Service Management。
     @State private var loginItemState =
         StatusPagePreviewParameters.loginItemState
+
+    /// 让每个独立预览直接呈现其声明的设置分类。
+    init(selectedPane: StatusPagePane) {
+        _selectedPane = State(initialValue: selectedPane)
+    }
 
     /// 把无副作用状态交给生产呈现层。
     var body: some View {

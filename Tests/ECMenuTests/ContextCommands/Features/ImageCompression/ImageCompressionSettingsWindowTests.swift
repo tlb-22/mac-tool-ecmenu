@@ -204,6 +204,69 @@ final class ImageCompressionSettingsWindowTests: XCTestCase {
         XCTAssertTrue(secondPrompt.run.didReturn)
     }
 
+    /// 当前支持语言的完整验证文案必须与按钮同排且不截断。
+    func testValidationMessageFitsInEverySupportedLanguage() throws {
+        let settings = try XCTUnwrap(
+            ImageCompressionSettings(maximumWidth: 1_440, quality: 8)
+        )
+        let controller = ImageCompressionSettingsWindowController(
+            settings: settings,
+            completion: { _ in }
+        )
+        defer { controller.dismiss() }
+
+        try maximumWidthField(in: controller).stringValue = ""
+        controller.present()
+        let compressButton = try compressButton(in: controller)
+        compressButton.performClick(nil)
+
+        let validationLabel = try validationLabel(in: controller)
+        let contentView = try XCTUnwrap(controller.window?.contentView)
+        XCTAssertFalse(validationLabel.isHidden)
+
+        let applicationBundle = Bundle(for: AppDelegate.self)
+        for language in ["en", "zh-Hans"] {
+            let localizationPath = try XCTUnwrap(
+                applicationBundle.path(
+                    forResource: language,
+                    ofType: "lproj"
+                ),
+                language
+            )
+            let localizationBundle = try XCTUnwrap(
+                Bundle(path: localizationPath),
+                language
+            )
+            validationLabel.stringValue = localizationBundle.localizedString(
+                forKey: "imageCompression.validation.targetWidth",
+                value: nil,
+                table: "Localizable"
+            )
+            contentView.layoutSubtreeIfNeeded()
+
+            let validationFrame = validationLabel.convert(
+                validationLabel.bounds,
+                to: contentView
+            )
+            let buttonFrame = compressButton.convert(
+                compressButton.bounds,
+                to: contentView
+            )
+
+            XCTAssertGreaterThanOrEqual(
+                validationLabel.frame.width + 0.5,
+                validationLabel.intrinsicContentSize.width,
+                "Validation message is truncated in \(language)"
+            )
+            XCTAssertEqual(
+                validationFrame.midY,
+                buttonFrame.midY,
+                accuracy: 1,
+                "Validation message and button are not on one row in \(language)"
+            )
+        }
+    }
+
     /// 创建隔离的偏好容器，避免窗口测试读写应用设置。
     private func makeSettingsStore() throws -> (
         store: ImageCompressionSettingsStore,
@@ -288,6 +351,22 @@ final class ImageCompressionSettingsWindowTests: XCTestCase {
                     == ImageCompressionSettingsControlIdentifier.confirmButton
             },
             "没有找到确认按钮"
+        )
+    }
+
+    /// 通过稳定控件身份查找底部验证文案。
+    private func validationLabel(
+        in controller: ImageCompressionSettingsWindowController
+    ) throws -> NSTextField {
+        try XCTUnwrap(
+            descendant(
+                of: NSTextField.self,
+                in: controller.window?.contentView
+            ) {
+                $0.identifier
+                    == ImageCompressionSettingsControlIdentifier.validationLabel
+            },
+            "没有找到验证文案"
         )
     }
 
