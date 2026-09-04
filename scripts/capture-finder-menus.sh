@@ -6,18 +6,32 @@ readonly script_path="${0:A}"
 readonly script_directory="${script_path:h}"
 readonly project_root="${script_directory:h}"
 readonly definitions_path="$project_root/Tests/FinderMenuCapture/FinderMenuCaptureComposition.sh"
+readonly language_definitions_path="$project_root/Tests/FinderMenuCapture/Languages/CaptureLanguages.sh"
 readonly localization_catalog="$project_root/ECMenuFinderExtension/Localizable.xcstrings"
 readonly operation_lock_directory="$project_root/.artifacts/scratch/probes"
 readonly operation_lock="$operation_lock_directory/preview-operation.lock"
 readonly derived_data_path="$project_root/.derivedData"
+readonly debug_products_directory="$derived_data_path/Build/Products/Debug"
 readonly developer_directory="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
 readonly destination="${XCODE_DESTINATION:-platform=macOS,arch=arm64}"
 readonly helper_bundle_identifier="com.axiomace.ecmenu.test.findermenuautomation"
+readonly finder_bundle_identifier="com.apple.finder"
+readonly finder_app_path="/System/Library/CoreServices/Finder.app"
+readonly finder_executable="$finder_app_path/Contents/MacOS/Finder"
+readonly finder_launch_service="com.apple.Finder"
+typeset -ra original_arguments=("$@")
 
 source "$definitions_path"
+source "$language_definitions_path"
+source "$script_directory/lib/application-languages.sh"
+source "$script_directory/lib/process-lifecycle.sh"
+source "$script_directory/lib/product-paths.sh"
 
 typeset -a registered_scenario_ids=()
 typeset -a selected_scenario_ids=()
+typeset -a registered_language_ids=()
+typeset -a requested_language_ids=()
+typeset -a selected_language_ids=()
 typeset mode=capture
 typeset run_name=""
 typeset test_directory=""
@@ -27,9 +41,23 @@ typeset build_log=""
 typeset build_settings_log=""
 typeset capture_log=""
 typeset helper_executable=""
+typeset app_path=""
+typeset extension_path=""
+typeset main_executable=""
+typeset extension_executable=""
+typeset main_bundle_identifier=""
+typeset extension_bundle_identifier=""
+typeset finder_languages_snapshot=""
+typeset app_languages_snapshot=""
+typeset language_session_active=false
+typeset language_session_restoring=false
+typeset capture_exit_running=false
 
 usage() {
-    print "Usage: ./scripts/capture-finder-menus.sh [--list | --check | <scenario-id> ...]"
+    print "Usage: ./scripts/capture-finder-menus.sh [--language <id>]... [<scenario-id> ...]"
+    print "       ./scripts/capture-finder-menus.sh --check"
+    print "       ./scripts/capture-finder-menus.sh --list"
+    print "       ./scripts/capture-finder-menus.sh --list-languages"
 }
 
 fail() {
@@ -71,6 +99,73 @@ load_registry() {
         || fail "The Finder menu capture registry is empty."
 }
 
+load_language_registry() {
+    local language_id
+    local language_ids_text
+    local finder_resource_name
+    local finder_marker_title
+    local -A seen_ids=()
+
+    if language_ids_text="$(finder_menu_capture_language_ids)"; then
+        :
+    else
+        fail "Finder menu capture could not load its language registry."
+    fi
+    if [[ -n "$language_ids_text" ]]; then
+        for language_id in "${(@f)language_ids_text}"; do
+            [[ "$language_id" =~ '^[A-Za-z0-9]+([_-][A-Za-z0-9]+)*$' ]] \
+                || fail "Finder menu capture registered an invalid language ID: $language_id"
+            if (( ${+seen_ids[$language_id]} )); then
+                fail "Finder menu capture registered a language twice: $language_id"
+            fi
+            seen_ids[$language_id]=1
+            registered_language_ids+=("$language_id")
+
+            finder_resource_name="$(
+                finder_menu_capture_finder_resource_name "$language_id"
+            )" || fail "Finder language has no resource mapping: $language_id"
+            finder_marker_title="$(
+                finder_menu_capture_finder_marker_title "$language_id"
+            )" || fail "Finder language has no menu marker: $language_id"
+            [[ -n "$finder_resource_name" && -n "$finder_marker_title" ]] \
+                || fail "Finder language definition is incomplete: $language_id"
+            [[ -d "$finder_app_path/Contents/Resources/$finder_resource_name.lproj" ]] \
+                || fail "Finder does not contain the mapped localization for $language_id: $finder_resource_name.lproj"
+        done
+    fi
+
+    (( ${#registered_language_ids[@]} > 0 )) \
+        || fail "The Finder menu capture language registry is empty."
+}
+
+select_requested_languages() {
+    local requested_id
+    local registered_id
+    local is_registered
+    local -A seen_requested_ids=()
+
+    if (( ${#requested_language_ids[@]} == 0 )); then
+        selected_language_ids=("${registered_language_ids[@]}")
+        return
+    fi
+
+    for requested_id in "${requested_language_ids[@]}"; do
+        is_registered=false
+        for registered_id in "${registered_language_ids[@]}"; do
+            if [[ "$requested_id" == "$registered_id" ]]; then
+                is_registered=true
+                break
+            fi
+        done
+        $is_registered || fail "Unsupported Finder menu capture language: $requested_id"
+        if (( ${+seen_requested_ids[$requested_id]} )); then
+            fail "Finder menu capture language was requested twice: $requested_id"
+        fi
+        seen_requested_ids[$requested_id]=1
+        selected_language_ids+=("$requested_id")
+    done
+}
+
 select_requested_scenarios() {
     local requested_id
     local registered_id
@@ -99,7 +194,59 @@ select_requested_scenarios() {
     done
 }
 
+parse_arguments() {
+    local -a requested_scenario_ids=()
+
+    if (( $# == 1 )); then
+        case "$1" in
+            --help|-h)
+                usage
+                exit 0
+                ;;
+            --list)
+                print -l -- "${registered_scenario_ids[@]}"
+                exit 0
+                ;;
+            --list-languages)
+                print -l -- "${registered_language_ids[@]}"
+                exit 0
+                ;;
+            --check)
+                mode=check
+                select_requested_languages
+                select_requested_scenarios
+                return
+                ;;
+        esac
+    fi
+
+    while (( $# > 0 )); do
+        case "$1" in
+            --language)
+                if (( $# < 2 )) || [[ "$2" == --* ]]; then
+                    usage >&2
+                    exit 64
+                fi
+                requested_language_ids+=("$2")
+                shift 2
+                ;;
+            --*)
+                usage >&2
+                exit 64
+                ;;
+            *)
+                requested_scenario_ids+=("$1")
+                shift
+                ;;
+        esac
+    done
+
+    select_requested_languages
+    select_requested_scenarios "${requested_scenario_ids[@]}"
+}
+
 initialize_run_directories() {
+    local language_id
     local run_timestamp
 
     run_timestamp="$(date '+%Y%m%d-%H%M%S')"
@@ -114,7 +261,14 @@ initialize_run_directories() {
 
     mkdir -p "$test_directory/fixtures" "$log_directory"
     if [[ "$mode" == capture ]]; then
-        mkdir -p "$output_directory"
+        mkdir -p \
+            "$test_directory/language-preferences" \
+            "$output_directory"
+        for language_id in "${selected_language_ids[@]}"; do
+            mkdir -p \
+                "$output_directory/$language_id" \
+                "$log_directory/$language_id"
+        done
     fi
 }
 
@@ -232,8 +386,8 @@ prepare_and_validate_fixtures() {
     local context_kind
     local basename
     local command_key
-    local english_title
-    local chinese_title
+    local language_id
+    local localized_title
     local selected_basenames_text
     local required_command_keys_text
     local -a selected_basenames=()
@@ -293,13 +447,13 @@ prepare_and_validate_fixtures() {
             for command_key in "${(@f)required_command_keys_text}"; do
                 [[ -n "$command_key" ]] \
                     || fail "Scenario has an empty command key: $scenario_id"
-                if english_title="$(localized_command_title "$command_key" en)" \
-                    && chinese_title="$(localized_command_title "$command_key" zh-Hans)" \
-                    && [[ -n "$english_title" && -n "$chinese_title" ]]; then
-                    :
-                else
-                    fail "Scenario references an incomplete localized command: $scenario_id/$command_key"
-                fi
+                for language_id in "${registered_language_ids[@]}"; do
+                    localized_title="$(
+                        localized_command_title "$command_key" "$language_id"
+                    )" || fail "Scenario references an incomplete localized command: $scenario_id/$command_key/$language_id"
+                    [[ -n "$localized_title" ]] \
+                        || fail "Scenario references an empty localized command: $scenario_id/$command_key/$language_id"
+                done
                 required_command_keys+=("$command_key")
             done
         fi
@@ -339,12 +493,13 @@ menu_titles_from_log() {
 }
 
 require_expected_menu_titles() {
-    local scenario_id="$1"
-    local stdout_log="$2"
-    local image_path="$3"
+    local language_id="$1"
+    local scenario_id="$2"
+    local stdout_log="$3"
+    local image_path="$4"
     local command_key
-    local english_title
-    local chinese_title
+    local expected_title
+    local finder_marker_title
     local actual_title
     local found
     local menu_titles_text
@@ -357,6 +512,25 @@ require_expected_menu_titles() {
         menu_titles=("${(@f)menu_titles_text}")
     fi
 
+    finder_marker_title="$(
+        finder_menu_capture_finder_marker_title "$language_id"
+    )" || fail "Finder language has no menu marker: $language_id"
+    found=false
+    for actual_title in "${menu_titles[@]}"; do
+        if [[ "$actual_title" == "$finder_marker_title" ]]; then
+            found=true
+            break
+        fi
+    done
+    if ! $found; then
+        print -u2 "Finder menu items observed for $scenario_id [$language_id]:"
+        for actual_title in "${menu_titles[@]}"; do
+            print -u2 -r -- "  $actual_title"
+        done
+        /bin/rm -f "$image_path"
+        fail "Finder menu did not use the requested language: $language_id"
+    fi
+
     if required_command_keys_text="$(
         finder_menu_capture_required_command_keys "$scenario_id"
     )"; then
@@ -366,23 +540,24 @@ require_expected_menu_titles() {
     fi
     if [[ -n "$required_command_keys_text" ]]; then
         for command_key in "${(@f)required_command_keys_text}"; do
-            english_title="$(localized_command_title "$command_key" en)"
-            chinese_title="$(localized_command_title "$command_key" zh-Hans)"
+            expected_title="$(
+                localized_command_title "$command_key" "$language_id"
+            )"
             found=false
             for actual_title in "${menu_titles[@]}"; do
-                if [[ "$actual_title" == "$english_title" \
-                    || "$actual_title" == "$chinese_title" ]]; then
+                if [[ "$actual_title" == "$expected_title" ]]; then
                     found=true
                     break
                 fi
             done
             if ! $found; then
-                print -u2 "Finder menu items observed for $scenario_id:"
+                print -u2 \
+                    "Finder menu items observed for $scenario_id [$language_id]:"
                 for actual_title in "${menu_titles[@]}"; do
                     print -u2 -r -- "  $actual_title"
                 done
                 /bin/rm -f "$image_path"
-                fail "Required ECMenu command is absent: $command_key"
+                fail "Required ECMenu command is absent in $language_id: $command_key"
             fi
         done
     fi
@@ -430,11 +605,12 @@ png_dimensions() {
 }
 
 capture_scenario() {
-    local scenario_id="$1"
+    local language_id="$1"
+    local scenario_id="$2"
     local fixture_directory="$test_directory/fixtures/$scenario_id"
-    local stdout_log="$log_directory/$scenario_id.stdout.log"
-    local stderr_log="$log_directory/$scenario_id.stderr.log"
-    local image_path="$output_directory/$scenario_id.png"
+    local stdout_log="$log_directory/$language_id/$scenario_id.stdout.log"
+    local stderr_log="$log_directory/$language_id/$scenario_id.stderr.log"
+    local image_path="$output_directory/$language_id/$scenario_id.png"
     local context_kind
     local basename
     local image_dimensions
@@ -457,7 +633,8 @@ capture_scenario() {
         done
     fi
 
-    print -r -- "Capturing $scenario_id" | tee -a "$capture_log"
+    print -r -- "Capturing $scenario_id [$language_id]" \
+        | tee -a "$capture_log"
     if [[ "$context_kind" == container ]]; then
         "$helper_executable" container "$image_path" "$fixture_directory" \
             >"$stdout_log" 2>"$stderr_log" || helper_status=$?
@@ -475,7 +652,11 @@ capture_scenario() {
         /bin/rm -f "$image_path"
         fail "Finder helper did not confirm a stable capture: $scenario_id"
     fi
-    require_expected_menu_titles "$scenario_id" "$stdout_log" "$image_path"
+    require_expected_menu_titles \
+        "$language_id" \
+        "$scenario_id" \
+        "$stdout_log" \
+        "$image_path"
 
     if [[ -s "$image_path" ]] \
         && image_dimensions="$(png_dimensions "$image_path")"; then
@@ -485,44 +666,354 @@ capture_scenario() {
         fail "Screenshot is not a non-empty PNG: $image_path"
     fi
 
-    print -r -- "Captured $scenario_id.png ($image_dimensions)" \
+    print -r -- "Captured $language_id/$scenario_id.png ($image_dimensions)" \
         | tee -a "$capture_log"
 }
 
+resolve_debug_products() {
+    local language_id
+
+    if ! ecmenu_resolve_product_paths "$debug_products_directory"; then
+        fail "Could not uniquely resolve the built Debug products."
+    fi
+
+    app_path="$ECMENU_PRODUCT_APP_PATH"
+    extension_path="$ECMENU_PRODUCT_EXTENSION_PATH"
+    main_executable="$ECMENU_PRODUCT_MAIN_EXECUTABLE_PATH"
+    extension_executable="$ECMENU_PRODUCT_EXTENSION_EXECUTABLE_PATH"
+    main_bundle_identifier="$ECMENU_PRODUCT_APPLICATION_BUNDLE_IDENTIFIER"
+    extension_bundle_identifier="$ECMENU_PRODUCT_EXTENSION_BUNDLE_IDENTIFIER"
+
+    [[ "$main_bundle_identifier" == *.debug \
+        && "$extension_bundle_identifier" \
+            == "$main_bundle_identifier.finderext" ]] \
+        || fail "Finder menu capture resolved a product outside the Debug identity tree."
+
+    for language_id in "${registered_language_ids[@]}"; do
+        [[ -f "$extension_path/Contents/Resources/$language_id.lproj/Localizable.strings" ]] \
+            || fail "Built Finder Extension lacks localization: $language_id"
+    done
+}
+
+finder_window_count() {
+    local label="$1"
+    local stdout_log="$log_directory/finder-windows-$label.stdout.log"
+    local stderr_log="$log_directory/finder-windows-$label.stderr.log"
+    local report
+    local record
+    local count
+
+    if "$helper_executable" finder-windows \
+        >"$stdout_log" 2>"$stderr_log"; then
+        :
+    else
+        print -u2 \
+            "Could not inspect Finder windows. Logs: $stdout_log, $stderr_log"
+        return 1
+    fi
+    report="$(
+        /usr/bin/awk -F '\t' '$1 == "FINDER_WINDOWS" && NF == 2 {
+            print
+            exit
+        }' "$stdout_log"
+    )"
+    [[ -n "$report" ]] || return 1
+    IFS=$'\t' read -r record count <<<"$report"
+    [[ "$count" == <-> ]] || return 1
+    print -r -- "$count"
+}
+
+wait_for_no_finder_windows() {
+    local label="$1"
+    local maximum_attempts="${2:-1}"
+    local count=""
+    local last_count=""
+    local attempt
+    local consecutive_zeroes=0
+    local last_probe_succeeded=false
+
+    for (( attempt = 1; attempt <= maximum_attempts; attempt++ )); do
+        if count="$(finder_window_count "$label")"; then
+            last_probe_succeeded=true
+            last_count="$count"
+            if (( count == 0 )); then
+                (( consecutive_zeroes += 1 ))
+                if (( maximum_attempts == 1 || consecutive_zeroes == 2 )); then
+                    return 0
+                fi
+            else
+                consecutive_zeroes=0
+            fi
+        else
+            last_probe_succeeded=false
+            consecutive_zeroes=0
+        fi
+        if (( attempt < maximum_attempts )); then
+            sleep 0.1
+        fi
+    done
+
+    $last_probe_succeeded || return 2
+    (( last_count != 0 )) || return 2
+    print -r -- "$last_count"
+    return 1
+}
+
+require_no_finder_windows() {
+    local label="$1"
+    local maximum_attempts="${2:-1}"
+    local remaining_count=""
+    local probe_status
+
+    if remaining_count="$(
+        wait_for_no_finder_windows "$label" "$maximum_attempts"
+    )"; then
+        return
+    else
+        probe_status=$?
+    fi
+    (( probe_status != 2 )) \
+        || fail "Could not determine the current Finder window count."
+    fail "Close all Finder windows before capturing menus. Current count: $remaining_count"
+}
+
+first_application_language_argument() {
+    local command_line="$1"
+    local language_arguments
+    local language_list
+    local first_language
+
+    language_arguments="${command_line#*-AppleLanguages }"
+    [[ "$language_arguments" != "$command_line" ]] || return 1
+    language_list="$(
+        print -r -- "$language_arguments" \
+            | /usr/bin/sed -n \
+                's/^[[:space:]]*\(([^)]*)\).*/\1/p'
+    )"
+    [[ -n "$language_list" ]] || return 1
+    first_language="$(
+        print -r -- "$language_list" \
+            | /usr/bin/sed -E -n \
+                's/^[[:space:]]*\([[:space:]]*"([A-Za-z0-9_-]+)"([[:space:]]*,|[[:space:]]*\)).*/\1/p'
+    )"
+    if [[ -z "$first_language" ]]; then
+        first_language="$(
+            print -r -- "$language_list" \
+                | /usr/bin/sed -E -n \
+                    's/^[[:space:]]*\([[:space:]]*([A-Za-z0-9_-]+)([[:space:]]*,|[[:space:]]*\)).*/\1/p'
+        )"
+    fi
+    [[ -n "$first_language" ]] || return 1
+    print -r -- "$first_language"
+}
+
+validate_language_argument_parser() {
+    [[ "$(
+        first_application_language_argument \
+            '/path/Extension -AppleLanguages (en) -AppleLocale en_US'
+    )" == en ]] \
+        || fail "Could not parse an unquoted application language argument."
+    [[ "$(
+        first_application_language_argument \
+            '/path/Extension -AppleLanguages ("zh-Hans", en) -AppleLocale zh_CN'
+    )" == zh-Hans ]] \
+        || fail "Could not parse a quoted application language argument."
+}
+
+restart_debug_finder_environment() {
+    local label="$1"
+    local expected_language="${2:-}"
+    local lifecycle_log="$log_directory/$label-processes.log"
+    local previous_main_pids
+    local previous_extension_pids
+    local previous_finder_pids
+    local current_main_pids_text
+    local current_extension_pids_text
+    local extension_command_line
+    local first_language
+    local -a current_main_pids=()
+    local -a current_extension_pids=()
+
+    previous_main_pids="$(process_ids_for_executable "$main_executable")"
+    previous_extension_pids="$(
+        process_ids_for_executable "$extension_executable"
+    )"
+    previous_finder_pids="$(process_ids_for_executable "$finder_executable")"
+    {
+        print -r -- "previous-main-pids=${previous_main_pids//$'\n'/,}"
+        print -r -- \
+            "previous-extension-pids=${previous_extension_pids//$'\n'/,}"
+        print -r -- "previous-finder-pids=${previous_finder_pids//$'\n'/,}"
+    } >>"$lifecycle_log"
+
+    terminate_process_ids "$previous_extension_pids"
+
+    restart_gui_launch_service "$finder_launch_service" \
+        >>"$lifecycle_log" 2>&1 \
+        || return 1
+
+    wait_for_process_ids_to_exit "$previous_extension_pids" 150 \
+        || return 1
+    wait_for_process_ids_to_exit "$previous_finder_pids" 150 \
+        || return 1
+
+    wait_for_process "$finder_executable" 150 || return 1
+
+    wait_for_process "$extension_executable" 150 || return 1
+
+    current_main_pids_text="$(process_ids_for_executable "$main_executable")"
+    current_extension_pids_text="$(
+        process_ids_for_executable "$extension_executable"
+    )"
+    if [[ -n "$current_main_pids_text" ]]; then
+        current_main_pids=("${(@f)current_main_pids_text}")
+    fi
+    if [[ -n "$current_extension_pids_text" ]]; then
+        current_extension_pids=("${(@f)current_extension_pids_text}")
+    fi
+    (( ${#current_main_pids[@]} == 1 \
+        && ${#current_extension_pids[@]} == 1 )) \
+        || return 1
+    [[ "$current_main_pids_text" == "$previous_main_pids" ]] \
+        || return 1
+
+    extension_command_line="$(
+        ps -ww -p "$current_extension_pids[1]" -o command=
+    )" || return 1
+    {
+        print -r -- "current-main-pid=$current_main_pids[1]"
+        print -r -- "current-extension-pid=$current_extension_pids[1]"
+        print -r -- "extension-command=$extension_command_line"
+    } >>"$lifecycle_log"
+
+    if [[ -n "$expected_language" ]]; then
+        first_language="$(
+            first_application_language_argument "$extension_command_line"
+        )" || return 1
+        [[ ( "$first_language" == "$expected_language" \
+                || "$first_language" == "$expected_language"-* \
+                || "$first_language" == "$expected_language"_* ) ]] \
+            || return 1
+    fi
+}
+
+begin_language_session() {
+    finder_languages_snapshot="$test_directory/language-preferences/finder.plist"
+    app_languages_snapshot="$test_directory/language-preferences/debug-app.plist"
+
+    ecmenu_snapshot_application_languages \
+        "$finder_bundle_identifier" \
+        "$finder_languages_snapshot" \
+        || fail "Could not snapshot Finder language preferences."
+    ecmenu_snapshot_application_languages \
+        "$main_bundle_identifier" \
+        "$app_languages_snapshot" \
+        || fail "Could not snapshot Debug app language preferences."
+
+    language_session_active=true
+}
+
+apply_capture_language() {
+    local language_id="$1"
+
+    print -r -- "Activating Finder menu language: $language_id" \
+        | tee -a "$capture_log"
+    ecmenu_set_application_language \
+        "$main_bundle_identifier" \
+        "$language_id" \
+        || fail "Could not set Debug app language: $language_id"
+    ecmenu_set_application_language \
+        "$finder_bundle_identifier" \
+        "$language_id" \
+        || fail "Could not set Finder language: $language_id"
+    restart_debug_finder_environment "$language_id" "$language_id" \
+        || fail "Could not restart Finder and the Debug Extension for $language_id."
+    require_no_finder_windows "$language_id-before-capture" 30
+}
+
+restore_language_session() {
+    local restore_failed=false
+    local remaining_finder_windows=""
+    local finder_window_status
+
+    $language_session_restoring && return 1
+    language_session_restoring=true
+    trap '' HUP INT TERM
+
+    if ! ecmenu_restore_application_languages \
+        "$main_bundle_identifier" \
+        "$app_languages_snapshot"; then
+        print -u2 "Could not restore Debug app language preferences."
+        restore_failed=true
+    fi
+    if ! ecmenu_restore_application_languages \
+        "$finder_bundle_identifier" \
+        "$finder_languages_snapshot"; then
+        print -u2 "Could not restore Finder language preferences."
+        restore_failed=true
+    fi
+    if ! restart_debug_finder_environment restored; then
+        print -u2 "Could not restart Finder and the Debug Extension after restoring languages."
+        restore_failed=true
+    fi
+    if ! ecmenu_application_languages_match_snapshot \
+        "$main_bundle_identifier" \
+        "$app_languages_snapshot"; then
+        print -u2 "Debug app language preferences changed while restoring."
+        restore_failed=true
+    fi
+    if ! ecmenu_application_languages_match_snapshot \
+        "$finder_bundle_identifier" \
+        "$finder_languages_snapshot"; then
+        print -u2 "Finder language preferences changed while restoring."
+        restore_failed=true
+    fi
+    if remaining_finder_windows="$(
+        wait_for_no_finder_windows restored 30
+    )"; then
+        :
+    else
+        finder_window_status=$?
+        if (( finder_window_status == 2 )); then
+            print -u2 "Could not inspect Finder windows after language restoration."
+        else
+            print -u2 \
+                "Finder windows remain after language restoration: $remaining_finder_windows"
+        fi
+        restore_failed=true
+    fi
+    language_session_restoring=false
+    if ! $capture_exit_running; then
+        trap 'exit 129' HUP
+        trap 'exit 130' INT
+        trap 'exit 143' TERM
+    fi
+    if $restore_failed; then
+        return 1
+    fi
+    language_session_active=false
+    return 0
+}
+
+capture_exit() {
+    local exit_status=$?
+
+    capture_exit_running=true
+    trap - EXIT HUP INT TERM
+    if $language_session_active; then
+        if ! restore_language_session; then
+            print -u2 \
+                "Finder menu capture failed to restore its language session. Snapshots: $test_directory/language-preferences"
+            exit_status=1
+        fi
+    fi
+    exit "$exit_status"
+}
+
 load_registry
-
-case "${1:-}" in
-    --help|-h)
-        (( $# == 1 )) || {
-            usage >&2
-            exit 64
-        }
-        usage
-        exit 0
-        ;;
-    --list)
-        (( $# == 1 )) || {
-            usage >&2
-            exit 64
-        }
-        print -l -- "${registered_scenario_ids[@]}"
-        exit 0
-        ;;
-    --check)
-        (( $# == 1 )) || {
-            usage >&2
-            exit 64
-        }
-        mode=check
-        shift
-        ;;
-    --*)
-        usage >&2
-        exit 64
-        ;;
-esac
-
-select_requested_scenarios "$@"
+load_language_registry
+parse_arguments "$@"
+validate_language_argument_parser
 
 if [[ "$mode" == capture \
     && "${ECMENU_FINDER_MENU_OPERATION_LOCK:-}" != "$operation_lock" ]]; then
@@ -534,7 +1025,7 @@ if [[ "$mode" == capture \
         /usr/bin/env \
         ECMENU_FINDER_MENU_OPERATION_LOCK="$operation_lock" \
         "$script_path" \
-        "${selected_scenario_ids[@]}"
+        "${original_arguments[@]}"
 fi
 
 initialize_run_directories
@@ -562,7 +1053,11 @@ else
     fail "Finder menu capture requires Accessibility and Screen Recording permission. Current status: ${preflight_line:-unavailable}. Logs: $preflight_stdout_log, $preflight_stderr_log"
 fi
 
+require_no_finder_windows initial
+
 if "$script_directory/run-debug.sh" \
+    --refresh-finder \
+    --no-open-finder-window \
     >"$log_directory/run-debug.log" 2>&1; then
     :
 else
@@ -572,9 +1067,24 @@ else
     exit "$run_debug_status"
 fi
 
-for scenario_id in "${selected_scenario_ids[@]}"; do
-    capture_scenario "$scenario_id"
+resolve_debug_products
+require_no_finder_windows after-debug-start
+trap capture_exit EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+begin_language_session
+
+for language_id in "${selected_language_ids[@]}"; do
+    apply_capture_language "$language_id"
+    for scenario_id in "${selected_scenario_ids[@]}"; do
+        capture_scenario "$language_id" "$scenario_id"
+        require_no_finder_windows "$language_id-after-$scenario_id"
+    done
 done
+
+restore_language_session \
+    || fail "Finder menu screenshots completed, but language restoration failed."
 
 print "Finder menu screenshots: $output_directory"
 print "Capture logs: $log_directory"

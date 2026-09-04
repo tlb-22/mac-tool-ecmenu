@@ -99,7 +99,11 @@ final class FinderMenuSession {
         )
 
         state = .menuRequested(application, resolvedContext.window, selection)
-        try AXClient.perform(kAXShowMenuAction as CFString, on: target)
+        try showMenu(
+            on: target,
+            in: resolvedContext,
+            application: application
+        )
         guard let menu = try menuWaiter.wait(
             timeout: AutomationTiming.menu,
             resolve: { elements in
@@ -109,7 +113,11 @@ final class FinderMenuSession {
                 )
             }
         ) else {
-            throw AutomationFailure.menuOpenTimeout
+            throw AutomationFailure.menuOpenTimeout(
+                frontmostBundleIdentifier: NSWorkspace.shared
+                    .frontmostApplication?
+                    .bundleIdentifier
+            )
         }
 
         state = .menuOpened(application, resolvedContext.window, menu, selection)
@@ -616,9 +624,13 @@ final class FinderMenuSession {
         while !helper.isActive, Date() < helperDeadline {
             runLoopSlice(AutomationTiming.poll)
         }
+        var activationRequested = false
         if helper.isActive {
             appKitApplication.yieldActivation(to: finder)
-            _ = finder.activate(from: helper, options: [])
+            activationRequested = finder.activate(from: helper, options: [])
+        }
+        if !activationRequested {
+            _ = finder.activate(options: [])
         }
         if try AXClient.isSettable(
             kAXFrontmostAttribute as CFString,
@@ -636,7 +648,11 @@ final class FinderMenuSession {
             if finder.isActive { return }
             runLoopSlice(AutomationTiming.poll)
         }
-        throw AutomationFailure.finderActivationTimeout
+        throw AutomationFailure.finderActivationTimeout(
+            frontmostBundleIdentifier: NSWorkspace.shared
+                .frontmostApplication?
+                .bundleIdentifier
+        )
     }
 
     private func createdFinderWindow(
@@ -931,6 +947,36 @@ final class FinderMenuSession {
             return resolved.selectionOwner
         case .items:
             return resolved.firstItem.menuElement
+        }
+    }
+
+    private func showMenu(
+        on target: AXUIElement,
+        in resolved: ResolvedContext,
+        application: AXUIElement
+    ) throws {
+        switch context {
+        case .container:
+            try AXClient.perform(kAXShowMenuAction as CFString, on: target)
+        case .items:
+            try verifySelectionFocus(
+                in: resolved,
+                application: application
+            )
+            let location = try FinderPointer.location(of: target)
+            let hitElement = try AXClient.element(
+                at: location,
+                in: AXUIElementCreateSystemWide()
+            )
+            guard try isDescendant(
+                hitElement,
+                of: resolved.firstItem.directChild
+            ) else {
+                throw AutomationFailure.focusLost(
+                    "The Finder item was obscured before opening its menu."
+                )
+            }
+            try FinderPointer.rightClick(at: location)
         }
     }
 

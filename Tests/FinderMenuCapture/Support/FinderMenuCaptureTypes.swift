@@ -49,6 +49,7 @@ struct ItemSelection {
 
 enum CLICommand {
     case preflight
+    case finderWindows
     case capture(CaptureRequest)
 
     struct CaptureRequest {
@@ -63,6 +64,9 @@ enum CLICommand {
         case "preflight":
             guard arguments.count == 1 else { throw AutomationFailure.usage }
             return .preflight
+        case "finder-windows":
+            guard arguments.count == 1 else { throw AutomationFailure.usage }
+            return .finderWindows
         case "container":
             guard arguments.count == 3 else { throw AutomationFailure.usage }
             let outputURL = try outputURL(arguments[1])
@@ -203,7 +207,7 @@ enum AutomationFailure: Error {
     case finderOpenFailed(String)
     case finderUnavailable
     case interactiveSessionUnavailable
-    case finderActivationTimeout
+    case finderActivationTimeout(frontmostBundleIdentifier: String?)
     case newFinderWindowUnavailable
     case finderWindowOwnershipAmbiguous
     case finderWindowTimeout
@@ -213,7 +217,7 @@ enum AutomationFailure: Error {
     case keyboardEventUnavailable
     case pointerEventUnavailable
     case showMenuUnavailable
-    case menuOpenTimeout
+    case menuOpenTimeout(frontmostBundleIdentifier: String?)
     case menuStabilityTimeout
     case menuCancelUnavailable
     case menuCloseTimeout
@@ -271,7 +275,7 @@ enum AutomationFailure: Error {
     var message: String {
         switch self {
         case .usage:
-            "Usage: FinderMenuAutomation preflight | container <output.png> <directory> | items <output.png> <item> [item ...]"
+            "Usage: FinderMenuAutomation preflight | finder-windows | container <output.png> <directory> | items <output.png> <item> [item ...]"
         case let .pathMustBeAbsolute(path): "Path must be absolute: \(path)"
         case let .directoryDoesNotExist(path): "Directory does not exist: \(path)"
         case let .containerIsEmpty(path):
@@ -288,7 +292,8 @@ enum AutomationFailure: Error {
         case .finderUnavailable: "Finder did not become available."
         case .interactiveSessionUnavailable:
             "Unlock the macOS desktop before capturing Finder menus."
-        case .finderActivationTimeout: "Finder did not become frontmost."
+        case let .finderActivationTimeout(bundleIdentifier):
+            "Finder did not become frontmost; frontmost application: \(bundleIdentifier ?? "unavailable")."
         case .newFinderWindowUnavailable:
             "Finder did not expose its Command-N new-window action."
         case .finderWindowOwnershipAmbiguous:
@@ -304,7 +309,8 @@ enum AutomationFailure: Error {
         case .pointerEventUnavailable:
             "The Finder automation helper could not create a pointer event."
         case .showMenuUnavailable: "Finder did not expose AXShowMenu for this context."
-        case .menuOpenTimeout: "The Finder menu did not open."
+        case let .menuOpenTimeout(bundleIdentifier):
+            "The Finder menu did not open; frontmost application: \(bundleIdentifier ?? "unavailable")."
         case .menuStabilityTimeout: "The Finder menu did not stabilize."
         case .menuCancelUnavailable: "The Finder menu did not expose AXCancel."
         case .menuCloseTimeout: "The Finder menu did not close."

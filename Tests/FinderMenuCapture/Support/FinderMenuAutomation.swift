@@ -14,6 +14,15 @@ struct FinderMenuAutomationMain {
                 let permissions = PermissionReport.current(requestIfNeeded: true)
                 ProtocolOutput.preflight(permissions)
                 Darwin.exit(permissions.isReady ? EXIT_SUCCESS : EXIT_FAILURE)
+            case .finderWindows:
+                let permissions = PermissionReport.current()
+                guard permissions.isReady else {
+                    throw AutomationFailure.permissions(permissions)
+                }
+                ProtocolOutput.finderWindows(
+                    try FinderWindowInventory.currentCount()
+                )
+                Darwin.exit(EXIT_SUCCESS)
             case let .capture(request):
                 let permissions = PermissionReport.current()
                 guard permissions.isReady else {
@@ -63,6 +72,10 @@ struct FinderMenuAutomationMain {
 private enum ProtocolOutput {
     static func preflight(_ report: PermissionReport) {
         line("PREFLIGHT\t\(report.accessibility ? 1 : 0)\t\(report.screenCapture ? 1 : 0)")
+    }
+
+    static func finderWindows(_ count: Int) {
+        line("FINDER_WINDOWS\t\(count)")
     }
 
     static func captured(_ snapshot: MenuSnapshot) {

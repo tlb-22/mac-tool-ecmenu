@@ -28,6 +28,24 @@ enum FinderPointer {
         mouseUp.post(tap: .cghidEventTap)
     }
 
+    static func rightClick(at location: CGPoint) throws {
+        guard let mouseDown = CGEvent(
+            mouseEventSource: nil,
+            mouseType: .rightMouseDown,
+            mouseCursorPosition: location,
+            mouseButton: .right
+        ), let mouseUp = CGEvent(
+            mouseEventSource: nil,
+            mouseType: .rightMouseUp,
+            mouseCursorPosition: location,
+            mouseButton: .right
+        ) else {
+            throw AutomationFailure.pointerEventUnavailable
+        }
+        mouseDown.post(tap: .cghidEventTap)
+        mouseUp.post(tap: .cghidEventTap)
+    }
+
     static func move(to location: CGPoint) throws {
         guard let mouseMove = CGEvent(
             mouseEventSource: nil,

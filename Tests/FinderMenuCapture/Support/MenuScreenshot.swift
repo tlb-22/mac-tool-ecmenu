@@ -10,7 +10,7 @@ enum MenuScreenshot {
         let filter = SCContentFilter(desktopIndependentWindow: window)
         let configuration = SCScreenshotConfiguration()
         configuration.showsCursor = false
-        configuration.ignoreShadows = false
+        configuration.ignoreShadows = true
         configuration.includeChildWindows = false
         configuration.dynamicRange = .sdr
 

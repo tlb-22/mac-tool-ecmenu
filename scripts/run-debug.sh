@@ -8,6 +8,7 @@ readonly derived_data_path="$project_root/.derivedData"
 readonly debug_products_directory="$derived_data_path/Build/Products/Debug"
 readonly run_timestamp="$(date '+%Y%m%d-%H%M%S')"
 readonly finder_executable="/System/Library/CoreServices/Finder.app/Contents/MacOS/Finder"
+readonly finder_launch_service="com.apple.Finder"
 readonly log_directory="$project_root/.artifacts/scratch/logs"
 readonly build_log="$log_directory/$run_timestamp-run-debug-$$.log"
 readonly developer_directory="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
@@ -15,15 +16,17 @@ readonly destination="${XCODE_DESTINATION:-platform=macOS,arch=arm64}"
 readonly launch_services_register="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
 
 source "$script_directory/lib/product-paths.sh"
+source "$script_directory/lib/process-lifecycle.sh"
 
 refresh_finder=false
 refresh_icon=false
+open_finder_window=true
 
 usage() {
-    print "Usage: ./scripts/run-debug.sh [--refresh-finder] [--refresh-icon]"
+    print "Usage: ./scripts/run-debug.sh [--refresh-finder] [--refresh-icon] [--no-open-finder-window]"
 }
 
-if (( $# > 2 )); then
+if (( $# > 3 )); then
     usage >&2
     exit 64
 fi
@@ -44,6 +47,13 @@ for option in "$@"; do
             fi
             refresh_icon=true
             ;;
+        --no-open-finder-window)
+            if ! $open_finder_window; then
+                usage >&2
+                exit 64
+            fi
+            open_finder_window=false
+            ;;
         *)
             usage >&2
             exit 64
@@ -51,71 +61,10 @@ for option in "$@"; do
     esac
 done
 
-process_ids_for_executable() {
-    local executable_path="$1"
-    local command_path
-    local pid
-
-    while read -r pid command_path; do
-        if [[ "$command_path" == "$executable_path" ]]; then
-            print "$pid"
-        fi
-    done < <(ps -axo pid=,comm= 2>/dev/null)
-}
-
-terminate_process_ids() {
-    local process_ids="$1"
-    local pid
-
-    if [[ -z "$process_ids" ]]; then
-        return 0
-    fi
-
-    for pid in "${(@f)process_ids}"; do
-        kill "$pid" 2>/dev/null || true
-    done
-}
-
-wait_for_process() {
-    local executable_path="$1"
-    local maximum_attempts="${2:-30}"
-    local attempt
-
-    for (( attempt = 1; attempt <= maximum_attempts; attempt++ )); do
-        if [[ -n "$(process_ids_for_executable "$executable_path")" ]]; then
-            return 0
-        fi
-        sleep 0.1
-    done
-    return 1
-}
-
-wait_for_process_ids_to_exit() {
-    local process_ids="$1"
-    local maximum_attempts="${2:-50}"
-    local all_exited
-    local attempt
-    local pid
-
-    if [[ -z "$process_ids" ]]; then
-        return 0
-    fi
-
-    for (( attempt = 1; attempt <= maximum_attempts; attempt++ )); do
-        all_exited=true
-        for pid in "${(@f)process_ids}"; do
-            if kill -0 "$pid" 2>/dev/null; then
-                all_exited=false
-                break
-            fi
-        done
-        if $all_exited; then
-            return 0
-        fi
-        sleep 0.1
-    done
-    return 1
-}
+if ! $open_finder_window && ! $refresh_finder; then
+    usage >&2
+    exit 64
+fi
 
 code_signing_value() {
     local bundle_path="$1"
@@ -588,7 +537,12 @@ if $refresh_finder; then
     )"
     previous_finder_pids="$(process_ids_for_executable "$finder_executable")"
     terminate_process_ids "$previous_extension_pids"
-    terminate_process_ids "$previous_finder_pids"
+
+    if ! restart_gui_launch_service "$finder_launch_service" \
+        >>"$build_log" 2>&1; then
+        print -u2 "Finder launch service did not restart."
+        exit 11
+    fi
 
     if ! wait_for_process_ids_to_exit "$previous_extension_pids" 100; then
         print -u2 \
@@ -603,16 +557,18 @@ fi
 
 open -n "$app_path"
 
-if $refresh_finder || $refresh_icon; then
+if { $refresh_finder || $refresh_icon } && $open_finder_window; then
     if ! open_finder_directory "$project_root"; then
         print -u2 "Finder did not become ready to open: $project_root"
         exit 6
     fi
 fi
 
-if $refresh_finder && ! wait_for_process "$finder_executable" 150; then
-    print -u2 "Finder did not restart: $finder_executable"
-    exit 12
+if $refresh_finder; then
+    if ! wait_for_process "$finder_executable" 150; then
+        print -u2 "Finder did not restart: $finder_executable"
+        exit 12
+    fi
 fi
 
 if ! wait_for_process "$main_executable" 100; then
