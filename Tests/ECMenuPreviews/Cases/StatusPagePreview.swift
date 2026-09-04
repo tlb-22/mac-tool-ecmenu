@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-/// 集中保存主程序设置页预览中需要反复手动调整的场景参数。
+/// 集中保存主程序设置页状态覆盖预览中需要反复手动调整的场景参数。
 @MainActor
 private enum StatusPagePreviewParameters {
     /// 产品总开关的初始状态。
@@ -17,14 +17,6 @@ private enum StatusPagePreviewParameters {
     ///
     /// 保持为空可以直观看到 iTerm2 缺失时，开启值被保留但控件不可操作。
     static let initiallyHiddenFeatureIDs: Set<String> = []
-
-    /// 根据集中参数构造只存在于预览进程内的菜单配置。
-    static var initialConfiguration: MenuConfiguration {
-        MenuConfiguration(
-            isEnabled: isEnabled,
-            hiddenFeatureIDs: initiallyHiddenFeatureIDs
-        )
-    }
 
     /// 为预览中已安装的外部应用创建不依赖 Launch Services 的占位图标。
     static var applicationIcons: [String: NSImage] {
@@ -42,6 +34,19 @@ private enum StatusPagePreviewParameters {
             ) ?? NSImage(),
         ]
     }
+
+    /// 汇总当前覆盖场景交给共用设置页预览会话。
+    static var state: StatusPagePreviewState {
+        StatusPagePreviewState(
+            isExtensionEnabled: isExtensionEnabled,
+            loginItemState: loginItemState,
+            configuration: MenuConfiguration(
+                isEnabled: isEnabled,
+                hiddenFeatureIDs: initiallyHiddenFeatureIDs
+            ),
+            applicationIcons: applicationIcons
+        )
+    }
 }
 
 /// 使用生产 `StatusPageContent` 检查通用设置页。
@@ -52,7 +57,10 @@ enum StatusPageGeneralPreview: ApplicationPreview {
 
     /// 注入固定状态和内存菜单配置，不访问任何系统设置或偏好存储。
     static func present() -> AnyObject {
-        StatusPagePreviewSession(selectedPane: .general)
+        StatusPagePreviewSession(
+            selectedPane: .general,
+            state: StatusPagePreviewParameters.state
+        )
     }
 }
 
@@ -64,19 +72,44 @@ enum StatusPageContextMenuPreview: ApplicationPreview {
 
     /// 注入固定状态和内存菜单配置，不访问任何系统设置或偏好存储。
     static func present() -> AnyObject {
-        StatusPagePreviewSession(selectedPane: .contextMenu)
+        StatusPagePreviewSession(
+            selectedPane: .contextMenu,
+            state: StatusPagePreviewParameters.state
+        )
     }
+}
+
+/// 设置页 Preview 需要注入的完整、无副作用状态。
+@MainActor
+struct StatusPagePreviewState {
+    /// Finder Extension 在页面中显示的启用状态。
+    let isExtensionEnabled: Bool
+
+    /// 登录项在页面中显示的登记与批准状态。
+    let loginItemState: LoginItemRegistrationState
+
+    /// 产品总开关与各菜单命令的可见性。
+    let configuration: MenuConfiguration
+
+    /// 外部应用的可用状态与图标，以 bundle identifier 索引。
+    let applicationIcons: [String: NSImage]
 }
 
 /// 保活真实 SwiftUI 页面所在的标准 AppKit 窗口。
 @MainActor
-private final class StatusPagePreviewSession {
+final class StatusPagePreviewSession {
     /// Preview target 独占的窗口控制器。
     private let windowController: NSWindowController
 
     /// 用纯状态页面构造自适应内容窗口并立即呈现。
-    init(selectedPane: StatusPagePane) {
-        let content = StatusPagePreviewContent(selectedPane: selectedPane)
+    init(
+        selectedPane: StatusPagePane,
+        state: StatusPagePreviewState
+    ) {
+        let content = StatusPagePreviewContent(
+            selectedPane: selectedPane,
+            state: state
+        )
         let hostingController = NSHostingController(rootView: content)
         let window = NSWindow(contentViewController: hostingController)
         window.title = ApplicationMetadata.displayName
@@ -104,16 +137,27 @@ private struct StatusPagePreviewContent: View {
     @State private var selectedPane: StatusPagePane
 
     /// 当前预览会话内的菜单可见性，不读取也不写入产品偏好。
-    @State private var configuration =
-        StatusPagePreviewParameters.initialConfiguration
+    @State private var configuration: MenuConfiguration
 
     /// 当前预览会话内的登录项状态，不访问 Service Management。
-    @State private var loginItemState =
-        StatusPagePreviewParameters.loginItemState
+    @State private var loginItemState: LoginItemRegistrationState
+
+    /// 当前场景显示的 Finder Extension 状态。
+    private let isExtensionEnabled: Bool
+
+    /// 当前场景显示的外部应用可用状态与图标。
+    private let applicationIcons: [String: NSImage]
 
     /// 让每个独立预览直接呈现其声明的设置分类。
-    init(selectedPane: StatusPagePane) {
+    init(
+        selectedPane: StatusPagePane,
+        state: StatusPagePreviewState
+    ) {
         _selectedPane = State(initialValue: selectedPane)
+        _configuration = State(initialValue: state.configuration)
+        _loginItemState = State(initialValue: state.loginItemState)
+        isExtensionEnabled = state.isExtensionEnabled
+        applicationIcons = state.applicationIcons
     }
 
     /// 把无副作用状态交给生产呈现层。
@@ -122,12 +166,11 @@ private struct StatusPagePreviewContent: View {
             displayName: ApplicationMetadata.displayName,
             version: ApplicationMetadata.version,
             selectedPane: $selectedPane,
-            isExtensionEnabled:
-                StatusPagePreviewParameters.isExtensionEnabled,
+            isExtensionEnabled: isExtensionEnabled,
             loginItemState: loginItemState,
             descriptors: ContextCommandComposition.handlers.descriptors,
             configuration: configuration,
-            applicationIcons: StatusPagePreviewParameters.applicationIcons,
+            applicationIcons: applicationIcons,
             setEnabled: { isEnabled in
                 configuration.setEnabled(isEnabled)
             },

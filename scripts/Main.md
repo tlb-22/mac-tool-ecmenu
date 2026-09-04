@@ -97,6 +97,8 @@ Archive 和打包不改变本机的 Extension 启用状态。Debug 与 Release �
 ```bash
 ./scripts/preview-ui.sh status-page-general
 ./scripts/preview-ui.sh status-page-context-menu
+./scripts/preview-ui.sh readme-status-page-general
+./scripts/preview-ui.sh readme-status-page-context-menu
 ./scripts/preview-ui.sh image-compression-settings
 ./scripts/preview-ui.sh image-compression-settings-validation-error
 ./scripts/preview-ui.sh context-command-progress-single
@@ -106,7 +108,7 @@ Archive 和打包不改变本机的 Extension 启用状态。Debug 与 Release �
 ./scripts/preview-ui.sh --list
 ```
 
-该命令构建并启动独立的 `ECMenuPreviews` macOS 应用。六个入口分别固定呈现通用设置、右键菜单设置、压缩设置正常与验证错误、单任务与多任务进度；它们复用生产界面，只注入合成状态，不读写图片、持久化设置或执行右键命令。`--language en` 与 `--language zh-Hans` 通过当前预览进程的 `AppleLanguages` 参数检查对应语言；省略参数时跟随系统语言。`--list` 仍只列出可用 Preview ID。
+该命令构建并启动独立的 `ECMenuPreviews` macOS 应用。各入口固定呈现设置页状态覆盖、README 正常设置、压缩设置正常与验证错误、单任务与多任务进度；它们复用生产界面，不写入图片或持久化设置，也不执行右键命令。普通状态覆盖场景只注入合成状态；README 场景保持所有开关开启，并额外从 Launch Services 只读 Visual Studio Code 与 iTerm2 的真实图标，任一应用未安装时不会使用占位图标。`--language en` 与 `--language zh-Hans` 通过当前预览进程的 `AppleLanguages` 参数检查对应语言；省略参数时跟随系统语言。`--list` 仍只列出可用 Preview ID。
 
 预览代码位于 `Tests/ECMenuPreviews/`，每个 Case 在文件开头集中保存任务数量等可调参数，并由声明式 Composition 统一注册。
 
@@ -116,9 +118,10 @@ Archive 和打包不改变本机的 Extension 启用状态。Debug 与 Release �
 
 ```bash
 ./scripts/capture-previews.sh
+./scripts/capture-previews.sh status-page-general status-page-context-menu
 ```
 
-该脚本只构建一次，并从 Preview 注册表读取场景，依次运行“全部场景 × 英文/简体中文”。每个 Preview 进程先自行激活目标窗口；窗口成为 key window、完成布局且尺寸稳定后，脚本才按窗口编号生成不含阴影的独立窗口截图，圆角外保持透明，并在截图完成后确认捕获期间没有失焦。失焦图片会被删除且本次运行失败。批量截图与交互预览互斥运行；截图和运行日志分别写入带本次时间与进程号的 `.artifacts/scratch/previews/` 与 `.artifacts/scratch/logs/` 目录。截图依赖运行脚本的终端具有“屏幕与系统音频录制”权限，不使用辅助功能权限。
+该脚本只构建一次，并从 Preview 注册表验证场景；未指定 Preview ID 时捕获全部场景，也可以只捕获指定场景，始终分别生成英文与简体中文版本。每个 Preview 进程先自行激活目标窗口；窗口成为 key window、完成布局且尺寸稳定后，脚本才按窗口编号生成不含阴影的独立窗口截图，圆角外保持透明，并在截图完成后确认捕获期间没有失焦。失焦图片会被删除且本次运行失败。批量截图与交互预览互斥运行；截图和运行日志分别写入带本次时间与进程号的 `.artifacts/scratch/previews/` 与 `.artifacts/scratch/logs/` 目录。截图依赖运行脚本的终端具有“屏幕与系统音频录制”权限，不使用辅助功能权限。
 
 ## Finder 菜单截图
 
@@ -142,6 +145,16 @@ Archive 和打包不改变本机的 Extension 启用状态。Debug 与 Release �
 真实截图运行时需要保持 macOS 桌面已解锁且不要操作 Finder。运行端需要“辅助功能”和“屏幕与系统音频录制”权限；这些权限只用于开发截图工具，ECMenu 产品本身仍不需要辅助功能权限。截图、fixture 和日志使用同一单次运行名称，分别位于 `.artifacts/scratch/{previews,tests,logs}/`。`--check` 只验证场景、语言定义、本地化键、Finder 资源映射、fixture、辅助程序编译及静态 TCC 身份，不修改偏好或重启进程。
 
 平台契约、窗口所有权、透明截图方案和已排除的失败路径见 [Finder 菜单自动截图](../spec/Technical/FinderMenuCapture.md)。
+
+## README 图片
+
+```bash
+./scripts/capture-readme-images.sh
+```
+
+该脚本复用上述两个截图入口，分别捕获英文与简体中文的 README 正常设置场景和 Finder 目录背景菜单，再按通用设置、右键菜单设置、Finder 菜单的顺序以固定间距合成同尺寸透明图片。设置页中所有开关均开启，外部应用使用本机安装的真实图标；缺少 Visual Studio Code 或 iTerm2 时会在刷新 Finder 前失败。合成过程不裁切来源截图；两个设置页保持原尺寸，作为产品主体的 Finder 菜单放大至 `1.5×`。全部捕获和校验成功后才更新 `.docs/images/overview-en.png` 与 `.docs/images/overview-zh-Hans.png`。纯图片排版由 `Tests/READMEImageCapture/Support/READMEOverviewComposer.swift` 负责，编译产物、来源截图和日志均位于对应的 `.artifacts/scratch/` 运行目录。
+
+该入口持有完整截图过程的互斥锁，并沿用 Finder 菜单截图的零窗口前置条件、语言恢复和权限要求。运行时保持桌面已解锁且不要操作 Finder。
 
 ## 应用图标
 

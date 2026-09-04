@@ -10,13 +10,20 @@ readonly log_directory="$project_root/.artifacts/scratch/logs"
 readonly test_log="$log_directory/$run_timestamp-test-$$.log"
 readonly preview_build_log="$log_directory/$run_timestamp-preview-build-$$.log"
 readonly finder_menu_capture_check_log="$log_directory/$run_timestamp-finder-menu-capture-check-$$.log"
+readonly readme_image_composer_log="$log_directory/$run_timestamp-readme-image-composer-$$.log"
 readonly test_artifact_directory="$project_root/.artifacts/scratch/tests/$run_timestamp-xctest-$$"
 readonly result_bundle_path="$test_artifact_directory/ECMenu.xcresult"
 readonly preview_executable="$derived_data_path/Build/Products/Debug/ECMenuPreviews.app/Contents/MacOS/ECMenuPreviews"
+readonly readme_image_composer_source="$project_root/Tests/READMEImageCapture/Support/READMEOverviewComposer.swift"
+readonly readme_image_composer="$test_artifact_directory/READMEOverviewComposer"
+readonly readme_image_module_cache="$test_artifact_directory/readme-image-module-cache"
 readonly developer_directory="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
 readonly destination="${XCODE_DESTINATION:-platform=macOS,arch=arm64}"
 
-mkdir -p "$log_directory" "$test_artifact_directory"
+mkdir -p \
+    "$log_directory" \
+    "$test_artifact_directory" \
+    "$readme_image_module_cache"
 cd "$project_root"
 
 if DEVELOPER_DIR="$developer_directory" xcodebuild \
@@ -65,6 +72,23 @@ else
     exit "${preview_list_status:-1}"
 fi
 
+if DEVELOPER_DIR="$developer_directory" xcrun swiftc \
+    -module-cache-path "$readme_image_module_cache" \
+    "$readme_image_composer_source" \
+    -framework CoreGraphics \
+    -framework ImageIO \
+    -framework UniformTypeIdentifiers \
+    -o "$readme_image_composer" \
+    >"$readme_image_composer_log" 2>&1; then
+    :
+else
+    readme_image_composer_status=$?
+    print -u2 \
+        "README image composer build failed. Log: $readme_image_composer_log"
+    tail -n 200 "$readme_image_composer_log" >&2
+    exit "$readme_image_composer_status"
+fi
+
 if "$script_directory/capture-finder-menus.sh" --check \
     >"$finder_menu_capture_check_log" 2>&1; then
     :
@@ -94,3 +118,4 @@ print "Test log: $test_log"
 print "Test result bundle: $result_bundle_path"
 print "Preview build and registry smoke test passed. Log: $preview_build_log"
 print "Finder menu capture smoke test passed. Log: $finder_menu_capture_check_log"
+print "README image composer build passed. Log: $readme_image_composer_log"

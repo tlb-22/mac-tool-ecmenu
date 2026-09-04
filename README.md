@@ -1,62 +1,69 @@
-# ECMenu
+<h1 align="center">ECMenu</h1>
 
 <p align="center">
-  <img src="design/AppIcon/AppIcon.svg" width="128" alt="ECMenu 图标">
+  <strong>English</strong> ·
+  <a href="README.zh-Hans.md">简体中文</a>
 </p>
-
-ECMenu 是一个 macOS Finder 的右键增强工具。
-
-界面支持英文和简体中文，并跟随 macOS 的语言设置。
-
-项目保持小而美，只收录常用功能，并尽可能考虑到使用时的各处细节，不会变成有一堆杂七杂八功能的工具箱。
-
-项目注重代码结构和类型安全，开发者可以根据自己的需求自定义添加、修改、或移除菜单功能。
 
 <p align="center">
-  <img src=".docs/images/overview.png" width="100%" alt="ECMenu 通用设置、右键菜单设置与 Finder 菜单">
+  <img src="design/AppIcon/AppIcon.svg" width="128" height="128" alt="ECMenu icon">
 </p>
 
-## 功能
+ECMenu enhances Finder’s context menu on macOS.
 
-| 命令 | 行为 |
+ECMenu is intentionally small and focused. It provides a concise set of frequently used commands and pays attention to the details of everyday use instead of becoming an all-purpose toolbox.
+
+The codebase prioritizes clear structure and type safety, so developers can add, change, or remove menu commands for their own needs.
+
+<p align="center">
+  <img src=".docs/images/overview-en.png" width="100%" alt="ECMenu General settings, Context Menu settings, and Finder context menu">
+</p>
+
+## Features
+
+| Command | Behavior |
 |---|---|
-| `新建 TXT` | 在点击位置新建空白 TXT 文件 |
-| `拷贝路径` | 将完整路径复制到剪贴板 |
-| `隐藏项目` / `显示项目` | 在 Finder 中隐藏选中的项目，或让它们重新显示 |
-| `压缩图片` | 将所选图片转换为 JPG，可设置缩小后的目标宽度和画质 |
-| `进入 Visual Studio Code` | 在 Visual Studio Code 中打开文件或目录 |
-| `进入 iTerm2` | 在 iTerm2 中打开目录 |
+| `New TXT File` | Create an empty TXT file at the clicked location |
+| `Copy Path` | Copy the full path to the clipboard |
+| `Hide Items` / `Show Items` | Hide selected items in Finder, or make them visible again |
+| `Compress Images` | Convert selected images to JPG with a configurable target width and quality |
+| `Open in Visual Studio Code` | Open a file or directory in Visual Studio Code |
+| `Open in iTerm2` | Open a directory in iTerm2 |
 
-命令只可能创建新文件，不会删除或改写原文件内容。
+Commands may create new files, but never delete or overwrite the contents of an original file.
 
-菜单只显示当前能执行的命令。例如，没有选中图片时，不会出现 `压缩图片`；Visual Studio Code 或 iTerm2 没有安装时，不会出现对应的 `进入...`。
+Only commands that apply to the current context are shown. For example, `Compress Images` is absent when no image is selected; the Visual Studio Code and iTerm2 commands are absent when their corresponding applications are not installed.
 
-## 系统要求
+## System Requirements
 
-- macOS 26.0 或更高版本。
-- `进入 Visual Studio Code` 和 `进入 iTerm2` 分别需要安装对应应用。
+- macOS 26.0 or later.
+- `Open in Visual Studio Code` and `Open in iTerm2` require their corresponding applications.
 
-## 安装
+## Installation
 
-1. 从 GitHub Releases 下载最新的安装包，解压后把 `ECMenu.app` 移入 `/Applications`。
-2. 打开 ECMenu。如果 macOS 阻止运行，请到“系统设置”的“隐私与安全性”中选择“仍要打开”（这是因为发布包使用免费的 Apple Development 签名，未经 Apple 公证；如需公证，需加入 [Apple Developer Program](https://developer.apple.com/cn/help/account/membership/enrolling-in-the-app/)，中国大陆个人会员目前为每年 ¥688）。
-3. 在“通用”页面找到“Finder 扩展”，点击“设置...”进入系统设置界面并启用。
-4. 如果希望登录后直接使用 Finder 命令，再开启“登录时打开”。
+1. Download the latest package from GitHub Releases, extract it, and move `ECMenu.app` to `/Applications`.
+2. Open ECMenu. If macOS blocks it, open System Settings → Privacy & Security and choose “Open Anyway” (the package uses free Apple Development signing and is not notarized; notarization requires an [Apple Developer Program](https://developer.apple.com/help/account/membership/enrolling-in-the-app/) membership, currently ¥688 per year for individuals in mainland China).
+3. On the General page, find Finder Extension and choose “Settings…” to open System Settings and enable it.
+4. Enable Open at Login if Finder commands should be available immediately after signing in.
 
-ECMenu 需要在后台运行，菜单命令才能执行。关闭配置窗口或按 `Command-Q` 只会隐藏设置界面，不会退出 ECMenu。没有开启“登录时打开”时，每次重新登录后要先打开一次应用。
+ECMenu must keep running in the background for its menu commands to work. Closing the settings window or pressing `Command-Q` only hides the settings interface; it does not quit ECMenu. Without Open at Login, open the application once after each new login.
 
-## 权限与隐私
+## Permissions and Privacy
 
-ECMenu 涉及两个权限：“Finder 扩展（文件提供程序）”、以及“完全磁盘访问”。
+ECMenu uses two system permissions: Finder Extension (File Providers) and Full Disk Access.
 
-- “Finder 扩展”必须启用，否则右键菜单不会出现。
-- “完全磁盘访问”则非必须启用。只是，在处理受 macOS 保护的位置时，会有弹窗提示授权访问。如果不希望被弹窗打扰，可以在“通用”界面找到“完全磁盘访问”，点击“设置...”进入系统设置界面授予这项权限。首次授权可能找不到 ECMenu，需要手动添加到权限列表。
+- Finder Extension is required; without it, the context menu commands do not appear.
+- Full Disk Access is optional. When ECMenu operates on a location protected by macOS, Finder may display a prompt requesting access. To avoid these prompts, find Full Disk Access on the General page, choose “Settings…”, and grant the permission in System Settings. ECMenu may not appear in the list during the first authorization and may need to be added manually.
 
-## 源码构建
+## Localization
 
-从源码运行需要 Xcode、macOS 26 SDK 和有效的 Apple Development 签名身份。工程当前带有维护者的 Personal Team 配置；换用自己的 Developer Team 时，需要一起替换 Team、主应用与 Finder Extension 的 Bundle ID 和 App Group，不能只改其中一项。具体约束见[构建身份](spec/Technical/Delivery/BuildIdentity.md)。
+English is the source language, with a Simplified Chinese translation. The application and Finder menu follow the macOS language selection and do not provide an in-app language switch. See the [localization technical notes](spec/Technical/Runtime/Localization.md) for implementation and validation boundaries.
 
-常用入口：
+## Building from Source
+
+Building from source requires Xcode, the macOS 26 SDK, and a valid Apple Development signing identity. The project currently contains the maintainer's Personal Team configuration. When using another Developer Team, replace the Team, the bundle identifiers of both the main application and Finder Extension, and the App Group together; changing only one of them is not sufficient. See [Build Identity](spec/Technical/Delivery/BuildIdentity.md) for the complete constraints.
+
+Common entry points:
 
 ```bash
 ./scripts/run-debug.sh
@@ -65,8 +72,8 @@ ECMenu 涉及两个权限：“Finder 扩展（文件提供程序）”、以及
 ./scripts/build-release.sh
 ```
 
-开发脚本的产物位置与完整说明见[开发脚本](scripts/Main.md)，产品行为与技术边界见[项目规格](spec/Main.md)。
+See [Development Scripts](scripts/Main.md) for artifact locations and complete usage, and [Project Specifications](spec/Main.md) for product behavior and technical boundaries.
 
-## 许可证
+## License
 
-本项目以 [MIT License](LICENSE) 发布。
+This project is released under the [MIT License](LICENSE).

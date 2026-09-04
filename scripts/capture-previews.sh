@@ -33,9 +33,12 @@ readonly destination="${XCODE_DESTINATION:-platform=macOS,arch=arm64}"
 readonly -a languages=(en zh-Hans)
 
 active_preview_pid=""
+typeset -a requested_preview_ids=()
+typeset -a registered_preview_ids=()
+typeset -a selected_preview_ids=()
 
 usage() {
-    print "Usage: ./scripts/capture-previews.sh"
+    print "Usage: ./scripts/capture-previews.sh [<preview-id> ...]"
 }
 
 log() {
@@ -50,6 +53,70 @@ fail() {
     print -r -- "ERROR: $message" >>"$capture_log"
     print -u2 "Capture log: $capture_log"
     exit 1
+}
+
+parse_arguments() {
+    if (( $# == 1 )) && [[ "$1" == --help || "$1" == -h ]]; then
+        usage
+        exit 0
+    fi
+
+    while (( $# > 0 )); do
+        [[ -n "$1" && "$1" != --* ]] || {
+            usage >&2
+            exit 64
+        }
+        requested_preview_ids+=("$1")
+        shift
+    done
+}
+
+load_preview_registry() {
+    local preview_ids_text="$1"
+    local preview_id
+    local -A seen_preview_ids=()
+
+    while IFS= read -r preview_id; do
+        [[ -n "$preview_id" ]] || continue
+        [[ "$preview_id" != */* ]] \
+            || fail "Preview ID cannot be used as a filename: $preview_id"
+        if (( ${+seen_preview_ids[$preview_id]} )); then
+            fail "A Preview ID was registered more than once: $preview_id"
+        fi
+        seen_preview_ids[$preview_id]=1
+        registered_preview_ids+=("$preview_id")
+    done <<<"$preview_ids_text"
+
+    (( ${#registered_preview_ids[@]} > 0 )) \
+        || fail "The Preview registry is empty."
+}
+
+select_requested_previews() {
+    local requested_id
+    local registered_id
+    local is_registered
+    local -A seen_requested_ids=()
+
+    if (( ${#requested_preview_ids[@]} == 0 )); then
+        selected_preview_ids=("${registered_preview_ids[@]}")
+        return
+    fi
+
+    for requested_id in "${requested_preview_ids[@]}"; do
+        is_registered=false
+        for registered_id in "${registered_preview_ids[@]}"; do
+            if [[ "$requested_id" == "$registered_id" ]]; then
+                is_registered=true
+                break
+            fi
+        done
+        $is_registered || fail "Unknown Preview ID: $requested_id"
+        if (( ${+seen_requested_ids[$requested_id]} )); then
+            fail "A Preview ID was requested more than once: $requested_id"
+        fi
+        seen_requested_ids[$requested_id]=1
+        selected_preview_ids+=("$requested_id")
+    done
 }
 
 terminate_active_preview() {
@@ -292,10 +359,7 @@ capture_preview() {
     log "Captured $preview_name.png ($image_dimensions)"
 }
 
-if (( $# != 0 )); then
-    usage >&2
-    exit 64
-fi
+parse_arguments "$@"
 
 trap cleanup EXIT
 trap 'exit 129' HUP
@@ -329,24 +393,13 @@ else
     fail "Could not list Preview IDs (status $list_status)."
 fi
 
-preview_ids=()
-while IFS= read -r preview_id; do
-    [[ -n "$preview_id" ]] || continue
-    if [[ "$preview_id" == */* ]]; then
-        fail "Preview ID cannot be used as a filename: $preview_id"
-    fi
-    preview_ids+=("$preview_id")
-done <<<"$preview_ids_text"
-readonly -a preview_ids
+load_preview_registry "$preview_ids_text"
+select_requested_previews
 
-if (( ${#preview_ids[@]} == 0 )); then
-    fail "The Preview registry is empty."
-fi
-
-log "Preview IDs: ${(j:, :)preview_ids}"
+log "Preview IDs: ${(j:, :)selected_preview_ids}"
 log "Languages: ${(j:, :)languages}"
 
-for preview_id in "${preview_ids[@]}"; do
+for preview_id in "${selected_preview_ids[@]}"; do
     for language in "${languages[@]}"; do
         capture_preview "$preview_id" "$language"
     done
