@@ -9,6 +9,7 @@ readonly run_timestamp="$(date '+%Y%m%d-%H%M%S')"
 readonly log_directory="$project_root/.artifacts/scratch/logs"
 readonly test_log="$log_directory/$run_timestamp-test-$$.log"
 readonly preview_build_log="$log_directory/$run_timestamp-preview-build-$$.log"
+readonly finder_menu_capture_check_log="$log_directory/$run_timestamp-finder-menu-capture-check-$$.log"
 readonly test_artifact_directory="$project_root/.artifacts/scratch/tests/$run_timestamp-xctest-$$"
 readonly result_bundle_path="$test_artifact_directory/ECMenu.xcresult"
 readonly preview_executable="$derived_data_path/Build/Products/Debug/ECMenuPreviews.app/Contents/MacOS/ECMenuPreviews"
@@ -64,6 +65,17 @@ else
     exit "${preview_list_status:-1}"
 fi
 
+if "$script_directory/capture-finder-menus.sh" --check \
+    >"$finder_menu_capture_check_log" 2>&1; then
+    :
+else
+    finder_menu_capture_check_status=$?
+    print -u2 \
+        "Finder menu capture smoke test failed. Log: $finder_menu_capture_check_log"
+    tail -n 200 "$finder_menu_capture_check_log" >&2
+    exit "$finder_menu_capture_check_status"
+fi
+
 if passed_count="$(
     DEVELOPER_DIR="$developer_directory" xcrun xcresulttool \
         get test-results summary \
@@ -81,3 +93,4 @@ print "Tests passed: $passed_count"
 print "Test log: $test_log"
 print "Test result bundle: $result_bundle_path"
 print "Preview build and registry smoke test passed. Log: $preview_build_log"
+print "Finder menu capture smoke test passed. Log: $finder_menu_capture_check_log"

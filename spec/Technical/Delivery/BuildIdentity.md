@@ -23,8 +23,11 @@ Xcode build configuration 通过 `ECMENU_APPLICATION_NAME`、`ECMENU_APPLICATION
 | Finder Extension 测试 | `com.axiomace.ecmenu.test.finderext` |
 | Preview | `com.axiomace.ecmenu.test.preview` |
 | IPC sender | `com.axiomace.ecmenu.test.ipcsender` |
+| `FinderMenuAutomation` | `com.axiomace.ecmenu.test.findermenuautomation` |
 
 IPC sender 是验证生产身份检查的唯一例外：产品 Bundle ID 仍属于测试子树，但本地集成构建显式把 signing identifier 覆盖为当前 Finder Extension 身份。它不嵌入或交付到产品应用。
+
+`FinderMenuAutomation` 是需要 Accessibility 与屏幕录制授权的本地开发 helper。其嵌入式 `CFBundleIdentifier` 和 code-signing identifier 都固定为表中身份，真实截图构建还核对 Apple Development Team；它不嵌入或交付到产品应用。具体自动化边界见 [Finder 菜单自动截图](../FinderMenuCapture.md)。
 
 ## 签名与隔离
 

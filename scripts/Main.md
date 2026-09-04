@@ -120,6 +120,22 @@ Archive 和打包不改变本机的 Extension 启用状态。Debug 与 Release �
 
 该脚本只构建一次，并从 Preview 注册表读取场景，依次运行“全部场景 × 英文/简体中文”。每个 Preview 进程先自行激活目标窗口；窗口成为 key window、完成布局且尺寸稳定后，脚本才按窗口编号截图，并在截图完成后确认捕获期间没有失焦。失焦图片会被删除且本次运行失败。批量截图与交互预览互斥运行；截图和运行日志分别写入带本次时间与进程号的 `.artifacts/scratch/previews/` 与 `.artifacts/scratch/logs/` 目录。截图依赖运行脚本的终端具有“屏幕与系统音频录制”权限，不使用辅助功能权限。
 
+## Finder 菜单截图
+
+```bash
+./scripts/capture-finder-menus.sh
+./scripts/capture-finder-menus.sh multiple-images
+./scripts/capture-finder-menus.sh --list
+```
+
+该脚本构建并运行当前 Debug 版本，再为目录背景、普通文件、目录和多张图片建立固定 fixture，打开 Finder 的真实右键菜单并分别截图。它不会重启 Finder；Finder Extension 源码变化后，先执行一次 `./scripts/run-debug.sh --refresh-finder`。每张图片捕获菜单的独立透明窗口，保留自身阴影，不包含后方 Finder 窗口或桌面；脚本会核对该场景必须出现的 ECMenu 命令，并在截图后重新确认 Finder、来源窗口、菜单位置和菜单项均未变化。当前配置中关闭了必需命令时，本次截图会失败，不改写用户配置。
+
+场景定义位于 `Tests/FinderMenuCapture/`：基础上下文集中在 `Contexts/`，各命令的菜单期望位于对应的 `Features/`，图片 fixture 与多图场景由 `Features/ImageCompression/` 持有。Finder 打开、Accessibility 读取和菜单生命周期统一封装在 `Support/`，不向 Finder Extension 加入截图分支。`--check` 验证注册表、fixture、本地化键、辅助程序编译及其静态 TCC 身份配置，已包含在 `test.sh` 与 CI 中；真实 Finder 截图不在无人值守的 CI 中运行。
+
+真实截图跟随当前 Finder Extension 进程的语言，运行时需要保持 macOS 桌面已解锁且不要操作 Finder。运行端需要“辅助功能”和“屏幕与系统音频录制”权限；这些权限只用于开发截图工具，ECMenu 产品本身仍不需要辅助功能权限。截图、fixture 和日志使用同一单次运行名称，分别位于 `.artifacts/scratch/{previews,tests,logs}/`。
+
+平台契约、窗口所有权、透明截图方案和已排除的失败路径见 [Finder 菜单自动截图](../spec/Technical/FinderMenuCapture.md)。
+
 ## 应用图标
 
 ```bash

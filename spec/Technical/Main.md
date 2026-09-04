@@ -36,3 +36,4 @@ spec/                           当前需求、技术知识与未来提案
 - [交付边界](Delivery/Main.md)：构建身份、环境隔离和应用图标交付。
 - [功能技术决策](Features/Main.md)：各业务能力依赖的平台 API 与不可由单个源码位置恢复的约束。
 - [界面预览目标](PreviewTarget.md)：独立 Preview target 与生产代码的边界。
+- [Finder 菜单自动截图](FinderMenuCapture.md)：真实 Finder 菜单的自动驱动、独立窗口捕获、稳定边界与失败经验。

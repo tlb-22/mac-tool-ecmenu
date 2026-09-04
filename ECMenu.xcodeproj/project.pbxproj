@@ -58,6 +58,7 @@
 		H10000000000000000000004 /* CompositionExpectation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompositionExpectation.swift; sourceTree = "<group>"; };
 		I10000000000000000000001 /* ContextCommandSender */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = ContextCommandSender; sourceTree = BUILT_PRODUCTS_DIR; };
 		P10000000000000000000001 /* ECMenuPreviews.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ECMenuPreviews.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		Q10000000000000000000001 /* FinderMenuAutomation */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = FinderMenuAutomation; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -149,6 +150,11 @@
 			path = Tests/ECMenuPreviews;
 			sourceTree = "<group>";
 		};
+		Q10000000000000000000002 /* Tests/FinderMenuCapture/Support */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Tests/FinderMenuCapture/Support;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -194,6 +200,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		Q10000000000000000000003 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -207,6 +220,7 @@
 				E10000000000000000000003 /* Tests/ECMenuTests */,
 				H10000000000000000000007 /* Tests/ECMenuFinderExtensionTests */,
 				I10000000000000000000002 /* Tests/Integration */,
+				Q10000000000000000000002 /* Tests/FinderMenuCapture/Support */,
 				H1000000000000000000000F /* Tests/Support */,
 				2863D49030273A440090DB7A /* Products */,
 			);
@@ -221,6 +235,7 @@
 				E10000000000000000000001 /* ECMenuTests.xctest */,
 				H10000000000000000000003 /* ECMenuFinderExtensionTests.xctest */,
 				I10000000000000000000001 /* ContextCommandSender */,
+				Q10000000000000000000001 /* FinderMenuAutomation */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -378,6 +393,28 @@
 			productReference = P10000000000000000000001 /* ECMenuPreviews.app */;
 			productType = "com.apple.product-type.application";
 		};
+		Q10000000000000000000006 /* FinderMenuAutomation */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = Q10000000000000000000009 /* Build configuration list for PBXNativeTarget "FinderMenuAutomation" */;
+			buildPhases = (
+				Q10000000000000000000004 /* Sources */,
+				Q10000000000000000000003 /* Frameworks */,
+				Q10000000000000000000005 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				Q10000000000000000000002 /* Tests/FinderMenuCapture/Support */,
+			);
+			name = FinderMenuAutomation;
+			packageProductDependencies = (
+			);
+			productName = FinderMenuAutomation;
+			productReference = Q10000000000000000000001 /* FinderMenuAutomation */;
+			productType = "com.apple.product-type.tool";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -404,6 +441,9 @@
 					P10000000000000000000007 = {
 						CreatedOnToolsVersion = 26.6;
 					};
+					Q10000000000000000000006 = {
+						CreatedOnToolsVersion = 26.6;
+					};
 				};
 			};
 			buildConfigurationList = 2863D48A30273A440090DB7A /* Build configuration list for PBXProject "ECMenu" */;
@@ -427,6 +467,7 @@
 				H1000000000000000000000B /* ECMenuFinderExtensionTests */,
 				I10000000000000000000006 /* ContextCommandSender */,
 				P10000000000000000000007 /* ECMenuPreviews */,
+				Q10000000000000000000006 /* FinderMenuAutomation */,
 			);
 		};
 /* End PBXProject section */
@@ -474,6 +515,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		Q10000000000000000000005 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -515,6 +563,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		P10000000000000000000006 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		Q10000000000000000000004 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -972,6 +1027,50 @@
 			};
 			name = Release;
 		};
+		Q10000000000000000000007 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CREATE_INFOPLIST_SECTION_IN_BINARY = YES;
+				DEVELOPMENT_TEAM = GVPW27HJZ5;
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				OTHER_CODE_SIGN_FLAGS = "$(inherited) --identifier $(PRODUCT_BUNDLE_IDENTIFIER)";
+				PRODUCT_BUNDLE_IDENTIFIER = com.axiomace.ecmenu.test.findermenuautomation;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_TREAT_WARNINGS_AS_ERRORS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		Q10000000000000000000008 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CREATE_INFOPLIST_SECTION_IN_BINARY = YES;
+				DEVELOPMENT_TEAM = GVPW27HJZ5;
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				OTHER_CODE_SIGN_FLAGS = "$(inherited) --identifier $(PRODUCT_BUNDLE_IDENTIFIER)";
+				PRODUCT_BUNDLE_IDENTIFIER = com.axiomace.ecmenu.test.findermenuautomation;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_TREAT_WARNINGS_AS_ERRORS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -1034,6 +1133,15 @@
 			buildConfigurations = (
 				P10000000000000000000008 /* Debug */,
 				P10000000000000000000009 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		Q10000000000000000000009 /* Build configuration list for PBXNativeTarget "FinderMenuAutomation" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				Q10000000000000000000007 /* Debug */,
+				Q10000000000000000000008 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
