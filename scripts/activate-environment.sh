@@ -2,7 +2,8 @@
 
 set -euo pipefail
 
-readonly script_directory="${0:A:h}"
+readonly script_path="${0:A}"
+readonly script_directory="${script_path:h}"
 readonly project_root="${script_directory:h}"
 readonly run_timestamp="$(date '+%Y%m%d-%H%M%S')"
 readonly log_directory="$project_root/.artifacts/scratch/logs"
@@ -14,6 +15,7 @@ readonly release_application_identifier="com.axiomace.ecmenu"
 readonly release_extension_identifier="com.axiomace.ecmenu.finderext"
 
 source "$script_directory/lib/product-paths.sh"
+source "$script_directory/lib/user-focus.sh"
 
 usage() {
     print "Usage: ./scripts/activate-environment.sh <debug|release>"
@@ -199,6 +201,15 @@ if (( $# != 1 )); then
     usage >&2
     exit 64
 fi
+case "$1" in
+    debug|release) ;;
+    *)
+        usage >&2
+        exit 64
+        ;;
+esac
+
+ecmenu_reexec_preserving_user_focus "$script_path" "$@"
 
 mkdir -p "$log_directory"
 : >"$activation_log"
@@ -256,9 +267,5 @@ case "$1" in
 
         print "Release environment active: $ECMENU_PRODUCT_APP_PATH"
         print "Activation log: $activation_log"
-        ;;
-    *)
-        usage >&2
-        exit 64
         ;;
 esac

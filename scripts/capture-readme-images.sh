@@ -8,6 +8,8 @@ readonly project_root="${script_directory:h}"
 readonly operation_lock_directory="$project_root/.artifacts/scratch/probes"
 readonly operation_lock="$operation_lock_directory/preview-operation.lock"
 
+source "$script_directory/lib/user-focus.sh"
+
 usage() {
     print "Usage: ./scripts/capture-readme-images.sh"
 }
@@ -16,6 +18,8 @@ if (( $# != 0 )); then
     usage >&2
     exit 64
 fi
+
+ecmenu_reexec_preserving_user_focus "$script_path" "$@"
 
 if [[ "${ECMENU_README_IMAGE_OPERATION_LOCK:-}" != "$operation_lock" ]]; then
     mkdir -p "$operation_lock_directory"

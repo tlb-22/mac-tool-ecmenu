@@ -24,6 +24,7 @@ typeset -ra original_arguments=("$@")
 source "$definitions_path"
 source "$language_definitions_path"
 source "$script_directory/lib/application-languages.sh"
+source "$script_directory/lib/user-focus.sh"
 source "$script_directory/lib/process-lifecycle.sh"
 source "$script_directory/lib/product-paths.sh"
 
@@ -1014,6 +1015,12 @@ load_registry
 load_language_registry
 parse_arguments "$@"
 validate_language_argument_parser
+
+if [[ "$mode" == capture ]]; then
+    ecmenu_reexec_preserving_user_focus \
+        "$script_path" \
+        "${original_arguments[@]}"
+fi
 
 if [[ "$mode" == capture \
     && "${ECMENU_FINDER_MENU_OPERATION_LOCK:-}" != "$operation_lock" ]]; then

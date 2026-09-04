@@ -8,17 +8,7 @@ readonly project_root="${script_directory:h}"
 readonly preview_operation_lock_directory="$project_root/.artifacts/scratch/probes"
 readonly preview_operation_lock="$preview_operation_lock_directory/preview-operation.lock"
 
-if [[ "${ECMENU_PREVIEW_OPERATION_LOCK:-}" != "$preview_operation_lock" ]]; then
-    mkdir -p "$preview_operation_lock_directory"
-    exec /usr/bin/lockf \
-        -k \
-        -t 0 \
-        "$preview_operation_lock" \
-        /usr/bin/env \
-        ECMENU_PREVIEW_OPERATION_LOCK="$preview_operation_lock" \
-        "$script_path" \
-        "$@"
-fi
+source "$script_directory/lib/user-focus.sh"
 
 readonly derived_data_path="$project_root/.derivedData"
 readonly run_timestamp="$(date '+%Y%m%d-%H%M%S')"
@@ -360,6 +350,20 @@ capture_preview() {
 }
 
 parse_arguments "$@"
+
+ecmenu_reexec_preserving_user_focus "$script_path" "$@"
+
+if [[ "${ECMENU_PREVIEW_OPERATION_LOCK:-}" != "$preview_operation_lock" ]]; then
+    mkdir -p "$preview_operation_lock_directory"
+    exec /usr/bin/lockf \
+        -k \
+        -t 0 \
+        "$preview_operation_lock" \
+        /usr/bin/env \
+        ECMENU_PREVIEW_OPERATION_LOCK="$preview_operation_lock" \
+        "$script_path" \
+        "$@"
+fi
 
 trap cleanup EXIT
 trap 'exit 129' HUP

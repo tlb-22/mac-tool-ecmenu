@@ -2,7 +2,8 @@
 
 set -euo pipefail
 
-readonly script_directory="${0:A:h}"
+readonly script_path="${0:A}"
+readonly script_directory="${script_path:h}"
 readonly project_root="${script_directory:h}"
 readonly derived_data_path="$project_root/.derivedData"
 readonly debug_products_directory="$derived_data_path/Build/Products/Debug"
@@ -17,6 +18,7 @@ readonly launch_services_register="/System/Library/Frameworks/CoreServices.frame
 
 source "$script_directory/lib/product-paths.sh"
 source "$script_directory/lib/process-lifecycle.sh"
+source "$script_directory/lib/user-focus.sh"
 
 refresh_finder=false
 refresh_icon=false
@@ -65,6 +67,8 @@ if ! $open_finder_window && ! $refresh_finder; then
     usage >&2
     exit 64
 fi
+
+ecmenu_reexec_preserving_user_focus "$script_path" "$@"
 
 code_signing_value() {
     local bundle_path="$1"

@@ -2,7 +2,8 @@
 
 set -euo pipefail
 
-readonly script_directory="${0:A:h}"
+readonly script_path="${0:A}"
+readonly script_directory="${script_path:h}"
 readonly project_root="${script_directory:h}"
 readonly derived_data_path="$project_root/.derivedData"
 readonly debug_products_directory="$derived_data_path/Build/Products/Debug"
@@ -16,6 +17,7 @@ readonly developer_directory="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/
 readonly destination="${XCODE_DESTINATION:-platform=macOS,arch=arm64}"
 
 source "$script_directory/lib/product-paths.sh"
+source "$script_directory/lib/user-focus.sh"
 
 fail() {
     print -u2 "$1"
@@ -51,6 +53,8 @@ assert_single_text_file() {
     done
     return 1
 }
+
+ecmenu_reexec_preserving_user_focus "$script_path" "$@"
 
 mkdir -p "$log_directory" "$resident_fixture"
 : >"$integration_log"

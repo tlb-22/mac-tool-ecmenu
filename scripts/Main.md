@@ -4,6 +4,12 @@
 
 正式发布产物写入 `.artifacts/releases/<version>+<build>/`，已有非空版本目录不得被静默覆盖。`design/AppIcon/output/Preview/` 是图标设计源包自己的可重建预览输出，不属于运行时 scratch。
 
+## 用户焦点恢复
+
+会驱动主应用、Preview 或 Finder 的自动化入口在运行前记录当前前台应用，并在自身清理完成后将焦点交还给同一应用实例：`run-debug.sh`、`test.sh`、`test-integration.sh`、`activate-environment.sh`、`capture-previews.sh`、`capture-finder-menus.sh` 和 `capture-readme-images.sh`。嵌套调用只由最外层入口记录和恢复一次，因此 README 截图流程不会在中途被子脚本切回原应用。
+
+普通应用退出后不会被脚本重新启动；Finder 因部分流程会主动重启，可恢复到身份唯一匹配的新 Finder 进程。没有前台应用的 CI 会话直接跳过恢复。`preview-ui.sh` 用于把可交互的 Preview 留在前台，不执行恢复。实现依据与 macOS Space 边界见[自动化脚本的用户焦点恢复](../spec/Technical/UserFocusRestoration.md)。
+
 ## 构建与运行
 
 ```bash
