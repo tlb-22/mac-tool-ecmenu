@@ -20,9 +20,9 @@ ecmenu_extension_state() {
     local registration
 
     registration="$(ecmenu_extension_registration "$identifier")" || return $?
-    if rg -q '^[+!]' <<<"$registration"; then
+    if /usr/bin/grep -q '^[+!]' <<<"$registration"; then
         print enabled
-    elif rg -q '^[[:space:]]*Path = ' <<<"$registration"; then
+    elif /usr/bin/grep -q '^[[:space:]]*Path = ' <<<"$registration"; then
         print disabled
     else
         print unregistered

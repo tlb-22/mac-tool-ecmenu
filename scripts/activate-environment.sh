@@ -109,11 +109,11 @@ verify_release_registration() {
         || fail "Expected one Release Finder Extension registration; found ${#registered_paths[@]}."
     [[ "$registered_paths[1]" == "$ECMENU_PRODUCT_EXTENSION_PATH" ]] \
         || fail "Release Finder Extension is registered from an unexpected path: $registered_paths[1]"
-    print -r -- "$registration" | rg -q '^[+!]' \
+    print -r -- "$registration" | /usr/bin/grep -q '^[+!]' \
         || fail "Release Finder Extension is not enabled."
 
     registration="$(ecmenu_extension_registration "$debug_extension_identifier")"
-    if print -r -- "$registration" | rg -q '^[+!]'; then
+    if print -r -- "$registration" | /usr/bin/grep -q '^[+!]'; then
         fail "Debug Finder Extension is still enabled."
     fi
 }

@@ -219,7 +219,7 @@ reject_enabled_other_product_extensions() {
             pluginkit -m -A -D -vv \
                 -i "$candidate_extension_bundle_id" || true
         )"
-        if print -r -- "$candidate_registration" | rg -q '^[+!]'; then
+        if print -r -- "$candidate_registration" | /usr/bin/grep -q '^[+!]'; then
             reported_bundle_ids[$candidate_extension_bundle_id]=1
             enabled_others+=(
                 "$candidate_extension_bundle_id ($candidate_extension_path)"
@@ -362,7 +362,7 @@ verify_extension_registration() {
         return 4
     fi
 
-    if ! print -r -- "$registration" | rg -q '^[+!]'; then
+    if ! print -r -- "$registration" | /usr/bin/grep -q '^[+!]'; then
         print -u2 "Finder Extension is registered but not enabled."
         return 8
     fi

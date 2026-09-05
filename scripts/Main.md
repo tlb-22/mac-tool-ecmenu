@@ -50,7 +50,7 @@ Finder Extension 源码变化、菜单消失或扩展没有加载时使用：
 
 成功时输出通过数量，并验证独立 Preview target 可编译、声明式注册表可列出。完整日志写入 `.artifacts/scratch/logs/` 中带时间的单次文件；测试 result bundle 位于 `.artifacts/scratch/tests/YYYYMMDD-HHMMSS-xctest-<pid>/ECMenu.xcresult`，其他测试 fixture 也只存在于对应的单次目录。失败时脚本输出对应日志尾部。
 
-环境切换测试位于 `Tests/DevelopmentScripts/`：在项目内隔离目录运行生产切换脚本，以外部命令替身验证准备失败、状态查询失败、激活失败、信号中断和恢复失败的处理顺序，不改变系统登记或启用状态。
+环境切换测试位于 `Tests/DevelopmentScripts/`：在项目内隔离目录运行生产切换脚本，以外部命令替身验证准备失败、状态查询失败、激活失败、信号中断和恢复失败的处理顺序，不改变系统登记或启用状态。测试命令路径只包含隔离替身与 macOS 系统目录，Python 替身使用当前测试解释器。
 
 ## 跨进程集成测试
 

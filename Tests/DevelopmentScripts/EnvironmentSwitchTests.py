@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import unittest
 
 
@@ -109,6 +110,7 @@ class EnvironmentSwitchTests(unittest.TestCase):
             '}\n'
         )
         (self.directory / "bin").mkdir()
+        (self.directory / "bin/python3").symlink_to(sys.executable)
         for executable in [
             script_directory / "run-debug.sh", self.directory / "bin/pluginkit",
             self.directory / "bin/xcodebuild", self.directory / "bin/codesign",
@@ -120,7 +122,7 @@ class EnvironmentSwitchTests(unittest.TestCase):
     def run_switch(self, failure="", command=None):
         (self.directory / "states.json").write_text(json.dumps(self.initial_states))
         environment = os.environ | {
-            "PATH": str(self.directory / "bin") + os.pathsep + os.environ["PATH"],
+            "PATH": str(self.directory / "bin") + os.pathsep + "/usr/bin:/bin:/usr/sbin:/sbin",
             "ECMENU_USER_FOCUS_SESSION": "isolated-script-tests",
             "ECMENU_SCRIPT_TEST_DIRECTORY": str(self.directory),
             "ECMENU_SCRIPT_TEST_FAILURE": failure,
