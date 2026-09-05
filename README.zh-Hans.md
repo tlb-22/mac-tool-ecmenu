@@ -57,7 +57,7 @@ ECMenu 涉及两个权限：“Finder 扩展（文件提供程序）”和“完
 
 ## 本地化
 
-ECMenu 以英文为源语言，并提供简体中文翻译。应用界面与 Finder 菜单跟随 macOS 的语言选择，不提供应用内语言切换。实现与验收边界见[本地化技术说明](spec/Technical/Runtime/Localization.md)。
+ECMenu 以英文为源语言，并提供简体中文翻译。应用界面与 Finder 菜单跟随 macOS 的语言选择。
 
 ## 源码构建
 

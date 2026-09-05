@@ -57,7 +57,7 @@ ECMenu uses two system permissions: Finder Extension (File Providers) and Full D
 
 ## Localization
 
-English is the source language, with a Simplified Chinese translation. The application and Finder menu follow the macOS language selection and do not provide an in-app language switch. See the [localization technical notes](spec/Technical/Runtime/Localization.md) for implementation and validation boundaries.
+English is the source language, with a Simplified Chinese translation. The application and Finder menu follow the macOS language selection.
 
 ## Building from Source
 
