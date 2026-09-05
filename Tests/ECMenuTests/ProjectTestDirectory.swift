@@ -17,7 +17,8 @@ nonisolated enum ProjectTestDirectory {
         formatter.timeZone = .current
         formatter.dateFormat = "yyyyMMdd-HHmmss"
 
-        let directoryName = "\(formatter.string(from: Date()))-unit-\(getpid())"
+        // 使用简短的 unit test 用途名，为 Unix socket 路径保留长度空间。
+        let directoryName = "\(formatter.string(from: Date()))-ut-\(getpid())"
         return projectRootURL
             .appendingPathComponent(
                 ".artifacts/scratch/tests",
