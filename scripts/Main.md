@@ -10,6 +10,12 @@
 
 普通应用退出后不会被脚本重新启动；Finder 因部分流程会主动重启，可恢复到身份唯一匹配的新 Finder 进程。没有前台应用的 CI 会话直接跳过恢复。`preview-ui.sh` 用于把可交互的 Preview 留在前台，不执行恢复。实现依据与 macOS Space 边界见[自动化脚本的用户焦点恢复](../spec/Technical/UserFocusRestoration.md)。
 
+## 测试期间的 Finder 窗口检查
+
+`test.sh` 与 `test-integration.sh` 在开始时记录 Finder 普通窗口的 ID 集合，在测试清理和焦点恢复全部结束后重新读取；新增、丢失或等量替换窗口都会使测试失败。最小化及非屏幕上的窗口也参与比较，窗口前后顺序不影响结果。成功、失败以及 HUP、INT、TERM 中断均执行检查，原测试已经失败时保留其退出码。嵌套测试只由最外层检查一次。
+
+检查只读取窗口元数据，无需辅助功能或屏幕录制授权，也不会自动关闭窗口。没有 GUI 会话时明确跳过；运行期间手动开关 Finder 窗口也会形成差异。前后快照保存在 `.artifacts/scratch/tests/YYYYMMDD-HHMMSS-finder-windows-<pid>/`，对应日志保存在 `scratch/logs/` 的同名目录。纯窗口比较及退出路径测试分别位于 `Tests/FinderWindowPreservation/` 与 `Tests/DevelopmentScripts/`。检查范围与平台依据见 [Finder 窗口保持](../spec/Technical/FinderWindowPreservation.md)。
+
 ## 构建与运行
 
 ```bash
@@ -52,9 +58,11 @@ Finder Extension 源码变化、菜单消失或扩展没有加载时使用：
 ./scripts/test-integration.sh
 ```
 
-该脚本刷新并运行项目 Debug 应用，随后构建产品 bundle identifier 为 `com.axiomace.ecmenu.test.ipcsender` 的 `ContextCommandSender`；该本地 helper 使用真实 Apple Development 签名，并有意把代码签名 identifier 覆盖为当前 Finder Extension 身份，同时声明共同 App Group entitlement。脚本从实际构建的 Debug Extension 派生 Team 与 identifier，核对其 Info.plist、代码签名和 helper 身份一致后，再通过生产 Unix-domain socket 双向验证身份、单次单向发送一份命令，并确认目标目录最终只创建一个 TXT 文件；随后单独使用请求/响应连接拉取菜单配置。测试工作目录位于 `.artifacts/scratch/tests/`，完整输出位于 `.artifacts/scratch/logs/`；两者均按单次运行命名。
+该脚本先通过 `run-debug.sh --build-only` 准备并验证当前签名 Debug 产品，再构建产品 bundle identifier 为 `com.axiomace.ecmenu.test.ipcsender` 的 `ContextCommandSender`。该本地 helper 使用真实 Apple Development 签名，并有意把代码签名 identifier 覆盖为当前 Finder Extension 身份，同时声明共同 App Group entitlement。脚本从实际构建的 Debug Extension 派生 Team 与 identifier，核对其 Info.plist、代码签名和 helper 身份一致。
 
-该测试不触发 Finder 菜单，也不验证 Finder Extension 能够冷启动已经退出的主应用。Finder host 的 URL 打开入口不属于当前恢复保证；Extension 点击链路和应用呈现生命周期仍需按下列步骤人工验收。
+验证准备完成后，脚本按当前 Debug 主应用的精确可执行路径停止旧进程并等待退出，再普通打开当前应用、确认进程运行。只读配置查询在五秒总预算内等待新宿主就绪；仅连接端点不存在或没有监听者时重试，身份不符和其他失败立即终止。随后向 scratch 中的一个普通名文件单次发送隐藏命令，读取实际文件 flags，确认 `UF_HIDDEN` 已设置；命令不重试。测试工作目录位于 `.artifacts/scratch/tests/`，完整输出位于 `.artifacts/scratch/logs/`；两者均按单次运行命名。
+
+跨进程验证不刷新 Finder，也不操作 Finder 窗口。真实 Finder 菜单、Extension 加载与点击链路属于独立的运行验收，使用 `run-debug.sh --refresh-finder` 及下列人工步骤验证。Finder host 的 URL 打开入口不属于主应用冷启动恢复保证。
 
 ## Release 构建
 

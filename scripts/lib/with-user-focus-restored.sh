@@ -54,7 +54,8 @@ restore_user_focus() {
     local exit_status=$?
     local restore_status=0
 
-    trap - EXIT HUP INT TERM
+    trap - EXIT
+    trap '' HUP INT TERM
     if [[ -n "$focus_snapshot" ]]; then
         "$restorer" restore "$focus_snapshot" >>"$focus_log" 2>&1 \
             || restore_status=$?
@@ -72,7 +73,7 @@ terminate_child_session() {
     local signal_name="$1"
     local signal_status="$2"
 
-    trap - HUP INT TERM
+    trap '' HUP INT TERM
     if [[ -n "$child_pid" ]]; then
         if /bin/kill -0 -- "-$child_pid" 2>/dev/null; then
             /bin/kill -s "$signal_name" -- "-$child_pid" \

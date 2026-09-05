@@ -14,6 +14,7 @@ readonly finder_menu_capture_check_log="$log_directory/$run_timestamp-finder-men
 readonly readme_image_composer_log="$log_directory/$run_timestamp-readme-image-composer-$$.log"
 readonly user_focus_restoration_log="$log_directory/$run_timestamp-user-focus-restoration-$$.log"
 readonly environment_switch_log="$log_directory/$run_timestamp-environment-switch-$$.log"
+readonly finder_window_tests_log="$log_directory/$run_timestamp-finder-window-tests-$$.log"
 readonly test_artifact_directory="$project_root/.artifacts/scratch/tests/$run_timestamp-xctest-$$"
 readonly result_bundle_path="$test_artifact_directory/ECMenu.xcresult"
 readonly preview_executable="$derived_data_path/Build/Products/Debug/ECMenuPreviews.app/Contents/MacOS/ECMenuPreviews"
@@ -29,8 +30,10 @@ readonly user_focus_module_cache="$test_artifact_directory/user-focus-module-cac
 readonly developer_directory="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
 readonly destination="${XCODE_DESTINATION:-platform=macOS,arch=arm64}"
 
+source "$script_directory/lib/finder-windows.sh"
 source "$script_directory/lib/user-focus.sh"
 
+ecmenu_reexec_checking_finder_windows "$script_path" "$@"
 ecmenu_reexec_preserving_user_focus "$script_path" "$@"
 
 mkdir -p \
@@ -39,6 +42,24 @@ mkdir -p \
     "$readme_image_module_cache" \
     "$user_focus_module_cache"
 cd "$project_root"
+
+if python3 Tests/DevelopmentScripts/FinderWindowGuardTests.py \
+    >"$finder_window_tests_log" 2>&1 \
+    && DEVELOPER_DIR="$developer_directory" xcrun swiftc \
+        -module-cache-path "$test_artifact_directory/finder-window-module-cache" \
+        Tests/FinderWindowPreservation/FinderWindowSnapshot.swift \
+        Tests/FinderWindowPreservation/FinderWindowSnapshotTests.swift \
+        -o "$test_artifact_directory/FinderWindowSnapshotTests" \
+        >>"$finder_window_tests_log" 2>&1 \
+    && "$test_artifact_directory/FinderWindowSnapshotTests" \
+        >>"$finder_window_tests_log" 2>&1; then
+    :
+else
+    window_test_status=$?
+    print -u2 "Finder window tests failed. Log: $finder_window_tests_log"
+    tail -n 100 "$finder_window_tests_log" >&2
+    exit "$window_test_status"
+fi
 
 if python3 Tests/DevelopmentScripts/EnvironmentSwitchTests.py \
     >"$environment_switch_log" 2>&1; then
@@ -169,3 +190,4 @@ print "Finder menu capture smoke test passed. Log: $finder_menu_capture_check_lo
 print "README image composer build passed. Log: $readme_image_composer_log"
 print "User focus restoration tests passed. Log: $user_focus_restoration_log"
 print "Environment switch tests passed. Log: $environment_switch_log"
+print "Finder window tests passed. Log: $finder_window_tests_log"

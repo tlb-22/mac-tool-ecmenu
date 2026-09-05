@@ -19,8 +19,11 @@ private enum ImageCompressionSettingsWindowLayout {
     /// 为文本框和质量滑块提供合理操作长度；窗口高度自动拟合内容。
     static let preferredContentWidth: CGFloat = 400
 
-    /// 窗口四边采用的系统标准间距倍数。
-    static let contentPaddingMultiplier: CGFloat = 1.2
+    /// 内容到窗口左右边缘的间距。
+    static let contentHorizontalPadding: CGFloat = 24
+
+    /// 内容到窗口上下边缘的间距。
+    static let contentVerticalPadding: CGFloat = 24
 
     /// 两行表单之间的视觉间距。
     static let formRowSpacing: CGFloat = 20
@@ -337,25 +340,23 @@ final class ImageCompressionSettingsWindowController:
         ownedWindow.contentView = contentView
         contentStack.translatesAutoresizingMaskIntoConstraints = false
         contentView.addSubview(contentStack)
-        let contentPaddingMultiplier =
-            ImageCompressionSettingsWindowLayout.contentPaddingMultiplier
 
         NSLayoutConstraint.activate([
             contentStack.topAnchor.constraint(
-                equalToSystemSpacingBelow: contentView.topAnchor,
-                multiplier: contentPaddingMultiplier
+                equalTo: contentView.topAnchor,
+                constant: ImageCompressionSettingsWindowLayout.contentVerticalPadding
             ),
             contentStack.leadingAnchor.constraint(
-                equalToSystemSpacingAfter: contentView.leadingAnchor,
-                multiplier: contentPaddingMultiplier
+                equalTo: contentView.leadingAnchor,
+                constant: ImageCompressionSettingsWindowLayout.contentHorizontalPadding
             ),
             contentView.trailingAnchor.constraint(
-                equalToSystemSpacingAfter: contentStack.trailingAnchor,
-                multiplier: contentPaddingMultiplier
+                equalTo: contentStack.trailingAnchor,
+                constant: ImageCompressionSettingsWindowLayout.contentHorizontalPadding
             ),
             contentView.bottomAnchor.constraint(
-                equalToSystemSpacingBelow: contentStack.bottomAnchor,
-                multiplier: contentPaddingMultiplier
+                equalTo: contentStack.bottomAnchor,
+                constant: ImageCompressionSettingsWindowLayout.contentVerticalPadding
             ),
             cancelButton.widthAnchor.constraint(equalTo: compressButton.widthAnchor),
         ])

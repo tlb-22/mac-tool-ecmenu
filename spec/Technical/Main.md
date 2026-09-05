@@ -38,3 +38,4 @@ spec/                           当前需求、技术知识与未来提案
 - [界面预览目标](PreviewTarget.md)：独立 Preview target 与生产代码的边界。
 - [Finder 菜单自动截图](FinderMenuCapture.md)：真实 Finder 菜单的自动驱动、独立窗口捕获、稳定边界与失败经验。
 - [自动化脚本的用户焦点恢复](UserFocusRestoration.md)：自动化结束后的前台应用恢复、嵌套边界与 macOS Space 行为。
+- [测试期间的 Finder 窗口保持](FinderWindowPreservation.md)：窗口集合核对、失败退出与无需新增授权的检查边界。
