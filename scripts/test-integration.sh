@@ -17,6 +17,7 @@ readonly developer_directory="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/
 readonly destination="${XCODE_DESTINATION:-platform=macOS,arch=arm64}"
 
 source "$script_directory/lib/product-paths.sh"
+source "$script_directory/lib/code-signing.sh"
 source "$script_directory/lib/user-focus.sh"
 
 fail() {
@@ -24,15 +25,6 @@ fail() {
     print -u2 "Integration log: $integration_log"
     tail -n 200 "$integration_log" >&2
     exit 1
-}
-
-code_signing_value() {
-    local bundle_path="$1"
-    local key="$2"
-
-    codesign -dv "$bundle_path" 2>&1 \
-        | sed -n "s/^$key=//p" \
-        || true
 }
 
 assert_single_text_file() {
@@ -110,13 +102,13 @@ extension_bundle_id="$(
         CFBundleIdentifier
 )"
 extension_signing_identifier="$(
-    code_signing_value "$debug_extension_path" Identifier
+    ecmenu_code_signing_value "$debug_extension_path" Identifier
 )"
 extension_team="$(
-    code_signing_value "$debug_extension_path" TeamIdentifier
+    ecmenu_code_signing_value "$debug_extension_path" TeamIdentifier
 )"
-sender_signing_identifier="$(code_signing_value "$sender_path" Identifier)"
-sender_team="$(code_signing_value "$sender_path" TeamIdentifier)"
+sender_signing_identifier="$(ecmenu_code_signing_value "$sender_path" Identifier)"
+sender_team="$(ecmenu_code_signing_value "$sender_path" TeamIdentifier)"
 
 if [[ -z "$extension_bundle_id" \
     || -z "$extension_signing_identifier" \

@@ -18,6 +18,8 @@ readonly expected_application_bundle_identifier="com.axiomace.ecmenu"
 readonly expected_extension_bundle_identifier="com.axiomace.ecmenu.finderext"
 readonly expected_application_group_identifier="GVPW27HJZ5.ecmenu"
 
+source "$script_directory/lib/code-signing.sh"
+
 fail() {
     local message="$1"
 
@@ -72,15 +74,6 @@ require_nonempty() {
     if [[ -z "$value" ]]; then
         fail "$description is empty."
     fi
-}
-
-code_signing_value() {
-    local bundle_path="$1"
-    local key="$2"
-
-    codesign -dv "$bundle_path" 2>&1 \
-        | sed -n "s/^$key=//p" \
-        || true
 }
 
 signed_entitlement_value() {
@@ -390,16 +383,16 @@ if ! codesign --verify --strict --verbose=2 "$application_path" \
 fi
 
 readonly application_signing_identifier="$(
-    code_signing_value "$application_path" Identifier
+    ecmenu_code_signing_value "$application_path" Identifier
 )"
 readonly extension_signing_identifier="$(
-    code_signing_value "$extension_path" Identifier
+    ecmenu_code_signing_value "$extension_path" Identifier
 )"
 readonly application_team_identifier="$(
-    code_signing_value "$application_path" TeamIdentifier
+    ecmenu_code_signing_value "$application_path" TeamIdentifier
 )"
 readonly extension_team_identifier="$(
-    code_signing_value "$extension_path" TeamIdentifier
+    ecmenu_code_signing_value "$extension_path" TeamIdentifier
 )"
 require_equal \
     "$application_signing_identifier" \
@@ -504,11 +497,11 @@ if ! codesign --verify --strict --verbose=2 "$unpacked_application_path" \
     fail "Unpacked application code signature is invalid."
 fi
 require_equal \
-    "$(code_signing_value "$unpacked_application_path" Identifier)" \
+    "$(ecmenu_code_signing_value "$unpacked_application_path" Identifier)" \
     "$expected_application_bundle_identifier" \
     "Unpacked application signing identifier"
 require_equal \
-    "$(code_signing_value "$unpacked_extension_path" Identifier)" \
+    "$(ecmenu_code_signing_value "$unpacked_extension_path" Identifier)" \
     "$expected_extension_bundle_identifier" \
     "Unpacked Finder Extension signing identifier"
 

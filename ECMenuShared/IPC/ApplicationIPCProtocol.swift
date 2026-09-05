@@ -124,6 +124,7 @@ nonisolated enum ApplicationIPCError: Error, Equatable {
     case codeRequirement(operation: String, reason: String)
     case posix(operation: String, code: Int32)
     case connectionClosed
+    case deadlineExceeded
     case frameLengthOverflow
     case invalidAuthenticationReadyAcknowledgment
 }
@@ -151,6 +152,8 @@ nonisolated extension ApplicationIPCError: LocalizedError {
             "\(operation) failed with errno \(code)"
         case .connectionClosed:
             "The IPC connection closed before a complete message"
+        case .deadlineExceeded:
+            "The IPC connection did not complete within its deadline"
         case .frameLengthOverflow:
             "The IPC frame length cannot be represented by this process"
         case .invalidAuthenticationReadyAcknowledgment:

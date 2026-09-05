@@ -108,10 +108,31 @@ final class FinderContextMenuEvaluationContext {
     /// 按事实值类型保存本次构建已经读取的结果。
     private var factsByType: [ObjectIdentifier: Any] = [:]
 
+    /// 单目标命令共享的文件系统读取边界。
+    private let readTargetKind: (AbsoluteFilePath) -> FinderTargetKind?
+
     /// 为一份冻结快照创建短生命周期求值上下文。
     /// - Parameter snapshot: 本次菜单实例唯一对应的 Finder 快照。
-    init(snapshot: FinderContextSnapshot) {
+    init(
+        snapshot: FinderContextSnapshot,
+        readTargetKind: @escaping (AbsoluteFilePath) -> FinderTargetKind? =
+            FinderTargetKind.read
+    ) {
         self.snapshot = snapshot
+        self.readTargetKind = readTargetKind
+    }
+
+    /// 同一菜单中的单目标命令复用存在性和种类，下次菜单重新读取。
+    var singleTarget: FinderSingleTargetFacts {
+        fact(FinderSingleTargetFacts.self) {
+            let paths = snapshot.absolutePaths
+            guard paths.count == 1,
+                  let path = paths.first,
+                  let kind = readTargetKind(path) else {
+                return .unavailable
+            }
+            return .existing(path: path, kind: kind)
+        }
     }
 
     /// 在本次菜单构建中至多读取一次指定类型的事实。
@@ -205,6 +226,9 @@ nonisolated struct FinderContextMenuActionDescriptor: Equatable, Sendable {
 
     /// Finder 菜单叶子显示的图标来源。
     let icon: ContextCommandIcon
+
+    /// 所属命令声明的运行依赖，不由具体菜单叶子的图标决定。
+    let requiredApplication: ContextCommandApplicationRequirement?
 }
 
 /// 一个 Feature 内声明的类型化菜单叶子。
@@ -299,7 +323,8 @@ final class AnyContextMenuAction {
                 localID: action.id
             ),
             title: action.title,
-            icon: action.icon
+            icon: action.icon,
+            requiredApplication: Command.descriptor.requiredApplication
         )
         self.descriptor = descriptor
         prepareClosure = { context in

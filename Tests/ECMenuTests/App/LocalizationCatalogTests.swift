@@ -3,6 +3,7 @@ import XCTest
 @testable import ECMenu
 
 /// 验证两个产品 Bundle 的本地化资源完整且共享命令文案一致。
+@MainActor
 final class LocalizationCatalogTests: XCTestCase {
     private let requiredLanguages = ["en", "zh-Hans"]
 
@@ -34,22 +35,40 @@ final class LocalizationCatalogTests: XCTestCase {
     func testCommandTranslationsMatchAcrossProductBundles() throws {
         let applicationCatalog = try loadCatalog(at: catalogURLs[0])
         let extensionCatalog = try loadCatalog(at: catalogURLs[1])
-        let commandKeys = [
-            "command.newTextFile",
-            "command.copyPath",
-            "command.hideItems",
-            "command.showItems",
-            "command.compressImages",
-            "command.openInVisualStudioCode",
-            "command.openInITerm2",
-        ]
+        let commandKeys = ContextCommandComposition.handlers.descriptors.map(\.title.key)
 
         for key in commandKeys {
             XCTAssertEqual(
-                applicationCatalog.strings[key]?.localizations,
-                extensionCatalog.strings[key]?.localizations,
+                try XCTUnwrap(applicationCatalog.strings[key]).localizations,
+                try XCTUnwrap(extensionCatalog.strings[key]).localizations,
                 key
             )
+        }
+    }
+
+    /// 编译产物必须能解析状态语义和包含另一个本地化资源的插值。
+    func testCompiledAccessibilityResourcesInBothLanguages() {
+        let bundle = Bundle(for: AppDelegate.self)
+        XCTAssertEqual(Bundle.main.bundleURL, bundle.bundleURL)
+        for (language, enabled, disabled, extensionSettings, diskSettings, showCopy) in [
+            ("en", "Enabled", "Disabled", "Open Finder Extension settings",
+             "Open Full Disk Access settings", "Show Copy Path"),
+            ("zh-Hans", "已启用", "未启用", "打开 Finder 扩展设置",
+             "打开完全磁盘访问设置", "显示拷贝路径"),
+        ] {
+            let locale = Locale(identifier: language)
+            func localized(_ resource: LocalizedStringResource) -> String {
+                var resource = resource
+                resource.locale = locale
+                return String(localized: resource)
+            }
+            XCTAssertEqual(localized(StatusPageAccessibility.extensionState(isEnabled: true)), enabled)
+            XCTAssertEqual(localized(StatusPageAccessibility.extensionState(isEnabled: false)), disabled)
+            XCTAssertEqual(localized(StatusPageAccessibility.extensionSettings), extensionSettings)
+            XCTAssertEqual(localized(StatusPageAccessibility.fullDiskAccessSettings), diskSettings)
+            var title = CopyPathCommand.descriptor.title
+            title.locale = locale
+            XCTAssertEqual(localized(StatusPageAccessibility.showCommand(title)), showCopy)
         }
     }
 

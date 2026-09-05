@@ -17,24 +17,35 @@ readonly destination="${XCODE_DESTINATION:-platform=macOS,arch=arm64}"
 readonly launch_services_register="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
 
 source "$script_directory/lib/product-paths.sh"
+source "$script_directory/lib/code-signing.sh"
 source "$script_directory/lib/process-lifecycle.sh"
+source "$script_directory/lib/finder-environment.sh"
 source "$script_directory/lib/user-focus.sh"
 
 refresh_finder=false
 refresh_icon=false
 open_finder_window=true
+build_mode=build-and-run
 
 usage() {
-    print "Usage: ./scripts/run-debug.sh [--refresh-finder] [--refresh-icon] [--no-open-finder-window]"
+    print "Usage: ./scripts/run-debug.sh [--build-only | --no-build] [--refresh-finder] [--refresh-icon] [--no-open-finder-window]"
 }
 
-if (( $# > 3 )); then
+if (( $# > 4 )); then
     usage >&2
     exit 64
 fi
 
 for option in "$@"; do
     case "$option" in
+        --build-only|--no-build)
+            [[ "$build_mode" == build-and-run ]] || { usage >&2; exit 64; }
+            if [[ "$option" == --build-only ]]; then
+                build_mode=build-only
+            else
+                build_mode=run-existing
+            fi
+            ;;
         --refresh-finder)
             if $refresh_finder; then
                 usage >&2
@@ -68,16 +79,14 @@ if ! $open_finder_window && ! $refresh_finder; then
     exit 64
 fi
 
-ecmenu_reexec_preserving_user_focus "$script_path" "$@"
-
-code_signing_value() {
-    local bundle_path="$1"
-    local key="$2"
-
-    codesign -dv "$bundle_path" 2>&1 \
-        | sed -n "s/^$key=//p" \
-        || true
-}
+if [[ "$build_mode" == build-only ]]; then
+    if $refresh_finder || $refresh_icon || ! $open_finder_window; then
+        usage >&2
+        exit 64
+    fi
+else
+    ecmenu_reexec_preserving_user_focus "$script_path" "$@"
+fi
 
 all_finder_extension_registration_paths() {
     pluginkit -m -A -D -vv -p com.apple.FinderSync \
@@ -182,16 +191,16 @@ reject_enabled_other_product_extensions() {
         fi
 
         candidate_app_signing_identifier="$(
-            code_signing_value "$candidate_app_path" Identifier
+            ecmenu_code_signing_value "$candidate_app_path" Identifier
         )"
         candidate_extension_signing_identifier="$(
-            code_signing_value "$candidate_extension_path" Identifier
+            ecmenu_code_signing_value "$candidate_extension_path" Identifier
         )"
         candidate_app_team_identifier="$(
-            code_signing_value "$candidate_app_path" TeamIdentifier
+            ecmenu_code_signing_value "$candidate_app_path" TeamIdentifier
         )"
         candidate_extension_team_identifier="$(
-            code_signing_value "$candidate_extension_path" TeamIdentifier
+            ecmenu_code_signing_value "$candidate_extension_path" TeamIdentifier
         )"
         if [[ "$candidate_app_signing_identifier" != "$release_main_bundle_id" \
             || "$candidate_extension_signing_identifier" \
@@ -289,7 +298,11 @@ reset_extension_registration() {
             -print0
     )
 
+    ecmenu_register_product "$app_path" "$extension_path" "$launch_services_register" \
+        || return $?
+
     for registered_path in "${(@k)extension_paths_to_remove}"; do
+        [[ "$registered_path" == "$extension_path" ]] && continue
         if ! pluginkit -r "$registered_path" >/dev/null 2>&1; then
             if (( ${+queried_extension_paths[$registered_path]} )); then
                 print -u2 \
@@ -299,6 +312,7 @@ reset_extension_registration() {
     done
 
     for registered_app_path in "${(@k)app_paths_to_remove}"; do
+        [[ "$registered_app_path" == "$app_path" ]] && continue
         if ! "$launch_services_register" -u "$registered_app_path" \
             >/dev/null 2>&1; then
             if (( ${+queried_app_paths[$registered_app_path]} )); then
@@ -308,8 +322,6 @@ reset_extension_registration() {
         fi
     done
 
-    "$launch_services_register" -f "$app_path"
-    pluginkit -a "$extension_path"
     pluginkit -e use -i "$extension_bundle_id"
     print "Finder Extension registration reset to current Debug app."
 }
@@ -374,19 +386,21 @@ open_finder_directory() {
 mkdir -p "$log_directory"
 cd "$project_root"
 
-if DEVELOPER_DIR="$developer_directory" xcodebuild \
-    -project ECMenu.xcodeproj \
-    -scheme ECMenu \
-    -configuration Debug \
-    -destination "$destination" \
-    -derivedDataPath "$derived_data_path" \
-    build -quiet >"$build_log" 2>&1; then
-    :
-else
-    build_status=$?
-    print -u2 "Debug build failed. Log: $build_log"
-    tail -n 200 "$build_log" >&2
-    exit "$build_status"
+if [[ "$build_mode" != run-existing ]]; then
+    if DEVELOPER_DIR="$developer_directory" xcodebuild \
+        -project ECMenu.xcodeproj \
+        -scheme ECMenu \
+        -configuration Debug \
+        -destination "$destination" \
+        -derivedDataPath "$derived_data_path" \
+        build -quiet >"$build_log" 2>&1; then
+        :
+    else
+        build_status=$?
+        print -u2 "Debug build failed. Log: $build_log"
+        tail -n 200 "$build_log" >&2
+        exit "$build_status"
+    fi
 fi
 
 if debug_build_settings="$(
@@ -426,74 +440,24 @@ readonly extension_path="$ECMENU_PRODUCT_EXTENSION_PATH"
 readonly main_executable="$ECMENU_PRODUCT_MAIN_EXECUTABLE_PATH"
 readonly extension_executable="$ECMENU_PRODUCT_EXTENSION_EXECUTABLE_PATH"
 
-readonly main_bundle_id="$(
-    ecmenu_plist_value "$app_path/Contents/Info.plist" CFBundleIdentifier
-)"
-readonly extension_bundle_id="$(
-    ecmenu_plist_value \
-        "$extension_path/Contents/Info.plist" \
-        CFBundleIdentifier
-)"
-readonly main_signing_identifier="$(
-    code_signing_value "$app_path" Identifier
-)"
-readonly extension_signing_identifier="$(
-    code_signing_value "$extension_path" Identifier
-)"
-readonly extension_team_identifier="$(
-    code_signing_value "$extension_path" TeamIdentifier
-)"
-readonly main_team_identifier="$(
-    code_signing_value "$app_path" TeamIdentifier
-)"
-readonly configured_main_bundle_id="$(
-    ecmenu_plist_value \
-        "$app_path/Contents/Info.plist" \
-        ECMApplicationSigningIdentifier
-)"
-readonly configured_extension_bundle_id="$(
-    ecmenu_plist_value \
-        "$app_path/Contents/Info.plist" \
-        ECMFinderExtensionSigningIdentifier
-)"
-readonly configured_app_group_id="$(
-    ecmenu_plist_value \
-        "$app_path/Contents/Info.plist" \
-        ECMApplicationGroupIdentifier
-)"
+readonly main_bundle_id="$ECMENU_PRODUCT_APPLICATION_BUNDLE_IDENTIFIER"
+readonly extension_bundle_id="$ECMENU_PRODUCT_EXTENSION_BUNDLE_IDENTIFIER"
+readonly configured_app_group_id="$ECMENU_PRODUCT_APPLICATION_GROUP_IDENTIFIER"
 
-if [[ -z "$main_bundle_id" \
-    || -z "$extension_bundle_id" \
-    || -z "$main_team_identifier" \
-    || -z "$extension_team_identifier" ]]; then
-    print -u2 "Could not read the built Debug signing identity."
-    exit 14
-fi
 if [[ "$main_bundle_id" != *.debug \
     || "$extension_bundle_id" != "$main_bundle_id.finderext" \
     || "$configured_app_group_id" != *.debug ]]; then
-    print -u2 \
-        "Refusing to manage a build that is not the isolated Debug identity tree."
+    print -u2 "Refusing to manage a build outside the isolated Debug identity tree."
     exit 17
 fi
-if [[ "$configured_main_bundle_id" != "$main_bundle_id" \
-    || "$configured_extension_bundle_id" != "$extension_bundle_id" ]]; then
-    print -u2 "Debug Info.plist signing identities do not match the products."
-    exit 18
-fi
-if [[ "$main_signing_identifier" != "$main_bundle_id" ]]; then
-    print -u2 \
-        "Debug app signing identifier does not match its Info.plist: $main_signing_identifier"
-    exit 15
-fi
-if [[ "$extension_signing_identifier" != "$extension_bundle_id" ]]; then
-    print -u2 \
-        "Debug Extension signing identifier does not match its Info.plist: $extension_signing_identifier"
-    exit 16
-fi
-if [[ "$main_team_identifier" != "$extension_team_identifier" ]]; then
-    print -u2 "Debug app and Extension are signed by different Teams."
-    exit 19
+extension_team_identifier="$(ecmenu_verify_product_signatures 2>>"$build_log")" \
+    || { print -u2 "Debug product signature verification failed. Log: $build_log"; exit 19; }
+readonly extension_team_identifier
+
+if [[ "$build_mode" == build-only ]]; then
+    print "Debug products prepared: $app_path"
+    print "Build log: $build_log"
+    exit 0
 fi
 
 reject_enabled_other_product_extensions

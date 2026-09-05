@@ -1,5 +1,4 @@
 import AppKit
-import FinderSync
 import SwiftUI
 
 /// 状态页左侧导航可以选择的产品设置分类。
@@ -54,11 +53,10 @@ struct StatusPage: View {
     @AppStorage("status-page-selected-pane")
     private var selectedPaneRawValue = StatusPagePane.general.rawValue
 
-    /// 系统当前报告的 Finder Extension 启用状态。
-    @State private var isExtensionEnabled = FIFinderSyncController.isExtensionEnabled
-
-    /// Launch Services 当前能够定位的外部应用及其系统图标。
-    @State private var applicationIcons: [String: NSImage] = [:]
+    /// 当前系统事实快照，由状态页唯一持有。
+    @State private var systemState = StatusPageSystemServices.live.read(
+        descriptors: ContextCommandComposition.handlers.descriptors
+    )
 
     /// 把持久化字符串转换为页面使用的有限分类。
     private var selectedPane: Binding<StatusPagePane> {
@@ -78,11 +76,10 @@ struct StatusPage: View {
             displayName: ApplicationMetadata.displayName,
             version: ApplicationMetadata.version,
             selectedPane: selectedPane,
-            isExtensionEnabled: isExtensionEnabled,
+            systemState: systemState,
             loginItemState: loginItemController.state,
             descriptors: ContextCommandComposition.handlers.descriptors,
             configuration: menuConfiguration.configuration,
-            applicationIcons: applicationIcons,
             setEnabled: { isEnabled in
                 menuConfiguration.setEnabled(isEnabled)
             },
@@ -92,13 +89,13 @@ struct StatusPage: View {
                 }
             },
             manageExtension: {
-                FIFinderSyncController.showExtensionManagementInterface()
+                StatusPageSystemServices.live.manageExtension()
             },
             setVisibility: { isVisible, featureID in
                 menuConfiguration.setVisible(isVisible, for: featureID)
             },
             openFullDiskAccessSettings: {
-                if !FullDiskAccessSettings.open() {
+                if !StatusPageSystemServices.live.openFullDiskAccessSettings() {
                     NSSound.beep()
                 }
             }
@@ -119,31 +116,10 @@ struct StatusPage: View {
 
     /// 在页面出现或应用重新激活时刷新全部外部系统事实。
     private func refreshSystemState() {
-        isExtensionEnabled = FIFinderSyncController.isExtensionEnabled
+        systemState = StatusPageSystemServices.live.read(
+            descriptors: ContextCommandComposition.handlers.descriptors
+        )
         loginItemController.refresh()
-        refreshExternalApplications()
-    }
-
-    /// 重新读取所有命令声明的外部应用可用状态与图标。
-    private func refreshExternalApplications() {
-        var icons: [String: NSImage] = [:]
-
-        for descriptor in ContextCommandComposition.handlers.descriptors {
-            guard
-                case .application(let application) = descriptor.icon,
-                let applicationURL = NSWorkspace.shared.urlForApplication(
-                    withBundleIdentifier: application.bundleIdentifier
-                )
-            else {
-                continue
-            }
-
-            icons[application.bundleIdentifier] = NSWorkspace.shared.icon(
-                forFile: applicationURL.path
-            )
-        }
-
-        applicationIcons = icons
     }
 }
 
@@ -183,79 +159,39 @@ enum StatusPageStyle {
     static let appIconFrameSize: CGFloat = 50
 }
 
-/// 把状态页图标渲染到统一设置界面画布。
-///
-/// 所有设置图标共用 `StatusPageStyle` 的字号和画布，以及 Finder
-/// 菜单已验证的自然尺寸、语义居中和越界裁切算法。
-enum StatusPageIconRenderer {
-    /// 状态页导航、设置行与命令预览共用的画布尺寸。
-    static let canvasSize = NSSize(
-        width: StatusPageStyle.iconCanvasLength,
-        height: StatusPageStyle.iconCanvasLength
+/// 没有独立视觉文字的状态与按钮的本地化辅助功能语义。
+enum StatusPageAccessibility {
+    static func showCommand(_ title: LocalizedStringResource) -> LocalizedStringResource {
+        LocalizedStringResource(
+            "statusPage.contextMenu.showCommand",
+            defaultValue: "Show \(title)",
+            comment: "Accessibility label for a switch that shows a command in Finder"
+        )
+    }
+
+    static let extensionSettings = LocalizedStringResource(
+        "statusPage.accessibility.extensionSettings",
+        defaultValue: "Open Finder Extension settings",
+        comment: "Accessibility label for the Finder Extension settings button"
+    )
+    static let fullDiskAccessSettings = LocalizedStringResource(
+        "statusPage.accessibility.fullDiskAccessSettings",
+        defaultValue: "Open Full Disk Access settings",
+        comment: "Accessibility label for the Full Disk Access settings button"
     )
 
-    /// 渲染一个可跟随 SwiftUI 前景色的单色设置图标。
-    /// - Parameter name: SF Symbols 中的稳定符号名称。
-    /// - Returns: 语义居中的 template 图像；系统不支持该符号时为 `nil`。
-    static func monochromeSystemSymbol(named name: String) -> NSImage? {
-        systemSymbol(
-            named: name,
-            renderingConfiguration: .preferringMonochrome()
-        )
-    }
-
-    /// 渲染一个使用系统层级明度的分层设置图标。
-    /// - Parameters:
-    ///   - name: SF Symbols 中的稳定符号名称。
-    ///   - hierarchicalColor: 分层渲染使用的基础系统颜色。
-    /// - Returns: 保持自然尺寸的方形图像；系统不支持该符号时为 `nil`。
-    static func hierarchicalSystemSymbol(
-        named name: String,
-        hierarchicalColor: NSColor = .labelColor
-    ) -> NSImage? {
-        systemSymbol(
-            named: name,
-            renderingConfiguration: NSImage.SymbolConfiguration(
-                hierarchicalColor: hierarchicalColor
+    static func extensionState(isEnabled: Bool) -> LocalizedStringResource {
+        isEnabled
+            ? LocalizedStringResource(
+                "statusPage.accessibility.extensionEnabled",
+                defaultValue: "Enabled",
+                comment: "Accessibility value of an enabled Finder Extension"
             )
-        )
-    }
-
-    /// 将统一字号、字重和 Symbol 比例与具体颜色模式合并后生成源图。
-    /// - Parameters:
-    ///   - name: SF Symbols 中的稳定符号名称。
-    ///   - renderingConfiguration: 单色或分层颜色配置。
-    /// - Returns: 语义主体已烘焙到画布中心的图像。
-    private static func systemSymbol(
-        named name: String,
-        renderingConfiguration: NSImage.SymbolConfiguration
-    ) -> NSImage? {
-        let configuration = NSImage.SymbolConfiguration(
-            pointSize: StatusPageStyle.iconSymbolPointSize,
-            weight: .regular,
-            scale: .small
-        ).applying(renderingConfiguration)
-        guard let sourceIcon = NSImage(
-            systemSymbolName: name,
-            accessibilityDescription: nil
-        )?.withSymbolConfiguration(configuration) else {
-            return nil
-        }
-
-        return AppKitIconCanvasRenderer.semanticCenteredSymbol(
-            sourceIcon,
-            canvasSize: canvasSize
-        )
-    }
-
-    /// 把应用图标保持比例地居中适配到统一设置图标画布。
-    /// - Parameter sourceIcon: Launch Services 返回的应用图标。
-    /// - Returns: 不放大、不拉伸的方形图像；源尺寸无效时为 `nil`。
-    static func applicationIcon(_ sourceIcon: NSImage) -> NSImage? {
-        AppKitIconCanvasRenderer.proportionallyFittedImage(
-            sourceIcon,
-            canvasSize: canvasSize
-        )
+            : LocalizedStringResource(
+                "statusPage.accessibility.extensionDisabled",
+                defaultValue: "Disabled",
+                comment: "Accessibility value of a disabled Finder Extension"
+            )
     }
 }
 
@@ -273,8 +209,8 @@ struct StatusPageContent: View {
     /// 当前选中的设置分类。
     @Binding var selectedPane: StatusPagePane
 
-    /// Finder Extension 当前是否已启用。
-    let isExtensionEnabled: Bool
+    /// 不含系统读写的 Extension 状态与外部应用快照。
+    let systemState: StatusPageSystemState
 
     /// 主应用登录项当前的登记和系统批准状态。
     let loginItemState: LoginItemRegistrationState
@@ -284,10 +220,6 @@ struct StatusPageContent: View {
 
     /// 当前产品总开关与菜单可见性快照。
     let configuration: MenuConfiguration
-
-    /// Launch Services 当前可定位的外部应用图标，以 bundle identifier 索引。
-    /// 键的存在同时表达应用可用性，避免两份状态发生分歧。
-    let applicationIcons: [String: NSImage]
 
     /// 用户更改产品总开关时的回调。
     let setEnabled: (Bool) -> Void
@@ -396,7 +328,7 @@ struct StatusPageContent: View {
                             systemRowIcon("power")
                         }
                         .foregroundStyle(
-                            isExtensionEnabled
+                            systemState.isExtensionEnabled
                                 ? Color.primary
                                 : Color.secondary
                         )
@@ -409,7 +341,7 @@ struct StatusPageContent: View {
                             )
                         )
                     }
-                    .disabled(!isExtensionEnabled)
+                    .disabled(!systemState.isExtensionEnabled)
 
                     Divider()
 
@@ -450,9 +382,15 @@ struct StatusPageContent: View {
                         ) {
                             systemRowIcon("puzzlepiece.extension")
                             .foregroundStyle(
-                                isExtensionEnabled ? .green : .secondary
+                                systemState.isExtensionEnabled ? .green : .secondary
                             )
                         }
+                        .accessibilityElement(children: .combine)
+                        .accessibilityValue(
+                            StatusPageAccessibility.extensionState(
+                                isEnabled: systemState.isExtensionEnabled
+                            )
+                        )
                     } trailing: {
                         Button(
                             LocalizedStringResource(
@@ -463,6 +401,9 @@ struct StatusPageContent: View {
                         ) {
                             manageExtension()
                         }
+                        .accessibilityLabel(
+                            StatusPageAccessibility.extensionSettings
+                        )
                     }
 
                     Divider()
@@ -487,6 +428,9 @@ struct StatusPageContent: View {
                         ) {
                             openFullDiskAccessSettings()
                         }
+                        .accessibilityLabel(
+                            StatusPageAccessibility.fullDiskAccessSettings
+                        )
                     }
                 }
             }
@@ -516,20 +460,23 @@ struct StatusPageContent: View {
         .padding(StatusPageStyle.contentPadding)
     }
 
+    /// 命令开关的交互规则由呈现层结合菜单配置与系统事实决定。
+    static func isVisibilityEditable(
+        for descriptor: ContextCommandDescriptor,
+        configuration: MenuConfiguration,
+        systemState: StatusPageSystemState
+    ) -> Bool {
+        configuration.isEnabled && systemState.isDependencyAvailable(for: descriptor)
+    }
+
     /// 构造一项右键命令设置行。
     /// - Parameter descriptor: 当前命令的共享产品声明。
     /// - Returns: 不读取系统状态的设置行。
     private func contextMenuRow(
         for descriptor: ContextCommandDescriptor
     ) -> some View {
-        let isDependencyAvailable = descriptor.requiredApplication.map {
-            applicationIcons[$0.bundleIdentifier] != nil
-        } ?? true
-        let visibilityTitle = LocalizedStringResource(
-            "statusPage.contextMenu.showCommand",
-            defaultValue: "Show \(descriptor.title)",
-            comment: "Accessibility label for a switch that shows a command in Finder"
-        )
+        let isDependencyAvailable = systemState.isDependencyAvailable(for: descriptor)
+        let visibilityTitle = StatusPageAccessibility.showCommand(descriptor.title)
         let dependencyStatus = isDependencyAvailable
             ? LocalizedStringResource(
                 "statusPage.contextMenu.installed",
@@ -569,7 +516,11 @@ struct StatusPageContent: View {
                     )
                 )
                 .disabled(
-                    !configuration.isEnabled || !isDependencyAvailable
+                    !Self.isVisibilityEditable(
+                        for: descriptor,
+                        configuration: configuration,
+                        systemState: systemState
+                    )
                 )
             }
         }
@@ -658,7 +609,7 @@ struct StatusPageContent: View {
 
         case .application(let application):
             if
-                let sourceImage = applicationIcons[application.bundleIdentifier],
+                let sourceImage = systemState.applicationIcons[application.bundleIdentifier],
                 let image = StatusPageIconRenderer.applicationIcon(
                     sourceImage
                 )

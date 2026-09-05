@@ -5,6 +5,25 @@ import XCTest
 /// 验证一次 Finder 动作只产生一次单向命令发送。
 final class ContextCommandClientTests: XCTestCase {
     @MainActor
+    func testUnavailableTransportReportsFailureOnce() throws {
+        var signals = 0
+        let client = ContextCommandClient(transport: nil, signalFailure: { signals += 1 })
+        client.send(CreateNewTextFileCommand(directoryPath: try XCTUnwrap(AbsoluteFilePath(path: "/test"))))
+        XCTAssertEqual(signals, 1)
+    }
+
+    @MainActor
+    func testFailedSendReportsFailureOnceWithoutRetry() async throws {
+        let transport = RecordingContextCommandTransport(result: .failure(ApplicationIPCError.deadlineExceeded))
+        let failed = expectation(description: "One delivery failure")
+        failed.assertForOverFulfill = true
+        let client = ContextCommandClient(transport: transport, signalFailure: { failed.fulfill() })
+        client.send(CreateNewTextFileCommand(directoryPath: try XCTUnwrap(AbsoluteFilePath(path: "/test"))))
+        await fulfillment(of: [failed], timeout: 1)
+        XCTAssertEqual(transport.recordedRequests.count, 1)
+    }
+
+    @MainActor
     func testClientSendsCommandExactlyOnce() throws {
         let transport = RecordingContextCommandTransport()
         let client = ContextCommandClient(transport: transport)
@@ -34,6 +53,9 @@ nonisolated private final class RecordingContextCommandTransport:
 {
     private let lock = NSLock()
     private var requests: [ContextCommandRequest] = []
+    private let result: Result<Void, Error>
+
+    init(result: Result<Void, Error> = .success(())) { self.result = result }
 
     var recordedRequests: [ContextCommandRequest] {
         lock.lock()
@@ -48,6 +70,6 @@ nonisolated private final class RecordingContextCommandTransport:
         lock.lock()
         requests.append(request)
         lock.unlock()
-        completion(.success(()))
+        completion(result)
     }
 }

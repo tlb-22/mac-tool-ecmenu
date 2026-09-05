@@ -36,5 +36,12 @@ final class ContextCommandCompositionTests: XCTestCase {
                 .application(OpenInITerm2Command.applicationRequirement),
             ]
         )
+        XCTAssertEqual(
+            ContextCommandComposition.handlers.descriptors.compactMap(\.requiredApplication),
+            [
+                OpenInVSCodeCommand.applicationRequirement,
+                OpenInITerm2Command.applicationRequirement,
+            ]
+        )
     }
 }

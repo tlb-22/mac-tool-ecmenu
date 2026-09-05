@@ -339,6 +339,32 @@ final class ContextMenuCompositionTests: XCTestCase {
         XCTAssertTrue(availableMenu.items.allSatisfy(\.isEnabled))
     }
 
+    /// 叶子改用系统图标时，仍按所属命令的业务依赖决定可用性。
+    func testApplicationDependencyDoesNotDependOnActionIcon() throws {
+        let snapshot = FinderContextSnapshot.container(path: absolutePath("/target"))
+        var isAvailable = false
+        let controller = FinderContextMenuController(
+            menu: FinderContextMenuDefinition {
+                TestApplicationSymbolFeature(commandClient: ContextCommandClient())
+            },
+            isFeatureVisible: { _ in true },
+            isApplicationAvailable: { requirement in
+                XCTAssertEqual(requirement, OpenInVSCodeCommand.applicationRequirement)
+                return isAvailable
+            }
+        )
+        XCTAssertNil(controller.menu(
+            for: snapshot,
+            action: #selector(NSApplication.terminate(_:))
+        ))
+        isAvailable = true
+        let menu = try XCTUnwrap(controller.menu(
+            for: snapshot,
+            action: #selector(NSApplication.terminate(_:))
+        ))
+        XCTAssertEqual(menu.items.count, 1)
+    }
+
     /// Finder 原始字段只在读取边界解释，Feature 只能看到确定语义。
     func testFinderBoundaryBuildsSemanticSnapshots() throws {
         let residualSelection = URL(fileURLWithPath: "/residual-selected-folder")
@@ -681,6 +707,27 @@ private struct TestParameterizedCommand: ContextCommandPayload, Equatable {
 private enum TestFormat: String, Codable, Equatable, Sendable {
     case png
     case jpeg
+}
+
+/// 保留真实应用命令依赖，只替换菜单叶子的视觉图标。
+private final class TestApplicationSymbolFeature: ContextMenuFeature {
+    typealias Command = OpenInVSCodeCommand
+    let commandClient: ContextCommandClient
+
+    init(commandClient: ContextCommandClient) {
+        self.commandClient = commandClient
+    }
+
+    var nodes: [ContextMenuNode<ContextMenuAction<Command>>] {
+        [.item(ContextMenuAction(
+            id: "symbol",
+            title: Command.descriptor.title,
+            icon: .systemSymbol(name: "folder"),
+            command: { context in
+                context.snapshot.absolutePaths.first.map(Command.init(targetPath:))
+            }
+        ))]
+    }
 }
 
 /// 用递归菜单声明两个参数化叶子的测试 Feature。

@@ -49,7 +49,7 @@ nonisolated enum FileSystemErrorKind: Equatable, Sendable {
                 self = .permissionDenied
             case .fileWriteVolumeReadOnly:
                 self = .readOnlyFileSystem
-            case .fileNoSuchFile:
+            case .fileNoSuchFile, .fileReadNoSuchFile:
                 self = .unavailable
             default:
                 self = .other

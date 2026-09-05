@@ -17,3 +17,5 @@
 用户启用选择、Launch Services/PlugInKit 登记的应用路径和当前 Extension 进程是三个独立状态。Bundle identifier 是系统登记身份；多个父应用嵌入同一 Extension 身份时，系统可能保留并列记录、选择已经失效的路径，进而使管理界面或加载状态异常。诊断副本若不测试 Extension，应移除 `Contents/PlugIns`；确需测试时，父应用和 Extension 必须使用成对的独立身份。
 
 Debug 与 Release 使用不同身份，但同时启用时仍会贡献重复菜单。项目脚本负责让所选环境只有一个 Extension 处于启用状态，并验证登记路径和运行进程；具体刷新与切换步骤见[开发脚本](../../../../scripts/Main.md)。
+
+启用状态回滚需要该身份仍有可用登记，因此刷新先登记通过签名验证的目标，再清理同身份的其他路径。项目于 2026-09-05 在 macOS 26.6.1（25G76）验证：该顺序配合 Finder service 重启后，Debug 登记唯一，主应用与 Extension 进程均来自当前 `.derivedData/Build/Products/Debug/` 产物。该观察来自已有 Debug、Release 登记的开发账号，不能作为首次安装验收依据。

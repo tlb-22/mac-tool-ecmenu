@@ -128,118 +128,131 @@ final class CommandAlertContentTests: XCTestCase {
         )
     }
 
-    /// 压缩失败和文件时间问题分行且顺序稳定，多项写入问题按数量汇总。
+    /// 目录写入失败引用受影响图片；日期错误引用已经生成的输出。
     func testImageCompressionSeparatesIssueKindsAndCountsItems() throws {
         let sourceURL = url("/private/test/secret/a.png")
         let outputURL = url("/private/test/secret/b.jpg")
         let mixedReport = ImageCompressionReport(
-            outputURLs: [outputURL],
-            issues: [
-                imageIssue(
-                    at: sourceURL,
-                    stage: .write,
-                    kind: .permissionDenied
-                ),
-                imageIssue(
-                    at: outputURL,
-                    stage: .fileDates,
-                    kind: .other
-                ),
+            items: [
+                imageWriteFailure(at: sourceURL, kind: .permissionDenied),
+                .output(ImageCompressionOutput(
+                    url: outputURL,
+                    fileDateError: diagnosticError()
+                )),
             ],
             wasCancelled: false
         )
-
         XCTAssertEqual(
-            try XCTUnwrap(
-                ImageCompressionAlertContent.make(
-                    for: mixedReport,
-                    locale: simplifiedChinese
-                )
-            ).body,
-            "无法压缩部分图片：“a.png”没有写入权限。\n"
+            try XCTUnwrap(ImageCompressionAlertContent.make(
+                for: mixedReport,
+                locale: simplifiedChinese
+            )).body,
+            "无法压缩部分图片：“a.png”所在文件夹没有写入权限。\n"
                 + "部分图片已压缩但遇到问题：“b.jpg”的时间属性写入失败。"
+        )
+        XCTAssertEqual(
+            try XCTUnwrap(ImageCompressionAlertContent.make(
+                for: mixedReport,
+                locale: english
+            )).body,
+            "Some images couldn’t be compressed because the folder containing “a.png” isn’t writable.\n"
+                + "Some images were compressed, but the date attributes of “b.jpg” couldn’t be updated."
         )
 
         let countedReport = ImageCompressionReport(
-            outputURLs: [],
-            issues: [
-                imageIssue(
-                    at: sourceURL,
-                    stage: .decode,
-                    kind: .permissionDenied
-                ),
-                imageIssue(
+            items: [
+                imageWriteFailure(at: sourceURL, kind: .permissionDenied),
+                imageWriteFailure(
                     at: url("/private/test/secret/c.png"),
-                    stage: .write,
                     kind: .readOnlyFileSystem
                 ),
             ],
             wasCancelled: false
         )
         XCTAssertEqual(
-            try XCTUnwrap(
-                ImageCompressionAlertContent.make(
-                    for: countedReport,
-                    locale: simplifiedChinese
-                )
-            ).body,
-            "无法压缩图片：2 张图片没有写入权限。"
+            try XCTUnwrap(ImageCompressionAlertContent.make(
+                for: countedReport,
+                locale: simplifiedChinese
+            )).body,
+            "无法压缩图片：2 张图片所在文件夹没有写入权限。"
+        )
+    }
+
+    /// 同批读取与写入权限问题分别说明，静默错误不增加误导性的权限原因。
+    func testImageCompressionSeparatesReadAndDestinationPermissions() throws {
+        let report = ImageCompressionReport(
+            items: [
+                .failed(.source(
+                    sourceURL: url("/private/test/unreadable.png"),
+                    stage: .decode,
+                    error: diagnosticError(kind: .permissionDenied)
+                )),
+                imageWriteFailure(
+                    at: url("/private/test/unwritable.png"),
+                    kind: .permissionDenied
+                ),
+                .failed(.source(
+                    sourceURL: url("/private/test/missing.png"),
+                    stage: .decode,
+                    error: diagnosticError(kind: .unavailable)
+                )),
+            ],
+            wasCancelled: false
         )
         XCTAssertEqual(
-            try XCTUnwrap(
-                ImageCompressionAlertContent.make(
-                    for: mixedReport,
-                    locale: english
-                )
-            ).body,
-            "Some images couldn’t be compressed because “a.png” isn’t writable.\n"
-                + "Some images were compressed, but the date attributes of “b.jpg” couldn’t be updated."
+            try XCTUnwrap(ImageCompressionAlertContent.make(
+                for: report,
+                locale: simplifiedChinese
+            )).body,
+            "无法压缩“unreadable.png”：没有读取权限。\n"
+                + "无法压缩“unwritable.png”：其所在文件夹没有写入权限。"
+        )
+        XCTAssertEqual(
+            try XCTUnwrap(ImageCompressionAlertContent.make(
+                for: report,
+                locale: english
+            )).body,
+            "Couldn’t compress “unreadable.png” because it can’t be read.\n"
+                + "Couldn’t compress “unwritable.png” because its folder isn’t writable."
         )
     }
 
     /// 文件时间问题是否为“部分”只取决于已经处理的其他图片。
     func testImageCompressionFileDateScopeUsesProcessedOutputs() throws {
         let datedOutputURL = url("/private/test/secret/dated.jpg")
+        let datedOutput = ImageCompressionItemResult.output(ImageCompressionOutput(
+            url: datedOutputURL,
+            fileDateError: diagnosticError(kind: .permissionDenied)
+        ))
         let onlyFileDateIssue = ImageCompressionReport(
-            outputURLs: [datedOutputURL],
-            issues: [
-                imageIssue(
-                    at: datedOutputURL,
-                    stage: .fileDates,
-                    kind: .permissionDenied
-                ),
-            ],
+            items: [datedOutput],
             wasCancelled: false
         )
+        XCTAssertEqual(onlyFileDateIssue.outputURLs, [datedOutputURL])
+        XCTAssertTrue(onlyFileDateIssue.hasIssues)
         XCTAssertEqual(
-            try XCTUnwrap(
-                ImageCompressionAlertContent.make(
-                    for: onlyFileDateIssue,
-                    locale: simplifiedChinese
-                )
-            ).body,
+            try XCTUnwrap(ImageCompressionAlertContent.make(
+                for: onlyFileDateIssue,
+                locale: simplifiedChinese
+            )).body,
             "图片已压缩但遇到问题：“dated.jpg”的时间属性写入失败。"
         )
 
-        let cleanOutputURL = url("/private/test/secret/clean.jpg")
         let partialFileDateIssue = ImageCompressionReport(
-            outputURLs: [cleanOutputURL, datedOutputURL],
-            issues: [
-                imageIssue(
-                    at: datedOutputURL,
-                    stage: .fileDates,
-                    kind: .readOnlyFileSystem
-                ),
+            items: [
+                .output(ImageCompressionOutput(
+                    url: url("/private/test/secret/clean.jpg"),
+                    fileDateError: nil
+                )),
+                datedOutput,
             ],
             wasCancelled: false
         )
         XCTAssertEqual(
-            try XCTUnwrap(
-                ImageCompressionAlertContent.make(
-                    for: partialFileDateIssue,
-                    locale: simplifiedChinese
-                )
-            ).body,
+            try XCTUnwrap(ImageCompressionAlertContent.make(
+                for: partialFileDateIssue,
+                locale: simplifiedChinese
+            )).body,
             "部分图片已压缩但遇到问题：“dated.jpg”的时间属性写入失败。"
         )
     }
@@ -346,17 +359,16 @@ final class CommandAlertContentTests: XCTestCase {
         )
     }
 
-    /// 构造单项图片处理问题。
-    private func imageIssue(
+    /// 构造关联源图片和目标目录的写入失败。
+    private func imageWriteFailure(
         at url: URL,
-        stage: ImageCompressionIssueStage,
         kind: FileSystemErrorKind
-    ) -> ImageCompressionIssue {
-        ImageCompressionIssue(
-            itemURL: url,
-            stage: stage,
-            systemError: diagnosticError(kind: kind)
-        )
+    ) -> ImageCompressionItemResult {
+        .failed(.destination(
+            sourceURL: url,
+            directoryURL: url.deletingLastPathComponent(),
+            error: diagnosticError(kind: kind)
+        ))
     }
 
     /// 构造标准化文件 URL。

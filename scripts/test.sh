@@ -13,6 +13,7 @@ readonly preview_build_log="$log_directory/$run_timestamp-preview-build-$$.log"
 readonly finder_menu_capture_check_log="$log_directory/$run_timestamp-finder-menu-capture-check-$$.log"
 readonly readme_image_composer_log="$log_directory/$run_timestamp-readme-image-composer-$$.log"
 readonly user_focus_restoration_log="$log_directory/$run_timestamp-user-focus-restoration-$$.log"
+readonly environment_switch_log="$log_directory/$run_timestamp-environment-switch-$$.log"
 readonly test_artifact_directory="$project_root/.artifacts/scratch/tests/$run_timestamp-xctest-$$"
 readonly result_bundle_path="$test_artifact_directory/ECMenu.xcresult"
 readonly preview_executable="$derived_data_path/Build/Products/Debug/ECMenuPreviews.app/Contents/MacOS/ECMenuPreviews"
@@ -38,6 +39,16 @@ mkdir -p \
     "$readme_image_module_cache" \
     "$user_focus_module_cache"
 cd "$project_root"
+
+if python3 Tests/DevelopmentScripts/EnvironmentSwitchTests.py \
+    >"$environment_switch_log" 2>&1; then
+    :
+else
+    script_test_status=$?
+    print -u2 "Environment switch tests failed. Log: $environment_switch_log"
+    tail -n 200 "$environment_switch_log" >&2
+    exit "$script_test_status"
+fi
 
 if DEVELOPER_DIR="$developer_directory" xcodebuild \
     -project ECMenu.xcodeproj \
@@ -157,3 +168,4 @@ print "Preview build and registry smoke test passed. Log: $preview_build_log"
 print "Finder menu capture smoke test passed. Log: $finder_menu_capture_check_log"
 print "README image composer build passed. Log: $readme_image_composer_log"
 print "User focus restoration tests passed. Log: $user_focus_restoration_log"
+print "Environment switch tests passed. Log: $environment_switch_log"

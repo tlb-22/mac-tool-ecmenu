@@ -65,7 +65,7 @@ final class ImageCompressionTests: XCTestCase {
         XCTAssertEqual(settings.imageIOQuality, 0.8, accuracy: 0.000_001)
 
         let baseDate = Date(timeIntervalSince1970: 1_700_000_000)
-        let plan = CompressImagesHandler.makePlan(
+        let plan = ImageCompressionPlan.make(
             imageURLs: [
                 URL(fileURLWithPath: "/test/image10.png"),
                 URL(fileURLWithPath: "/test/image2.png"),
@@ -212,7 +212,7 @@ final class ImageCompressionTests: XCTestCase {
         }
         XCTAssertTrue(didRevealProgress)
 
-        let report = await CompressImagesHandler.execute(
+        let report = await ImageCompressionExecution.execute(
             ImageCompressionPlan(
                 settings: try XCTUnwrap(
                     ImageCompressionSettings(maximumWidth: 4, quality: 8)
@@ -239,7 +239,7 @@ final class ImageCompressionTests: XCTestCase {
             report.outputURLs.map(\.lastPathComponent),
             ["first.jpg"]
         )
-        XCTAssertTrue(report.issues.isEmpty)
+        XCTAssertFalse(report.hasIssues)
         XCTAssertFalse(
             FileManager.default.fileExists(
                 atPath: fixture.appendingPathComponent("second.jpg").path
@@ -255,7 +255,7 @@ final class ImageCompressionTests: XCTestCase {
         try writePNG(width: 8, height: 4, to: sourceURL)
 
         let outputDate = Date(timeIntervalSince1970: 1_700_000_000)
-        let report = await CompressImagesHandler.execute(
+        let report = await ImageCompressionExecution.execute(
             ImageCompressionPlan(
                 settings: try XCTUnwrap(
                     ImageCompressionSettings(maximumWidth: 4, quality: 8)
@@ -269,7 +269,7 @@ final class ImageCompressionTests: XCTestCase {
             )
         )
 
-        XCTAssertTrue(report.issues.isEmpty)
+        XCTAssertFalse(report.hasIssues)
         let outputURL = try XCTUnwrap(report.outputURLs.first)
         XCTAssertEqual(outputURL.lastPathComponent, "wide.jpg")
         let source = try XCTUnwrap(
@@ -323,19 +323,19 @@ final class ImageCompressionTests: XCTestCase {
         let startBarrier = TwoTaskBarrier()
         let firstTask = Task.detached {
             await startBarrier.wait()
-            return await CompressImagesHandler.execute(plan)
+            return await ImageCompressionExecution.execute(plan)
         }
         let secondTask = Task.detached {
             await startBarrier.wait()
-            return await CompressImagesHandler.execute(plan)
+            return await ImageCompressionExecution.execute(plan)
         }
         let (firstReport, secondReport) = await (
             firstTask.value,
             secondTask.value
         )
 
-        XCTAssertTrue(firstReport.issues.isEmpty)
-        XCTAssertTrue(secondReport.issues.isEmpty)
+        XCTAssertFalse(firstReport.hasIssues)
+        XCTAssertFalse(secondReport.hasIssues)
         XCTAssertEqual(
             Set(
                 (firstReport.outputURLs + secondReport.outputURLs)
@@ -360,7 +360,7 @@ final class ImageCompressionTests: XCTestCase {
         let occupiedFallbackData = Data("occupied".utf8)
         try occupiedFallbackData.write(to: occupiedFallbackURL)
 
-        let report = await CompressImagesHandler.execute(
+        let report = await ImageCompressionExecution.execute(
             ImageCompressionPlan(
                 settings: try XCTUnwrap(
                     ImageCompressionSettings(maximumWidth: 4, quality: 8)
@@ -374,7 +374,7 @@ final class ImageCompressionTests: XCTestCase {
             )
         )
 
-        XCTAssertTrue(report.issues.isEmpty)
+        XCTAssertFalse(report.hasIssues)
         XCTAssertEqual(
             report.outputURLs.map(\.lastPathComponent),
             ["\(stem)_copy2.jpg"]
@@ -393,7 +393,7 @@ final class ImageCompressionTests: XCTestCase {
         let sourceURL = fixture.appendingPathComponent("transparent.png")
         try writeTransparentPNG(width: 2, height: 2, to: sourceURL)
 
-        let report = await CompressImagesHandler.execute(
+        let report = await ImageCompressionExecution.execute(
             ImageCompressionPlan(
                 settings: try XCTUnwrap(
                     ImageCompressionSettings(maximumWidth: 2, quality: 10)

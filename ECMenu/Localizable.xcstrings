@@ -109,74 +109,146 @@
         }
       }
     },
-    "alert.imageCompression.writePermission.all.counted": {
-      "comment": "No selected images could be compressed",
+    "alert.imageCompression.readPermission.all.counted": {
+      "comment": "The selected source images cannot be read",
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Couldn’t compress the selected images because %lld images aren’t writable."
+            "value": "Couldn’t compress the selected images because %lld images can’t be read."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "无法压缩图片：%lld 张图片没有写入权限。"
+            "value": "无法压缩图片：%lld 张图片没有读取权限。"
+          }
+        }
+      }
+    },
+    "alert.imageCompression.readPermission.all.named": {
+      "comment": "The named source image cannot be read",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn’t compress “%@” because it can’t be read."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法压缩“%@”：没有读取权限。"
+          }
+        }
+      }
+    },
+    "alert.imageCompression.readPermission.partial.counted": {
+      "comment": "Some source images cannot be read while other images succeeded",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Some images couldn’t be compressed because %lld images can’t be read."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法压缩部分图片：%lld 张图片没有读取权限。"
+          }
+        }
+      }
+    },
+    "alert.imageCompression.readPermission.partial.named": {
+      "comment": "The named source image cannot be read while other images succeeded",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Some images couldn’t be compressed because “%@” can’t be read."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法压缩部分图片：“%@”没有读取权限。"
+          }
+        }
+      }
+    },
+    "alert.imageCompression.writePermission.all.counted": {
+      "comment": "The folders containing the selected images are not writable",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Couldn’t compress the selected images because the folders containing %lld images aren’t writable."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法压缩图片：%lld 张图片所在文件夹没有写入权限。"
           }
         }
       }
     },
     "alert.imageCompression.writePermission.all.named": {
-      "comment": "The named image could not be compressed",
+      "comment": "The folder containing the named image is not writable",
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Couldn’t compress “%@” because it isn’t writable."
+            "value": "Couldn’t compress “%@” because its folder isn’t writable."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "无法压缩图片：“%@”没有写入权限。"
+            "value": "无法压缩“%@”：其所在文件夹没有写入权限。"
           }
         }
       }
     },
     "alert.imageCompression.writePermission.partial.counted": {
-      "comment": "Some selected images could not be compressed",
+      "comment": "Some image output folders are not writable while other images succeeded",
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Some images couldn’t be compressed because %lld images aren’t writable."
+            "value": "Some images couldn’t be compressed because the folders containing %lld images aren’t writable."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "无法压缩部分图片：%lld 张图片没有写入权限。"
+            "value": "无法压缩部分图片：%lld 张图片所在文件夹没有写入权限。"
           }
         }
       }
     },
     "alert.imageCompression.writePermission.partial.named": {
-      "comment": "The named image could not be compressed while other images succeeded",
+      "comment": "The folder containing the named image is not writable while other images succeeded",
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Some images couldn’t be compressed because “%@” isn’t writable."
+            "value": "Some images couldn’t be compressed because the folder containing “%@” isn’t writable."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "无法压缩部分图片：“%@”没有写入权限。"
+            "value": "无法压缩部分图片：“%@”所在文件夹没有写入权限。"
           }
         }
       }
@@ -681,6 +753,78 @@
           "stringUnit": {
             "state": "translated",
             "value": "正在取消…"
+          }
+        }
+      }
+    },
+    "statusPage.accessibility.extensionDisabled": {
+      "comment": "Accessibility value of a disabled Finder Extension",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Disabled"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未启用"
+          }
+        }
+      }
+    },
+    "statusPage.accessibility.extensionEnabled": {
+      "comment": "Accessibility value of an enabled Finder Extension",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enabled"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已启用"
+          }
+        }
+      }
+    },
+    "statusPage.accessibility.extensionSettings": {
+      "comment": "Accessibility label for the Finder Extension settings button",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open Finder Extension settings"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "打开 Finder 扩展设置"
+          }
+        }
+      }
+    },
+    "statusPage.accessibility.fullDiskAccessSettings": {
+      "comment": "Accessibility label for the Full Disk Access settings button",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open Full Disk Access settings"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "打开完全磁盘访问设置"
           }
         }
       }

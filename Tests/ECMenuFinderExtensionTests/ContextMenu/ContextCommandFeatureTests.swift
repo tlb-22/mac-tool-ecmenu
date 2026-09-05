@@ -6,6 +6,57 @@ import XCTest
 /// 验证菜单期可见性与强类型命令参数由同一次求值产生。
 @MainActor
 final class ContextCommandFeatureTests: XCTestCase {
+    /// 三个单目标命令共享一次文件事实，下一次菜单重新观察目标变化。
+    func testSingleTargetFactsAreSharedOnlyWithinOneMenu() throws {
+        let path = try absolutePath(URL(fileURLWithPath: "/test-target"))
+        let snapshot = FinderContextSnapshot.items(
+            selection: try XCTUnwrap(FinderItemSelection(paths: [path.path]))
+        )
+        let client = ContextCommandClient()
+        let newText = CreateNewTextFileFeature(commandClient: client)
+        let vscode = OpenInVSCodeFeature(commandClient: client)
+        let iterm = OpenInITerm2Feature(commandClient: client)
+        var readCount = 0
+        var kind: FinderTargetKind? = .directory
+        let read: (AbsoluteFilePath) -> FinderTargetKind? = { candidate in
+            XCTAssertEqual(candidate, path)
+            readCount += 1
+            return kind
+        }
+        let first = FinderContextMenuEvaluationContext(
+            snapshot: snapshot,
+            readTargetKind: read
+        )
+        XCTAssertEqual(newText.command(in: first)?.directoryPath, path)
+        kind = nil
+        XCTAssertEqual(vscode.command(in: first)?.targetPath, path)
+        XCTAssertEqual(iterm.command(in: first)?.targetPath, path)
+        XCTAssertEqual(readCount, 1)
+
+        let second = FinderContextMenuEvaluationContext(
+            snapshot: snapshot,
+            readTargetKind: read
+        )
+        XCTAssertNil(newText.command(in: second))
+        XCTAssertNil(vscode.command(in: second))
+        XCTAssertNil(iterm.command(in: second))
+        XCTAssertEqual(readCount, 2)
+    }
+
+    /// 多选不发起单目标文件系统读取。
+    func testMultipleSelectionDoesNotReadSingleTargetFacts() throws {
+        let context = FinderContextMenuEvaluationContext(
+            snapshot: .items(
+                selection: try XCTUnwrap(FinderItemSelection(paths: ["/a", "/b"]))
+            ),
+            readTargetKind: { _ in
+                XCTFail("Multiple selection has no single target")
+                return nil
+            }
+        )
+        XCTAssertEqual(context.singleTarget, .unavailable)
+    }
+
     /// 新建 TXT 应在菜单期把容器或单个文件解析为最终目录。
     func testNewTextFileResolvesTargetDirectory() throws {
         let fixture = try makeUniqueDirectory(purpose: "new-text-feature")

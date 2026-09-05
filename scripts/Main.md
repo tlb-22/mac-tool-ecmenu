@@ -18,6 +18,8 @@
 
 该命令执行签名 Debug 构建，只结束该构建产物精确路径上的旧主应用，运行 `.derivedData/Build/Products/Debug/ECMenu(Debug).app`，并验证主应用和 Finder Extension 进程。脚本从 Xcode build settings、构建后的 Info.plist 与代码签名解析产品路径和 Debug 身份，不按写死的产品名或进程名操作，因此不会结束已安装的 Release 主应用。
 
+环境切换分两阶段复用此入口：`--build-only` 只构建并验证产品身份与签名；`--no-build` 使用现有产品，重新验证身份与签名后执行运行步骤。两者互斥，`--build-only` 单独使用。日常构建与运行使用默认模式。
+
 应用图标变化而程序坞仍显示旧缓存时使用：
 
 ```bash
@@ -32,7 +34,7 @@ Finder Extension 源码变化、菜单消失或扩展没有加载时使用：
 ./scripts/run-debug.sh --refresh-finder
 ```
 
-该模式先移除与当前 Debug Extension 具有相同 bundle identifier 的旧登记及其父应用登记，只保留并启用当前 Debug 扩展；随后只按当前 Debug Extension 的精确可执行路径结束旧进程，通过 Finder 的用户级 launchd service 重启 Finder，并打开项目目录触发加载。脚本不会注销、停用或结束不同身份的 Release 版本；若发现同一产品的另一 Finder Extension 身份仍处于启用状态，会在改变任何非 Debug 登记前停止并要求先在系统设置中明确停用，避免两个扩展同时贡献重复菜单。脚本在等待进程前验证 Debug 登记唯一性，并为 Finder 冷启动保留 15 秒加载时间。内部截图流程会同时传入 `--no-open-finder-window`，跳过项目目录窗口。
+该模式先登记当前 Debug 应用与扩展，再移除同一 Extension 身份的其他旧路径及其父应用登记，保留并启用当前路径；随后只按当前 Debug Extension 的精确可执行路径结束旧进程，通过 Finder 的用户级 launchd service 重启 Finder，并打开项目目录触发加载。脚本不会注销、停用或结束不同身份的 Release 版本；若发现同一产品的另一 Finder Extension 身份仍处于启用状态，会在改变任何非 Debug 登记前停止并要求先在系统设置中明确停用，避免两个扩展同时贡献重复菜单。脚本在等待进程前验证 Debug 登记唯一性，并为 Finder 冷启动保留 15 秒加载时间。内部截图流程会同时传入 `--no-open-finder-window`，跳过项目目录窗口。
 
 ## 完整测试
 
@@ -41,6 +43,8 @@ Finder Extension 源码变化、菜单消失或扩展没有加载时使用：
 ```
 
 成功时输出通过数量，并验证独立 Preview target 可编译、声明式注册表可列出。完整日志写入 `.artifacts/scratch/logs/` 中带时间的单次文件；测试 result bundle 位于 `.artifacts/scratch/tests/YYYYMMDD-HHMMSS-xctest-<pid>/ECMenu.xcresult`，其他测试 fixture 也只存在于对应的单次目录。失败时脚本输出对应日志尾部。
+
+环境切换测试位于 `Tests/DevelopmentScripts/`：在项目内隔离目录运行生产切换脚本，以外部命令替身验证准备失败、状态查询失败、激活失败、信号中断和恢复失败的处理顺序，不改变系统登记或启用状态。
 
 ## 跨进程集成测试
 
@@ -79,7 +83,9 @@ Archive 和打包不改变本机的 Extension 启用状态。Debug 与 Release �
 ./scripts/activate-environment.sh release
 ```
 
-脚本总是先停用另一身份，再启用目标身份并重启 Finder。Debug 模式复用 `run-debug.sh --refresh-finder` 完成构建、登记和运行验证；Release 模式只接受 `/Applications` 中身份和签名配对正确的安装版，清除同一 Release 身份的旧路径后登记并验证当前路径。两套主应用不需要因为切换而退出，脚本不注销非目标身份或删除其数据。
+脚本先完成目标准备：Debug 构建并验证产品，Release 定位并验证 `/Applications` 中的安装版；准备失败保留现有启用状态。随后记录两个身份的启用状态，先停用另一身份，再登记并启用目标身份，通过 Finder 的用户级 launchd service 重启 Finder，验证登记与运行路径。Debug 激活复用已准备的构建产品，Release 使用安装版；两者都先登记目标路径，再清理同身份的其他旧路径，使清理失败时目标仍有可启用的登记。
+
+切换失败或收到 HUP、INT、TERM 时，脚本先停用原本未启用的身份，再恢复原本启用的身份，并重启 Finder。恢复启用状态不撤销已经完成的目标构建或登记更新；恢复失败会明确报告并保留失败日志。两套主应用不因切换而互相退出，脚本不注销非目标身份或删除其数据。
 
 真正的首次安装验收在没有登记过 ECMenu 的新 macOS 用户或虚拟机中进行：解压 ZIP、放入 `/Applications`、手动放行并启用 Release Finder Extension，再验证 IPC、登录项、完全磁盘访问、六类命令和卸载边界。这样不会为了 clean-room 验收破坏日常开发账号中的 Debug 环境。
 

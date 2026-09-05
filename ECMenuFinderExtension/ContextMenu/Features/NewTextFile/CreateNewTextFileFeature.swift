@@ -17,9 +17,7 @@ final class CreateNewTextFileFeature: SingleActionContextMenuFeature {
     func command(
         in context: FinderContextMenuEvaluationContext
     ) -> CreateNewTextFileCommand? {
-        guard let directoryPath = Self.directoryPath(
-            for: context.snapshot
-        ) else {
+        guard let directoryPath = Self.directoryPath(in: context) else {
             return nil
         }
         return CreateNewTextFileCommand(directoryPath: directoryPath)
@@ -27,26 +25,17 @@ final class CreateNewTextFileFeature: SingleActionContextMenuFeature {
 
     /// 跟随符号链接重验目标，并把单个文件归一到父目录。
     private static func directoryPath(
-        for snapshot: FinderContextSnapshot
+        in context: FinderContextMenuEvaluationContext
     ) -> AbsoluteFilePath? {
-        guard snapshot.absolutePaths.count == 1,
-              let targetPath = snapshot.absolutePaths.first else {
+        guard case .existing(let targetPath, let kind) = context.singleTarget else {
             return nil
         }
 
-        var isDirectory: ObjCBool = false
-        guard FileManager.default.fileExists(
-            atPath: targetPath.path,
-            isDirectory: &isDirectory
-        ) else {
-            return nil
-        }
-
-        switch snapshot {
+        switch context.snapshot {
         case .container, .sidebar:
-            return isDirectory.boolValue ? targetPath : nil
+            return kind == .directory ? targetPath : nil
         case .items:
-            if isDirectory.boolValue {
+            if kind == .directory {
                 return targetPath
             }
             return AbsoluteFilePath(

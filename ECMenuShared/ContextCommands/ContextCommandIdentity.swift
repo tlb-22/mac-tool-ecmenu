@@ -50,20 +50,20 @@ nonisolated struct ContextCommandDescriptor: Equatable, Sendable {
     /// Finder 菜单使用的固定图标声明。
     let icon: ContextCommandIcon
 
-    /// 命令依赖的外部应用；该事实直接由图标声明携带。
-    var requiredApplication: ContextCommandApplicationRequirement? {
-        icon.applicationRequirement
-    }
+    /// 命令执行所需的外部应用，与图标的视觉来源分别表达。
+    let requiredApplication: ContextCommandApplicationRequirement?
 
     /// 创建一个共享命令身份。
     /// - Parameters:
     ///   - id: 跨版本保持不变的字符串标识。
     ///   - title: 两个界面共用的产品名称。
     ///   - icon: Finder 菜单使用的图标来源。
+    ///   - requiredApplication: 功能执行所需的固定应用，不依赖图标选择。
     init(
         id: String,
         title: LocalizedStringResource,
-        icon: ContextCommandIcon
+        icon: ContextCommandIcon,
+        requiredApplication: ContextCommandApplicationRequirement? = nil
     ) {
         precondition(!title.key.isEmpty)
         switch icon {
@@ -76,6 +76,7 @@ nonisolated struct ContextCommandDescriptor: Equatable, Sendable {
         self.id = ContextCommandFeatureID(rawValue: id)
         self.title = title
         self.icon = icon
+        self.requiredApplication = requiredApplication
     }
 }
 
@@ -86,14 +87,6 @@ nonisolated enum ContextCommandIcon: Equatable, Sendable {
 
     /// 使用关联应用的软件图标；读取失败时由呈现端降级。
     case application(ContextCommandApplicationRequirement)
-
-    /// 应用图标同时携带的运行依赖；系统符号没有应用依赖。
-    var applicationRequirement: ContextCommandApplicationRequirement? {
-        guard case .application(let requirement) = self else {
-            return nil
-        }
-        return requirement
-    }
 }
 
 /// 描述一个右键命令依赖的固定 macOS 应用。

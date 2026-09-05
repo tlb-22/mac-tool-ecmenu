@@ -25,6 +25,26 @@ nonisolated protocol MenuConfigurationRequesting: AnyObject, Sendable {
     )
 }
 
+/// 一条连接的传输预算；不包括命令接管后的业务执行。
+nonisolated struct LocalSocketDeadline: Sendable {
+    static let defaultTimeout: TimeInterval = 5
+    let dispatchTime: DispatchTime
+
+    init(timeout: TimeInterval) {
+        precondition(timeout > 0 && timeout.isFinite)
+        dispatchTime = .now() + timeout
+    }
+
+    func remainingMilliseconds() throws -> Int32 {
+        let now = DispatchTime.now().uptimeNanoseconds
+        guard dispatchTime.uptimeNanoseconds > now else {
+            throw ApplicationIPCError.deadlineExceeded
+        }
+        let remaining = dispatchTime.uptimeNanoseconds - now
+        return Int32(min((remaining + 999_999) / 1_000_000, UInt64(Int32.max)))
+    }
+}
+
 /// Unix stream 上使用的固定八字节大端长度前缀。
 nonisolated private enum ApplicationIPCFrame {
     static let headerByteCount = MemoryLayout<UInt64>.size
@@ -136,6 +156,7 @@ nonisolated final class AuthenticatedLocalSocketClient:
 {
     private let socketURL: URL
     private let peerValidator: LocalSocketPeerValidator
+    private let connectionTimeout: TimeInterval
     private let queue = DispatchQueue(
         label: "\(ApplicationIPC.applicationSigningIdentifier).ipc-client",
         qos: .userInitiated,
@@ -145,9 +166,11 @@ nonisolated final class AuthenticatedLocalSocketClient:
     /// 创建生产客户端；显式 URL 仅供隔离测试使用。
     init(
         expectedServerSigningIdentifier: String,
-        socketURL: URL? = nil
+        socketURL: URL? = nil,
+        connectionTimeout: TimeInterval = LocalSocketDeadline.defaultTimeout
     ) throws {
         self.socketURL = try socketURL ?? ApplicationIPC.socketURL()
+        self.connectionTimeout = connectionTimeout
         peerValidator = try LocalSocketPeerValidator(
             expectedSigningIdentifier: expectedServerSigningIdentifier
         )
@@ -176,16 +199,16 @@ nonisolated final class AuthenticatedLocalSocketClient:
 
     /// 同步写入一条命令，不读取回执或业务结果。
     func transmit(_ request: ContextCommandRequest) throws {
-        try withVerifiedConnection { descriptor in
-            try write(.contextCommand(request), to: descriptor)
+        try withVerifiedConnection { descriptor, deadline in
+            try write(.contextCommand(request), to: descriptor, deadline: deadline)
         }
     }
 
     /// 集成测试和异步包装共享的同步菜单配置查询。
     func fetchMenuConfiguration() throws -> MenuConfiguration {
-        try withVerifiedConnection { descriptor in
-            try write(.menuConfiguration, to: descriptor)
-            let responseData = try LocalSocketIO.readFrame(from: descriptor)
+        try withVerifiedConnection { descriptor, deadline in
+            try write(.menuConfiguration, to: descriptor, deadline: deadline)
+            let responseData = try LocalSocketIO.readFrame(from: descriptor, deadline: deadline)
             return try JSONDecoder().decode(
                 MenuConfiguration.self,
                 from: responseData
@@ -195,9 +218,10 @@ nonisolated final class AuthenticatedLocalSocketClient:
 
     /// 建立连接并等待双方都在任何业务正文发出前完成身份验证。
     private func withVerifiedConnection<Result>(
-        _ operation: (Int32) throws -> Result
+        _ operation: (Int32, LocalSocketDeadline) throws -> Result
     ) throws -> Result {
-        let descriptor = try LocalSocketIO.connect(to: socketURL)
+        let deadline = LocalSocketDeadline(timeout: connectionTimeout)
+        let descriptor = try LocalSocketIO.connect(to: socketURL, deadline: deadline)
         defer { LocalSocketIO.close(descriptor) }
 
         // Client 先验证 Server；Server 验证 Client 后才发送认证就绪 ACK。
@@ -205,20 +229,22 @@ nonisolated final class AuthenticatedLocalSocketClient:
         // Client 已经写完并关闭连接。
         try peerValidator.validate(connectedSocket: descriptor)
         let acknowledgmentPayload = try LocalSocketIO.readFrame(
-            from: descriptor
+            from: descriptor,
+            deadline: deadline
         )
         try LocalSocketAuthenticationReadyAcknowledgment
             .validateAcknowledgmentPayload(acknowledgmentPayload)
-        return try operation(descriptor)
+        return try operation(descriptor, deadline)
     }
 
     /// 编码并完整写入一条应用协议请求。
     private func write(
         _ request: ApplicationIPCRequest,
-        to descriptor: Int32
+        to descriptor: Int32,
+        deadline: LocalSocketDeadline
     ) throws {
         let requestData = try JSONEncoder().encode(request)
-        try LocalSocketIO.writeFrame(requestData, to: descriptor)
+        try LocalSocketIO.writeFrame(requestData, to: descriptor, deadline: deadline)
     }
 }
 
@@ -228,6 +254,13 @@ nonisolated final class AuthenticatedLocalSocketServer: @unchecked Sendable {
     typealias MenuConfigurationProvider = @Sendable (
         @escaping @Sendable (MenuConfiguration) -> Void
     ) -> Void
+    typealias AcceptConnection = @Sendable (Int32) -> Result<Int32, ApplicationIPCError>
+
+    private enum ListenerState {
+        case listening
+        case retryScheduled(DispatchWorkItem)
+        case stopped(ApplicationIPCError?)
+    }
 
     private let logger = Logger(
         subsystem: ApplicationIPC.applicationSigningIdentifier,
@@ -237,6 +270,9 @@ nonisolated final class AuthenticatedLocalSocketServer: @unchecked Sendable {
     private let peerValidator: LocalSocketPeerValidator
     private let contextCommandSink: ContextCommandSink
     private let menuConfigurationProvider: MenuConfigurationProvider
+    private let connectionTimeout: TimeInterval
+    private let acceptConnection: AcceptConnection
+    private let didFail: @Sendable (ApplicationIPCError) -> Void
     private let acceptQueue = DispatchQueue(
         label: "\(ApplicationIPC.applicationSigningIdentifier).ipc-server.accept",
         qos: .userInitiated
@@ -247,15 +283,18 @@ nonisolated final class AuthenticatedLocalSocketServer: @unchecked Sendable {
         attributes: .concurrent
     )
     private let stateLock = NSLock()
-    private var listenerDescriptor: Int32
-    private let socketFileIdentity: LocalSocketIO.SocketFileIdentity
-    private var stopped = false
+    private let listenerDescriptor: Int32
+    private let listenerSource: any DispatchSourceRead
+    private var state = ListenerState.listening
 
     init(
         expectedClientSigningIdentifier: String,
         socketURL: URL? = nil,
         contextCommandSink: @escaping ContextCommandSink,
-        menuConfigurationProvider: @escaping MenuConfigurationProvider
+        menuConfigurationProvider: @escaping MenuConfigurationProvider,
+        connectionTimeout: TimeInterval = LocalSocketDeadline.defaultTimeout,
+        acceptConnection: @escaping AcceptConnection = { LocalSocketIO.acceptConnection($0) },
+        didFail: @escaping @Sendable (ApplicationIPCError) -> Void = { _ in }
     ) throws {
         self.socketURL = try socketURL ?? ApplicationIPC.socketURL()
         peerValidator = try LocalSocketPeerValidator(
@@ -263,13 +302,30 @@ nonisolated final class AuthenticatedLocalSocketServer: @unchecked Sendable {
         )
         self.contextCommandSink = contextCommandSink
         self.menuConfigurationProvider = menuConfigurationProvider
+        self.connectionTimeout = connectionTimeout
+        self.acceptConnection = acceptConnection
+        self.didFail = didFail
         let boundSocket = try LocalSocketIO.listen(at: self.socketURL)
         listenerDescriptor = boundSocket.descriptor
-        socketFileIdentity = boundSocket.fileIdentity
-
-        acceptQueue.async { [weak self] in
+        listenerSource = DispatchSource.makeReadSource(
+            fileDescriptor: boundSocket.descriptor,
+            queue: acceptQueue
+        )
+        listenerSource.setEventHandler { [weak self] in
             self?.acceptConnections()
         }
+        let endpointURL = self.socketURL
+        listenerSource.setCancelHandler { [weak self] in
+            // Dispatch source 的取消回调晚于所有 accept 回调，descriptor
+            // 只在这里关闭，避免 stop 与 accept 之间的 FD 重用竞态。
+            LocalSocketIO.stopListening(
+                boundSocket.descriptor,
+                at: endpointURL,
+                fileIdentity: boundSocket.fileIdentity
+            )
+            self?.reportListenerFailure()
+        }
+        listenerSource.activate()
     }
 
     deinit {
@@ -278,67 +334,95 @@ nonisolated final class AuthenticatedLocalSocketServer: @unchecked Sendable {
 
     /// 关闭监听端并删除自己创建的 socket 文件。
     func stop() {
-        stateLock.lock()
-        guard !stopped else {
-            stateLock.unlock()
-            return
-        }
-        stopped = true
-        let descriptor = listenerDescriptor
-        listenerDescriptor = -1
-        stateLock.unlock()
-
-        LocalSocketIO.stopListening(
-            descriptor,
-            at: socketURL,
-            fileIdentity: socketFileIdentity
-        )
+        stopListening(failure: nil)
     }
 
     private func acceptConnections() {
         while true {
             stateLock.lock()
-            let descriptor = listenerDescriptor
-            let shouldStop = stopped
+            let isListening: Bool
+            if case .listening = state { isListening = true } else { isListening = false }
             stateLock.unlock()
-            guard !shouldStop, descriptor >= 0 else {
-                return
-            }
+            guard isListening else { return }
 
-            let connection = Darwin.accept(descriptor, nil, nil)
-            guard connection >= 0 else {
-                if errno == EINTR {
+            switch acceptConnection(listenerDescriptor) {
+            case let .success(connection):
+                connectionQueue.async { [weak self] in
+                    self?.handleConnection(connection)
+                        ?? LocalSocketIO.close(connection)
+                }
+            case let .failure(error):
+                guard case let .posix(_, code) = error else {
+                    stopListening(failure: error)
+                    return
+                }
+                switch code {
+                case EINTR, ECONNABORTED:
                     continue
+                case EAGAIN:
+                    return
+                case EMFILE, ENFILE, ENOBUFS, ENOMEM:
+                    scheduleAcceptRetry()
+                    return
+                default:
+                    stopListening(failure: error)
+                    return
                 }
-                stateLock.lock()
-                let stopped = self.stopped
-                stateLock.unlock()
-                if !stopped {
-                    logger.error(
-                        "accept failed with errno \(errno, privacy: .public)"
-                    )
-                }
-                return
-            }
-
-            connectionQueue.async { [weak self] in
-                self?.handleConnection(connection)
-                    ?? LocalSocketIO.close(connection)
             }
         }
+    }
+
+    /// 资源短缺时暂停 ready source，避免内核持续报告可读导致忙循环。
+    private func scheduleAcceptRetry() {
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        guard case .listening = state else { return }
+        let retry = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            stateLock.lock()
+            defer { stateLock.unlock() }
+            guard case .retryScheduled = state else { return }
+            state = .listening
+            listenerSource.resume()
+        }
+        state = .retryScheduled(retry)
+        listenerSource.suspend()
+        acceptQueue.asyncAfter(deadline: .now() + 0.1, execute: retry)
+    }
+
+    private func stopListening(failure: ApplicationIPCError?) {
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        if case .stopped = state { return }
+        let retry: DispatchWorkItem?
+        if case let .retryScheduled(work) = state { retry = work } else { retry = nil }
+        state = .stopped(failure)
+        retry?.cancel()
+        listenerSource.cancel()
+        if retry != nil { listenerSource.resume() }
+    }
+
+    private func reportListenerFailure() {
+        stateLock.lock()
+        let failure: ApplicationIPCError?
+        if case let .stopped(error) = state { failure = error } else { failure = nil }
+        stateLock.unlock()
+        if let failure { didFail(failure) }
     }
 
     private func handleConnection(_ descriptor: Int32) {
         defer { LocalSocketIO.close(descriptor) }
 
         do {
+            let deadline = LocalSocketDeadline(timeout: connectionTimeout)
             // Server 必须先验证身份，错误进程的字节不会进入 JSON 解码或路由。
             try peerValidator.validate(connectedSocket: descriptor)
             try LocalSocketIO.writeFrame(
                 LocalSocketAuthenticationReadyAcknowledgment.acknowledgmentPayload,
-                to: descriptor
+                to: descriptor,
+                deadline: deadline
             )
-            let requestData = try LocalSocketIO.readFrame(from: descriptor)
+            let requestData = try LocalSocketIO.readFrame(from: descriptor, deadline: deadline)
             let request = try JSONDecoder().decode(
                 ApplicationIPCRequest.self,
                 from: requestData
@@ -354,10 +438,10 @@ nonisolated final class AuthenticatedLocalSocketServer: @unchecked Sendable {
                 menuConfigurationProvider { configuration in
                     waiter.fulfill(configuration)
                 }
-                let configuration = waiter.wait()
+                let configuration = try waiter.wait(deadline: deadline)
 
                 let responseData = try JSONEncoder().encode(configuration)
-                try LocalSocketIO.writeFrame(responseData, to: descriptor)
+                try LocalSocketIO.writeFrame(responseData, to: descriptor, deadline: deadline)
             }
         } catch {
             logger.error(
@@ -393,8 +477,10 @@ nonisolated private final class MenuConfigurationResponseWaiter:
         semaphore.signal()
     }
 
-    func wait() -> MenuConfiguration {
-        semaphore.wait()
+    func wait(deadline: LocalSocketDeadline) throws -> MenuConfiguration {
+        guard semaphore.wait(timeout: deadline.dispatchTime) == .success else {
+            throw ApplicationIPCError.deadlineExceeded
+        }
         lock.lock()
         defer { lock.unlock() }
         guard case let .fulfilled(response) = state else {
@@ -407,7 +493,7 @@ nonisolated private final class MenuConfigurationResponseWaiter:
 }
 
 /// Unix socket 的路径、连接和精确读写原语。
-nonisolated private enum LocalSocketIO {
+nonisolated enum LocalSocketIO {
     /// `bind` 发现同名路径后，对现有 Unix socket 的精确探测结果。
     private enum OccupiedEndpointProbe {
         /// 路径仍由能够接受连接的 Server 使用。
@@ -432,12 +518,25 @@ nonisolated private enum LocalSocketIO {
         let inode: ino_t
     }
 
-    static func connect(to socketURL: URL) throws -> Int32 {
+    static func connect(
+        to socketURL: URL,
+        deadline: LocalSocketDeadline = LocalSocketDeadline(timeout: LocalSocketDeadline.defaultTimeout)
+    ) throws -> Int32 {
         let descriptor = try makeSocket()
         do {
+            try setNonBlocking(descriptor)
             try withAddress(for: socketURL.path) { address, length in
-                guard Darwin.connect(descriptor, address, length) == 0 else {
-                    throw posixError("connect")
+                if Darwin.connect(descriptor, address, length) != 0 {
+                    guard errno == EINPROGRESS else { throw posixError("connect") }
+                    try waitUntilReady(descriptor, events: Int16(POLLOUT), deadline: deadline)
+                    var error: Int32 = 0
+                    var length = socklen_t(MemoryLayout<Int32>.size)
+                    guard getsockopt(descriptor, SOL_SOCKET, SO_ERROR, &error, &length) == 0 else {
+                        throw posixError("getsockopt(SO_ERROR)")
+                    }
+                    guard error == 0 else {
+                        throw ApplicationIPCError.posix(operation: "connect", code: error)
+                    }
                 }
             }
             return descriptor
@@ -487,6 +586,7 @@ nonisolated private enum LocalSocketIO {
                 guard Darwin.listen(descriptor, SOMAXCONN) == 0 else {
                     throw posixError("listen")
                 }
+                try setNonBlocking(descriptor)
                 return BoundSocket(
                     descriptor: descriptor,
                     fileIdentity: try socketFileIdentity(at: socketURL)
@@ -519,14 +619,24 @@ nonisolated private enum LocalSocketIO {
         }
     }
 
-    static func writeFrame(_ payload: Data, to descriptor: Int32) throws {
-        try write(ApplicationIPCFrame.encode(payload: payload), to: descriptor)
+    static func acceptConnection(_ descriptor: Int32) -> Result<Int32, ApplicationIPCError> {
+        let connection = Darwin.accept(descriptor, nil, nil)
+        return connection >= 0 ? .success(connection) : .failure(posixError("accept"))
     }
 
-    static func readFrame(from descriptor: Int32) throws -> Data {
+    static func writeFrame(
+        _ payload: Data,
+        to descriptor: Int32,
+        deadline: LocalSocketDeadline
+    ) throws {
+        try write(ApplicationIPCFrame.encode(payload: payload), to: descriptor, deadline: deadline)
+    }
+
+    static func readFrame(from descriptor: Int32, deadline: LocalSocketDeadline) throws -> Data {
         let header = try read(
             count: ApplicationIPCFrame.headerByteCount,
-            from: descriptor
+            from: descriptor,
+            deadline: deadline
         )
         var encodedLength: UInt64 = 0
         _ = withUnsafeMutableBytes(of: &encodedLength) { destination in
@@ -536,7 +646,7 @@ nonisolated private enum LocalSocketIO {
         guard payloadLength <= UInt64(Int.max) else {
             throw ApplicationIPCError.frameLengthOverflow
         }
-        return try read(count: Int(payloadLength), from: descriptor)
+        return try read(count: Int(payloadLength), from: descriptor, deadline: deadline)
     }
 
     static func close(_ descriptor: Int32) {
@@ -585,6 +695,13 @@ nonisolated private enum LocalSocketIO {
             throw error
         }
         return descriptor
+    }
+
+    private static func setNonBlocking(_ descriptor: Int32) throws {
+        let flags = fcntl(descriptor, F_GETFL)
+        guard flags >= 0, fcntl(descriptor, F_SETFL, flags | O_NONBLOCK) == 0 else {
+            throw posixError("fcntl(O_NONBLOCK)")
+        }
     }
 
     private static func bind(_ descriptor: Int32, to socketURL: URL) throws {
@@ -712,16 +829,22 @@ nonisolated private enum LocalSocketIO {
         }
     }
 
-    private static func write(_ data: Data, to descriptor: Int32) throws {
+    private static func write(
+        _ data: Data,
+        to descriptor: Int32,
+        deadline: LocalSocketDeadline
+    ) throws {
         try data.withUnsafeBytes { bytes in
             var offset = 0
             while offset < bytes.count {
-                let written = Darwin.write(
+                try waitUntilReady(descriptor, events: Int16(POLLOUT), deadline: deadline)
+                let written = Darwin.send(
                     descriptor,
                     bytes.baseAddress!.advanced(by: offset),
-                    bytes.count - offset
+                    bytes.count - offset,
+                    MSG_DONTWAIT
                 )
-                if written < 0, errno == EINTR {
+                if written < 0, errno == EINTR || errno == EAGAIN {
                     continue
                 }
                 guard written > 0 else {
@@ -736,20 +859,23 @@ nonisolated private enum LocalSocketIO {
 
     private static func read(
         count: Int,
-        from descriptor: Int32
+        from descriptor: Int32,
+        deadline: LocalSocketDeadline
     ) throws -> Data {
         guard count > 0 else { return Data() }
         var bytes = [UInt8](repeating: 0, count: count)
         var offset = 0
         while offset < count {
+            try waitUntilReady(descriptor, events: Int16(POLLIN), deadline: deadline)
             let received = bytes.withUnsafeMutableBytes { buffer in
-                Darwin.read(
+                Darwin.recv(
                     descriptor,
                     buffer.baseAddress!.advanced(by: offset),
-                    count - offset
+                    count - offset,
+                    MSG_DONTWAIT
                 )
             }
-            if received < 0, errno == EINTR {
+            if received < 0, errno == EINTR || errno == EAGAIN {
                 continue
             }
             guard received > 0 else {
@@ -760,6 +886,25 @@ nonisolated private enum LocalSocketIO {
             offset += received
         }
         return Data(bytes)
+    }
+
+    /// 所有短读、短写共享同一个单调时钟期限，零碎字节不会不断延长等待。
+    private static func waitUntilReady(
+        _ descriptor: Int32,
+        events: Int16,
+        deadline: LocalSocketDeadline
+    ) throws {
+        while true {
+            var descriptorState = pollfd(fd: descriptor, events: events, revents: 0)
+            let result = Darwin.poll(&descriptorState, 1, try deadline.remainingMilliseconds())
+            if result < 0, errno == EINTR { continue }
+            guard result >= 0 else { throw posixError("poll") }
+            guard result > 0 else { throw ApplicationIPCError.deadlineExceeded }
+            guard descriptorState.revents & Int16(POLLNVAL) == 0 else {
+                throw ApplicationIPCError.posix(operation: "poll", code: EBADF)
+            }
+            return
+        }
     }
 
     private static func posixError(_ operation: String) -> ApplicationIPCError {

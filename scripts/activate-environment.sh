@@ -16,6 +16,9 @@ readonly release_extension_identifier="com.axiomace.ecmenu.finderext"
 
 source "$script_directory/lib/product-paths.sh"
 source "$script_directory/lib/user-focus.sh"
+source "$script_directory/lib/code-signing.sh"
+source "$script_directory/lib/process-lifecycle.sh"
+source "$script_directory/lib/finder-environment.sh"
 
 usage() {
     print "Usage: ./scripts/activate-environment.sh <debug|release>"
@@ -26,89 +29,6 @@ fail() {
     print -u2 "Activation log: $activation_log"
     tail -n 100 "$activation_log" >&2 || true
     exit 1
-}
-
-code_signing_value() {
-    local bundle_path="$1"
-    local key="$2"
-
-    codesign -dv "$bundle_path" 2>&1 \
-        | sed -n "s/^$key=//p" \
-        || true
-}
-
-extension_registration() {
-    local bundle_identifier="$1"
-
-    pluginkit -m -A -D -vv -i "$bundle_identifier" 2>>"$activation_log" \
-        || true
-}
-
-disable_extension_if_registered() {
-    local bundle_identifier="$1"
-    local registration
-
-    registration="$(extension_registration "$bundle_identifier")"
-    if ! print -r -- "$registration" | rg -q '^[[:space:]]*Path = '; then
-        return 0
-    fi
-    if print -r -- "$registration" | rg -q '^[+!]'; then
-        pluginkit -e ignore -i "$bundle_identifier" \
-            >>"$activation_log" 2>&1 \
-            || fail "Could not disable Finder Extension: $bundle_identifier"
-    fi
-    registration="$(extension_registration "$bundle_identifier")"
-    if print -r -- "$registration" | rg -q '^[+!]'; then
-        fail "Finder Extension is still enabled: $bundle_identifier"
-    fi
-}
-
-process_ids_for_executable() {
-    local executable_path="$1"
-    local command_path
-    local pid
-
-    while read -r pid command_path; do
-        if [[ "$command_path" == "$executable_path" ]]; then
-            print "$pid"
-        fi
-    done < <(ps -axo pid=,comm= 2>/dev/null)
-}
-
-wait_for_process() {
-    local executable_path="$1"
-    local maximum_attempts="${2:-150}"
-    local attempt
-
-    for (( attempt = 1; attempt <= maximum_attempts; attempt++ )); do
-        if [[ -n "$(process_ids_for_executable "$executable_path")" ]]; then
-            return 0
-        fi
-        sleep 0.1
-    done
-    return 1
-}
-
-wait_for_process_ids_to_exit() {
-    local process_ids="$1"
-    local maximum_attempts="${2:-100}"
-    local all_exited
-    local attempt
-    local pid
-
-    [[ -n "$process_ids" ]] || return 0
-    for (( attempt = 1; attempt <= maximum_attempts; attempt++ )); do
-        all_exited=true
-        for pid in "${(@f)process_ids}"; do
-            if kill -0 "$pid" 2>/dev/null; then
-                all_exited=false
-                break
-            fi
-        done
-        $all_exited && return 0
-        sleep 0.1
-    done
-    return 1
 }
 
 resolve_installed_release() {
@@ -146,28 +66,29 @@ reset_release_registration() {
     local registered_paths_text
 
     registered_paths_text="$(
-        extension_registration "$release_extension_identifier" \
+        ecmenu_extension_registration "$release_extension_identifier" \
             | sed -n 's/^[[:space:]]*Path = //p'
     )"
+    ecmenu_register_product \
+        "$ECMENU_PRODUCT_APP_PATH" "$ECMENU_PRODUCT_EXTENSION_PATH" \
+        "$launch_services_register" >>"$activation_log" 2>&1 \
+        || fail "Could not register the installed Release products."
+
     if [[ -n "$registered_paths_text" ]]; then
         for registered_extension_path in "${(@f)registered_paths_text}"; do
+            [[ "$registered_extension_path" == "$ECMENU_PRODUCT_EXTENSION_PATH" ]] && continue
             pluginkit -r "$registered_extension_path" \
                 >>"$activation_log" 2>&1 \
                 || fail "Could not remove Release Finder Extension registration: $registered_extension_path"
             parent_application_path="${registered_extension_path%/Contents/PlugIns/*}"
-            if [[ "$parent_application_path" != "$registered_extension_path" ]]; then
+            if [[ "$parent_application_path" != "$registered_extension_path" \
+                && "$parent_application_path" != "$ECMENU_PRODUCT_APP_PATH" ]]; then
                 "$launch_services_register" -u "$parent_application_path" \
                     >>"$activation_log" 2>&1 || true
             fi
         done
     fi
 
-    "$launch_services_register" -f "$ECMENU_PRODUCT_APP_PATH" \
-        >>"$activation_log" 2>&1 \
-        || fail "Could not register the installed Release application."
-    pluginkit -a "$ECMENU_PRODUCT_EXTENSION_PATH" \
-        >>"$activation_log" 2>&1 \
-        || fail "Could not register the installed Release Finder Extension."
     pluginkit -e use -i "$release_extension_identifier" \
         >>"$activation_log" 2>&1 \
         || fail "Could not enable the Release Finder Extension."
@@ -178,7 +99,7 @@ verify_release_registration() {
     local registered_paths_text
     local -a registered_paths=()
 
-    registration="$(extension_registration "$release_extension_identifier")"
+    registration="$(ecmenu_extension_registration "$release_extension_identifier")"
     registered_paths_text="$(
         print -r -- "$registration" | sed -n 's/^[[:space:]]*Path = //p'
     )"
@@ -191,7 +112,7 @@ verify_release_registration() {
     print -r -- "$registration" | rg -q '^[+!]' \
         || fail "Release Finder Extension is not enabled."
 
-    registration="$(extension_registration "$debug_extension_identifier")"
+    registration="$(ecmenu_extension_registration "$debug_extension_identifier")"
     if print -r -- "$registration" | rg -q '^[+!]'; then
         fail "Debug Finder Extension is still enabled."
     fi
@@ -215,57 +136,98 @@ mkdir -p "$log_directory"
 : >"$activation_log"
 cd "$project_root"
 
+# 在改变启用状态前完成目标构建、定位和签名验证。
 case "$1" in
     debug)
-        disable_extension_if_registered "$release_extension_identifier"
-        exec "$script_directory/run-debug.sh" --refresh-finder
+        "$script_directory/run-debug.sh" --build-only >>"$activation_log" 2>&1 \
+            || fail "Could not prepare the Debug products."
         ;;
     release)
         resolve_installed_release
-
-        readonly release_application_signing_identifier="$(
-            code_signing_value "$ECMENU_PRODUCT_APP_PATH" Identifier
-        )"
-        readonly release_extension_signing_identifier="$(
-            code_signing_value "$ECMENU_PRODUCT_EXTENSION_PATH" Identifier
-        )"
-        readonly release_application_team="$(
-            code_signing_value "$ECMENU_PRODUCT_APP_PATH" TeamIdentifier
-        )"
-        readonly release_extension_team="$(
-            code_signing_value "$ECMENU_PRODUCT_EXTENSION_PATH" TeamIdentifier
-        )"
-        [[ "$release_application_signing_identifier" \
-            == "$release_application_identifier" \
-            && "$release_extension_signing_identifier" \
-                == "$release_extension_identifier" \
-            && -n "$release_application_team" \
-            && "$release_extension_team" == "$release_application_team" ]] \
+        ecmenu_verify_product_signatures >>"$activation_log" 2>&1 \
             || fail "The installed Release signing identity is invalid."
+        ;;
+esac
 
-        disable_extension_if_registered "$debug_extension_identifier"
+previous_debug_state="$(
+    ecmenu_extension_state "$debug_extension_identifier" 2>>"$activation_log"
+)" || fail "Could not read the current Debug Finder Extension state."
+previous_release_state="$(
+    ecmenu_extension_state "$release_extension_identifier" 2>>"$activation_log"
+)" || fail "Could not read the current Release Finder Extension state."
+readonly previous_debug_state previous_release_state
+switch_pending=true
+
+restore_on_exit() {
+    local exit_status=$?
+    local restore_status=0
+
+    trap - EXIT
+    trap '' HUP INT TERM
+    if $switch_pending; then
+        ecmenu_restore_extension_states \
+            "$debug_extension_identifier" "$previous_debug_state" \
+            "$release_extension_identifier" "$previous_release_state" \
+            >>"$activation_log" 2>&1 || restore_status=1
+        restart_gui_launch_service com.apple.Finder \
+            >>"$activation_log" 2>&1 || restore_status=1
+        if (( restore_status != 0 )); then
+            print -u2 "Could not restore the original Finder Extension states. Log: $activation_log"
+            (( exit_status != 0 )) || exit_status=1
+        else
+            print -u2 "Original Finder Extension states restored."
+        fi
+    fi
+    exit "$exit_status"
+}
+
+trap restore_on_exit EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+case "$1" in
+    debug)
+        ecmenu_set_extension_state "$release_extension_identifier" disabled \
+            >>"$activation_log" 2>&1 \
+            || fail "Could not disable the Release Finder Extension."
+        "$script_directory/run-debug.sh" --no-build --refresh-finder \
+            >>"$activation_log" 2>&1 \
+            || fail "Could not activate the prepared Debug products."
+        ;;
+    release)
+        ecmenu_set_extension_state "$debug_extension_identifier" disabled \
+            >>"$activation_log" 2>&1 \
+            || fail "Could not disable the Debug Finder Extension."
         reset_release_registration
 
         previous_finder_pids="$(process_ids_for_executable "$finder_executable")"
-        for finder_pid in "${(@f)previous_finder_pids}"; do
-            kill "$finder_pid" 2>/dev/null || true
-        done
-        wait_for_process_ids_to_exit "$previous_finder_pids" \
+        previous_extension_pids="$(
+            process_ids_for_executable "$ECMENU_PRODUCT_EXTENSION_EXECUTABLE_PATH"
+        )"
+        terminate_process_ids "$previous_extension_pids"
+        restart_gui_launch_service com.apple.Finder >>"$activation_log" 2>&1 \
+            || fail "Could not restart Finder."
+        wait_for_process_ids_to_exit "$previous_finder_pids" 150 \
             || fail "Previous Finder process did not exit."
+        wait_for_process_ids_to_exit "$previous_extension_pids" 150 \
+            || fail "Previous Release Finder Extension did not exit."
 
         open "$ECMENU_PRODUCT_APP_PATH" >>"$activation_log" 2>&1 \
             || fail "Could not open the installed Release application."
         open "$project_root" >>"$activation_log" 2>&1 \
             || fail "Could not reopen Finder."
-        wait_for_process "$finder_executable" \
+        wait_for_process "$finder_executable" 150 \
             || fail "Finder did not restart."
-        wait_for_process "$ECMENU_PRODUCT_MAIN_EXECUTABLE_PATH" \
+        wait_for_process "$ECMENU_PRODUCT_MAIN_EXECUTABLE_PATH" 150 \
             || fail "Release application did not start."
-        wait_for_process "$ECMENU_PRODUCT_EXTENSION_EXECUTABLE_PATH" \
+        wait_for_process "$ECMENU_PRODUCT_EXTENSION_EXECUTABLE_PATH" 150 \
             || fail "Release Finder Extension did not load."
         verify_release_registration
-
         print "Release environment active: $ECMENU_PRODUCT_APP_PATH"
-        print "Activation log: $activation_log"
         ;;
 esac
+
+switch_pending=false
+print "Finder environment activated: $1"
+print "Activation log: $activation_log"

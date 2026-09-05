@@ -43,7 +43,8 @@ nonisolated struct OpenInApplicationCommandDefinition: Equatable, Sendable {
         ContextCommandDescriptor(
             id: featureID.rawValue,
             title: title,
-            icon: .application(applicationRequirement)
+            icon: .application(applicationRequirement),
+            requiredApplication: applicationRequirement
         )
     }
 

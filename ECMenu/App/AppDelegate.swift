@@ -22,9 +22,43 @@ enum ApplicationInitialOpenSource: Equatable {
     }
 }
 
+/// 生命周期的系统副作用；窗口的可见、最小化和业务窗口状态仍由 AppKit 持有。
+@MainActor
+struct ApplicationLifecycleEffects {
+    let startIPC: () -> Void
+    let changeActivationPolicy: (NSApplication.ActivationPolicy) -> Bool
+    let showConfigurationWindow: () -> Void
+    let closeConfigurationWindow: () -> Bool
+    let closeActiveWindow: () -> Void
+    let activate: () -> Void
+}
+
 /// 协调常驻命令宿主与可退出的配置界面生命周期。
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    private let injectedEffects: ApplicationLifecycleEffects?
+    private lazy var effects = injectedEffects ?? ApplicationLifecycleEffects(
+        startIPC: { [weak self] in self?.applicationIPCServer.startIfNeeded() },
+        changeActivationPolicy: { policy in
+            NSApp.activationPolicy() == policy || NSApp.setActivationPolicy(policy)
+        },
+        showConfigurationWindow: { [weak self] in self?.statusPageWindowController.showWindow() },
+        closeConfigurationWindow: { [weak self] in self?.statusPageWindowController.closeWindow() ?? false },
+        closeActiveWindow: { NSApp.keyWindow?.performClose(nil) },
+        activate: { NSApp.activate(ignoringOtherApps: true) }
+    )
+
+    override init() {
+        injectedEffects = nil
+        super.init()
+    }
+
+    /// 测试替换系统边界，直接验证生产事件处理路径。
+    init(effects: ApplicationLifecycleEffects) {
+        injectedEffects = effects
+        super.init()
+    }
+
     /// 记录无法完成的应用呈现状态切换。
     private let logger = Logger(
         subsystem: ApplicationLogging.subsystem,
@@ -79,7 +113,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// 装配常驻服务；首次 Open Application 事件随后决定是否显示界面。
     func applicationDidFinishLaunching(_ notification: Notification) {
-        _ = applicationIPCServer
+        effects.startIPC()
     }
 
     /// 让主应用在最后一个窗口关闭后继续接收 Finder 命令。
@@ -110,18 +144,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         _ event: NSAppleEventDescriptor,
         withReplyEvent replyEvent: NSAppleEventDescriptor
     ) {
+        handleOpenApplication(source: ApplicationInitialOpenSource(openApplicationEvent: event))
+    }
+
+    func handleOpenApplication(source: ApplicationInitialOpenSource) {
         if hasHandledInitialOpenApplicationEvent {
             showConfiguration()
             return
         }
 
         hasHandledInitialOpenApplicationEvent = true
-        if ApplicationInitialOpenSource(
-            openApplicationEvent: event
-        ) == .loginItem {
+        if source == .loginItem {
             enterBackgroundMode()
         } else {
-            showConfiguration()
+            // 首次启动的监听由 didFinishLaunching 负责，初始打开事件只呈现窗口。
+            presentConfiguration()
         }
     }
 
@@ -140,27 +177,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// 显示或聚焦唯一的 Status Page，并让应用出现在 Dock 中。
     func showConfiguration() {
+        effects.startIPC()
+        presentConfiguration()
+    }
+
+    private func presentConfiguration() {
         guard changeActivationPolicy(to: .regular) else {
             return
         }
-        statusPageWindowController.showWindow()
-        NSApp.activate(ignoringOtherApps: true)
+        effects.showConfigurationWindow()
+        effects.activate()
     }
 
     /// 关闭 Status Page 并退出配置形态，但不终止命令宿主或业务任务。
     func hideConfiguration() {
-        if !statusPageWindowController.closeWindow() {
+        if !effects.closeConfigurationWindow() {
             enterBackgroundMode()
         }
     }
 
     /// 执行标准关闭窗口语义；Status Page 的 delegate 会同步配置会话状态。
     func closeActiveWindow() {
-        NSApp.keyWindow?.performClose(nil)
+        effects.closeActiveWindow()
     }
 
     /// 响应用户直接关闭 Status Page 的事件。
-    private func handleConfigurationWindowDidClose() {
+    func handleConfigurationWindowDidClose() {
         enterBackgroundMode()
     }
 
@@ -175,10 +217,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func changeActivationPolicy(
         to policy: NSApplication.ActivationPolicy
     ) -> Bool {
-        guard NSApp.activationPolicy() != policy else {
-            return true
-        }
-        guard NSApp.setActivationPolicy(policy) else {
+        guard effects.changeActivationPolicy(policy) else {
             logger.error(
                 "AppKit refused activation policy \(policy.rawValue, privacy: .public)"
             )

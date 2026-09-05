@@ -12,9 +12,11 @@ final class ContextCommandClient {
 
     /// 每次发送前验证精确主应用签名的定向 socket 客户端。
     private let transport: (any ContextCommandSending)?
+    private let signalFailure: () -> Void
 
     /// 建立生产 transport；初始化失败时每次点击直接反馈投递失败。
     init() {
+        signalFailure = { NSSound.beep() }
         do {
             transport = try AuthenticatedLocalSocketClient(
                 expectedServerSigningIdentifier:
@@ -29,8 +31,12 @@ final class ContextCommandClient {
     }
 
     /// 注入 transport，供单次发送测试使用。
-    init(transport: (any ContextCommandSending)?) {
+    init(
+        transport: (any ContextCommandSending)?,
+        signalFailure: @escaping () -> Void = { NSSound.beep() }
+    ) {
         self.transport = transport
+        self.signalFailure = signalFailure
     }
 
     /// 构造并单次发送命令，不等待接管回执或业务执行结果。
@@ -62,6 +68,6 @@ final class ContextCommandClient {
         } else {
             logger.error("Authenticated local IPC is unavailable")
         }
-        NSSound.beep()
+        signalFailure()
     }
 }

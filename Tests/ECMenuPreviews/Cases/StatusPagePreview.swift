@@ -166,11 +166,13 @@ private struct StatusPagePreviewContent: View {
             displayName: ApplicationMetadata.displayName,
             version: ApplicationMetadata.version,
             selectedPane: $selectedPane,
-            isExtensionEnabled: isExtensionEnabled,
+            systemState: StatusPageSystemState(
+                isExtensionEnabled: isExtensionEnabled,
+                applicationIcons: applicationIcons
+            ),
             loginItemState: loginItemState,
             descriptors: ContextCommandComposition.handlers.descriptors,
             configuration: configuration,
-            applicationIcons: applicationIcons,
             setEnabled: { isEnabled in
                 configuration.setEnabled(isEnabled)
             },

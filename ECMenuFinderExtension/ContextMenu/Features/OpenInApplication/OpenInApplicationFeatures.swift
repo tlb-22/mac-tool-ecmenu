@@ -16,10 +16,10 @@ final class OpenInApplicationFeature<Command: OpenInApplicationCommand>:
     func command(
         in context: FinderContextMenuEvaluationContext
     ) -> Command? {
-        guard let targetPath = OpenInApplicationFinderFacts.targetPath(
-            for: context.snapshot,
-            kind: Command.targetKind
-        ) else {
+        guard case .existing(let targetPath, let kind) = context.singleTarget else {
+            return nil
+        }
+        guard !Command.targetKind.requiresDirectory || kind == .directory else {
             return nil
         }
         return Command(targetPath: targetPath)
@@ -28,31 +28,3 @@ final class OpenInApplicationFeature<Command: OpenInApplicationCommand>:
 
 typealias OpenInVSCodeFeature = OpenInApplicationFeature<OpenInVSCodeCommand>
 typealias OpenInITerm2Feature = OpenInApplicationFeature<OpenInITerm2Command>
-
-// MARK: - ==================== Finder 系统事实边界 ====================
-
-/// 读取外部应用菜单目标所需的 Finder 与文件系统事实。
-private enum OpenInApplicationFinderFacts {
-    /// 重验单一候选的存在性和命令声明的目标种类。
-    static func targetPath(
-        for snapshot: FinderContextSnapshot,
-        kind: OpenInApplicationTargetKind
-    ) -> AbsoluteFilePath? {
-        guard snapshot.absolutePaths.count == 1,
-              let targetPath = snapshot.absolutePaths.first else {
-            return nil
-        }
-
-        var isDirectory: ObjCBool = false
-        guard FileManager.default.fileExists(
-            atPath: targetPath.path,
-            isDirectory: &isDirectory
-        ) else {
-            return nil
-        }
-        guard !kind.requiresDirectory || isDirectory.boolValue else {
-            return nil
-        }
-        return targetPath
-    }
-}

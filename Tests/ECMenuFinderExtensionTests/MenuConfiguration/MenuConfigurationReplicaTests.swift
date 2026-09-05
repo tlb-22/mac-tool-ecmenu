@@ -5,6 +5,44 @@ import XCTest
 /// 验证配置更新信号只形成单飞拉取，且过时响应不会覆盖最终真相。
 @MainActor
 final class MenuConfigurationReplicaTests: XCTestCase {
+    func testFailedRefreshPreservesCacheAndNextSignalCanRefresh() async throws {
+        let suiteName = "MenuConfigurationReplicaTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let cached = MenuConfiguration(isEnabled: false)
+        let cachedData = MenuConfigurationChannel.encodedData(for: cached)
+        defaults.set(cachedData, forKey: MenuConfigurationChannel.persistedConfigurationKey)
+        let transport = ControlledMenuConfigurationTransport()
+        let replica = MenuConfigurationReplica(defaults: defaults, transport: transport)
+
+        transport.completeNext(with: .failure(ApplicationIPCError.deadlineExceeded))
+        for _ in 0..<100 where replica.isRefreshing { await Task.yield() }
+        XCTAssertFalse(replica.isRefreshing)
+        XCTAssertFalse(replica.isEnabled)
+        XCTAssertEqual(defaults.data(forKey: MenuConfigurationChannel.persistedConfigurationKey), cachedData)
+        replica.refreshConfiguration()
+        await waitForRequestCount(2, in: transport)
+        XCTAssertFalse(replica.isEnabled)
+        XCTAssertEqual(defaults.data(forKey: MenuConfigurationChannel.persistedConfigurationKey), cachedData)
+
+        transport.completeNext(with: .success(.standard))
+        for _ in 0..<100 where !replica.isEnabled { await Task.yield() }
+        XCTAssertTrue(replica.isEnabled)
+        let stored = try XCTUnwrap(defaults.data(forKey: MenuConfigurationChannel.persistedConfigurationKey))
+        XCTAssertEqual(try MenuConfigurationChannel.decodedConfiguration(from: stored), .standard)
+    }
+
+    func testInvalidCacheStartsWithStandardConfigurationWhenTransportIsUnavailable() throws {
+        let suiteName = "MenuConfigurationReplicaTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set(Data("{}".utf8), forKey: MenuConfigurationChannel.persistedConfigurationKey)
+        let replica = MenuConfigurationReplica(defaults: defaults, transport: nil)
+        XCTAssertTrue(replica.isEnabled)
+        replica.refreshConfiguration()
+        XCTAssertTrue(replica.isEnabled)
+    }
+
     func testConcurrentRefreshSignalsCoalesceAndSkipStaleResponse() async throws {
         let suiteName = "MenuConfigurationReplicaTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))

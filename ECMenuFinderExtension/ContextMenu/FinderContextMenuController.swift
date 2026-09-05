@@ -144,7 +144,7 @@ final class FinderContextMenuController {
                 guard isFeatureVisible(descriptor.id.featureID) else {
                     return nil
                 }
-                guard descriptor.icon.applicationRequirement.map(
+                guard descriptor.requiredApplication.map(
                     isApplicationAvailable
                 ) ?? true else {
                     return nil

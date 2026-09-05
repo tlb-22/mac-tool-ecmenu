@@ -3,6 +3,10 @@ import OSLog
 
 /// Finder Extension 保存的最后一份有效菜单配置，只接受主应用发布的更新。
 final class MenuConfigurationReplica: NSObject {
+    private enum RefreshState {
+        case idle
+        case fetching(refreshAgain: Bool)
+    }
     /// 当前用于构建 Finder 菜单的配置快照。
     private var configuration: MenuConfiguration
 
@@ -13,10 +17,7 @@ final class MenuConfigurationReplica: NSObject {
     private let transport: (any MenuConfigurationRequesting)?
 
     /// 同一时刻最多存在一个配置拉取，避免响应乱序覆盖新状态。
-    private var isRefreshInFlight = false
-
-    /// 拉取期间又收到变更信号时，在当前连接结束后再读取一次最终真相。
-    private var refreshRequestedWhileInFlight = false
+    private var refreshState = RefreshState.idle
     private static let logger = Logger(
         subsystem: ApplicationLogging.subsystem,
         category: "MenuConfiguration"
@@ -69,6 +70,12 @@ final class MenuConfigurationReplica: NSObject {
         configuration.isEnabled
     }
 
+    /// 从单飞状态推导是否仍在等待响应，供边界验证读取。
+    var isRefreshing: Bool {
+        if case .fetching = refreshState { return true }
+        return false
+    }
+
     /// 查询功能自身的显示配置，不合并产品总开关。
     /// - Parameter feature: 固定右键功能标识。
     /// - Returns: 功能未被独立隐藏时为 `true`。
@@ -89,19 +96,19 @@ final class MenuConfigurationReplica: NSObject {
             Self.logger.error("Authenticated local IPC is unavailable")
             return
         }
-        guard !isRefreshInFlight else {
-            refreshRequestedWhileInFlight = true
+        guard case .idle = refreshState else {
+            refreshState = .fetching(refreshAgain: true)
             return
         }
 
-        isRefreshInFlight = true
+        refreshState = .fetching(refreshAgain: false)
 
         transport.fetchMenuConfiguration { [self] result in
             Task { @MainActor [self] in
-                self.isRefreshInFlight = false
-                let shouldRefreshAgain =
-                    self.refreshRequestedWhileInFlight
-                self.refreshRequestedWhileInFlight = false
+                guard case let .fetching(shouldRefreshAgain) = self.refreshState else {
+                    preconditionFailure("A configuration request completed without an active refresh")
+                }
+                self.refreshState = .idle
 
                 // 拉取期间出现新信号时，当前响应可能已经过时；不应用它，
                 // 等下一次已验证读取返回最终真相。

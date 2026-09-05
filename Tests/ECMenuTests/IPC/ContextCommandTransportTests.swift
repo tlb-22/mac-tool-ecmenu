@@ -340,6 +340,204 @@ final class ContextCommandTransportTests: XCTestCase {
         await fulfillment(of: [routed], timeout: 0.1)
     }
 
+    func testAcceptRecoversAfterResourceFailure() async throws {
+        let socketURL = try ProjectTestDirectory.makeUniqueSocketURL()
+        let acceptor = FailingOnceIPCAcceptor(code: EMFILE)
+        let routed = expectation(description: "Command after recovered accept")
+        let server = try AuthenticatedLocalSocketServer(
+            expectedClientSigningIdentifier: ApplicationIPC.applicationSigningIdentifier,
+            socketURL: socketURL,
+            contextCommandSink: { _ in routed.fulfill() },
+            menuConfigurationProvider: { $0(.standard) },
+            acceptConnection: { acceptor.accept($0) },
+            didFail: { error in XCTFail("Resource failure stopped the listener: \(error)") }
+        )
+        defer { server.stop() }
+        let client = try AuthenticatedLocalSocketClient(
+            expectedServerSigningIdentifier: ApplicationIPC.applicationSigningIdentifier,
+            socketURL: socketURL
+        )
+        let request = try makeRequest()
+        try await Task.detached { try client.transmit(request) }.value
+        await fulfillment(of: [routed], timeout: 1)
+    }
+
+    func testStoppingOrReleasingListenerAfterResourceFailureCleansEndpoint() async throws {
+        for termination in [ListenerTermination.stop, .release] {
+            let socketURL = try ProjectTestDirectory.makeUniqueSocketURL()
+            let exhausted = expectation(description: "Listener encountered resource exhaustion")
+            let acceptor = ResourceExhaustedIPCAcceptor(firstFailure: exhausted)
+            var server: AuthenticatedLocalSocketServer? = try AuthenticatedLocalSocketServer(
+                expectedClientSigningIdentifier: ApplicationIPC.applicationSigningIdentifier,
+                socketURL: socketURL,
+                contextCommandSink: { _ in XCTFail("Resource-exhausted listener routed a command") },
+                menuConfigurationProvider: { $0(.standard) },
+                acceptConnection: { acceptor.accept($0) },
+                didFail: { error in XCTFail("Stopping reported a fatal failure: \(error)") }
+            )
+            defer { server?.stop() }
+            let releasedServer = WeakIPCListenerReference(server)
+            let connection = try LocalSocketIO.connect(to: socketURL)
+            defer { LocalSocketIO.close(connection) }
+            await fulfillment(of: [exhausted], timeout: 1)
+
+            // accept 替身返回后，让 source 进入 100 ms 的资源退避。
+            // 替身始终返回 EMFILE，延迟调度也不会进入正常接收路径。
+            try await Task.sleep(for: .milliseconds(20))
+            switch termination {
+            case .stop:
+                server?.stop()
+                server?.stop() // 停止必须幂等，不能对已取消 source 再次 resume。
+            case .release:
+                server = nil
+            }
+
+            let clock = ContinuousClock()
+            let cleanupDeadline = clock.now.advanced(by: .seconds(1))
+            while FileManager.default.fileExists(atPath: socketURL.path), clock.now < cleanupDeadline {
+                try await Task.sleep(for: .milliseconds(10))
+            }
+            XCTAssertFalse(FileManager.default.fileExists(atPath: socketURL.path))
+            // 越过原重试时刻，确认取消的延迟任务不会重新打开或再次恢复 source。
+            try await Task.sleep(for: .milliseconds(150))
+            XCTAssertFalse(FileManager.default.fileExists(atPath: socketURL.path))
+            server = nil
+            XCTAssertNil(releasedServer.value)
+        }
+    }
+
+    func testFatalAcceptFailureReleasesEndpointBeforeReporting() async throws {
+        let socketURL = try ProjectTestDirectory.makeUniqueSocketURL()
+        let failed = expectation(description: "Fatal listener failure reported after cleanup")
+        let server = try AuthenticatedLocalSocketServer(
+            expectedClientSigningIdentifier: ApplicationIPC.applicationSigningIdentifier,
+            socketURL: socketURL,
+            contextCommandSink: { _ in XCTFail("Failed listener routed a command") },
+            menuConfigurationProvider: { $0(.standard) },
+            acceptConnection: { _ in .failure(.posix(operation: "accept", code: EBADF)) },
+            didFail: { error in
+                XCTAssertEqual(error, .posix(operation: "accept", code: EBADF))
+                XCTAssertFalse(FileManager.default.fileExists(atPath: socketURL.path))
+                failed.fulfill()
+            }
+        )
+        defer { server.stop() }
+        let client = try AuthenticatedLocalSocketClient(
+            expectedServerSigningIdentifier: ApplicationIPC.applicationSigningIdentifier,
+            socketURL: socketURL,
+            connectionTimeout: 1
+        )
+        let result = await Task.detached { Result { try client.fetchMenuConfiguration() } }.value
+        if case .success = result { XCTFail("A failed listener returned a configuration") }
+        await fulfillment(of: [failed], timeout: 1)
+    }
+
+    func testTruncatedFramesAreRejected() throws {
+        for bytes: [UInt8] in [[0, 0, 0], [0, 0, 0, 0, 0, 0, 0, 5, 1, 2]] {
+            var descriptors: [Int32] = [-1, -1]
+            XCTAssertEqual(socketpair(AF_UNIX, SOCK_STREAM, 0, &descriptors), 0)
+            defer { descriptors.forEach { _ = Darwin.close($0) } }
+            XCTAssertEqual(bytes.withUnsafeBytes {
+                Darwin.write(descriptors[1], $0.baseAddress, $0.count)
+            }, bytes.count)
+            XCTAssertEqual(Darwin.shutdown(descriptors[1], SHUT_WR), 0)
+            XCTAssertThrowsError(try LocalSocketIO.readFrame(
+                from: descriptors[0], deadline: .init(timeout: 1)
+            )) { error in
+                XCTAssertEqual(error as? ApplicationIPCError, .connectionClosed)
+            }
+        }
+    }
+
+    func testInvalidAuthenticationAcknowledgmentPreventsCommandWrite() async throws {
+        let server = try RawIPCServer { descriptor in
+            try LocalSocketIO.writeFrame(Data([1]), to: descriptor, deadline: .init(timeout: 1))
+            XCTAssertThrowsError(try LocalSocketIO.readFrame(from: descriptor, deadline: .init(timeout: 1))) {
+                XCTAssertEqual($0 as? ApplicationIPCError, .connectionClosed)
+            }
+        }
+        defer { server.stop() }
+        let client = try AuthenticatedLocalSocketClient(
+            expectedServerSigningIdentifier: ApplicationIPC.applicationSigningIdentifier,
+            socketURL: server.socketURL
+        )
+        let request = try makeRequest()
+        let result = await Task.detached { Result { try client.transmit(request) } }.value
+        guard case let .failure(error) = result else { return XCTFail("Invalid ACK was accepted") }
+        XCTAssertEqual(error as? ApplicationIPCError, .invalidAuthenticationReadyAcknowledgment)
+        await fulfillment(of: [server.finished], timeout: 1)
+    }
+
+    func testSilentAuthenticatedPeerHasBoundedWait() async throws {
+        let server = try RawIPCServer { descriptor in
+            // 进程身份正确，但不发认证就绪 ACK；Client 应自行结束等待并关闭。
+            XCTAssertThrowsError(try LocalSocketIO.readFrame(from: descriptor, deadline: .init(timeout: 1))) {
+                XCTAssertEqual($0 as? ApplicationIPCError, .connectionClosed)
+            }
+        }
+        defer { server.stop() }
+        let client = try AuthenticatedLocalSocketClient(
+            expectedServerSigningIdentifier: ApplicationIPC.applicationSigningIdentifier,
+            socketURL: server.socketURL,
+            connectionTimeout: 0.1
+        )
+        let result = await Task.detached { Result { try client.fetchMenuConfiguration() } }.value
+        guard case let .failure(error) = result else { return XCTFail("Silent peer returned data") }
+        XCTAssertEqual(error as? ApplicationIPCError, .deadlineExceeded)
+        await fulfillment(of: [server.finished], timeout: 1)
+    }
+
+    func testConfigurationProviderWaitHasDeadline() async throws {
+        let socketURL = try ProjectTestDirectory.makeUniqueSocketURL()
+        let server = try AuthenticatedLocalSocketServer(
+            expectedClientSigningIdentifier: ApplicationIPC.applicationSigningIdentifier,
+            socketURL: socketURL,
+            contextCommandSink: { _ in XCTFail("Configuration became a command") },
+            menuConfigurationProvider: { _ in },
+            connectionTimeout: 0.1
+        )
+        defer { server.stop() }
+        let client = try AuthenticatedLocalSocketClient(
+            expectedServerSigningIdentifier: ApplicationIPC.applicationSigningIdentifier,
+            socketURL: socketURL,
+            connectionTimeout: 1
+        )
+        let result = await Task.detached { Result { try client.fetchMenuConfiguration() } }.value
+        guard case let .failure(error) = result else { return XCTFail("Missing provider returned data") }
+        XCTAssertEqual(error as? ApplicationIPCError, .connectionClosed)
+    }
+
+    @MainActor
+    func testApplicationServerRecoversInitializationAndRuntimeFailure() async throws {
+        var starts = 0
+        var signals = 0
+        var reportFailure: (@Sendable (ApplicationIPCError) -> Void)?
+        let server = ApplicationIPCServer(makeTransport: { failure in
+            starts += 1
+            if starts == 1 { throw ApplicationIPCError.applicationGroupUnavailable }
+            reportFailure = failure
+            return TestIPCListener()
+        }, didStart: { signals += 1 })
+        XCTAssertEqual(starts, 0)
+        server.startIfNeeded()
+        guard case .failed = server.state else { return XCTFail("Startup failure was lost") }
+        server.startIfNeeded()
+        guard case .listening = server.state else { return XCTFail("Startup did not recover") }
+        server.startIfNeeded()
+        XCTAssertEqual(starts, 2)
+        XCTAssertEqual(signals, 1)
+        reportFailure?(.posix(operation: "accept", code: EBADF))
+        for _ in 0..<100 {
+            if case .failed = server.state { break }
+            await Task.yield()
+        }
+        guard case .failed = server.state else { return XCTFail("Runtime failure was lost") }
+        server.startIfNeeded()
+        guard case .listening = server.state else { return XCTFail("Runtime did not recover") }
+        XCTAssertEqual(starts, 3)
+        XCTAssertEqual(signals, 2)
+    }
+
     private func makeRequest(
         path: String = "/test/parent"
     ) throws -> ContextCommandRequest {
@@ -375,6 +573,81 @@ final class ContextCommandTransportTests: XCTestCase {
             line: line
         )
     }
+}
+
+nonisolated private enum ListenerTermination {
+    case stop
+    case release
+}
+
+nonisolated private final class WeakIPCListenerReference {
+    weak var value: AuthenticatedLocalSocketServer?
+
+    init(_ value: AuthenticatedLocalSocketServer?) { self.value = value }
+}
+
+nonisolated private final class ResourceExhaustedIPCAcceptor: @unchecked Sendable {
+    private let lock = NSLock()
+    private var firstFailure: XCTestExpectation?
+
+    init(firstFailure: XCTestExpectation) { self.firstFailure = firstFailure }
+
+    func accept(_ descriptor: Int32) -> Result<Int32, ApplicationIPCError> {
+        lock.lock()
+        let notification = firstFailure
+        firstFailure = nil
+        lock.unlock()
+        notification?.fulfill()
+        return .failure(.posix(operation: "accept", code: EMFILE))
+    }
+}
+
+nonisolated private final class TestIPCListener: ApplicationIPCListening {
+    func stop() {}
+}
+
+nonisolated private final class FailingOnceIPCAcceptor: @unchecked Sendable {
+    private let lock = NSLock()
+    private var failure: Int32?
+
+    init(code: Int32) { failure = code }
+
+    func accept(_ descriptor: Int32) -> Result<Int32, ApplicationIPCError> {
+        lock.lock()
+        let code = failure
+        failure = nil
+        lock.unlock()
+        if let code { return .failure(.posix(operation: "accept", code: code)) }
+        return LocalSocketIO.acceptConnection(descriptor)
+    }
+}
+
+/// 用当前测试宿主的真实签名身份验证 Client 的异常认证响应路径。
+nonisolated private final class RawIPCServer: @unchecked Sendable {
+    let socketURL: URL
+    let finished = XCTestExpectation(description: "Raw IPC peer completed")
+    private let source: any DispatchSourceRead
+
+    init(handle: @escaping @Sendable (Int32) throws -> Void) throws {
+        socketURL = try ProjectTestDirectory.makeUniqueSocketURL()
+        let endpoint = try LocalSocketIO.listen(at: socketURL)
+        let endpointURL = socketURL
+        let finished = self.finished
+        source = DispatchSource.makeReadSource(fileDescriptor: endpoint.descriptor, queue: .global())
+        source.setEventHandler { [source] in
+            guard case let .success(connection) = LocalSocketIO.acceptConnection(endpoint.descriptor) else { return }
+            source.cancel()
+            defer { LocalSocketIO.close(connection); finished.fulfill() }
+            do { try handle(connection) } catch { XCTFail("Raw IPC peer failed: \(error)") }
+        }
+        source.setCancelHandler {
+            LocalSocketIO.stopListening(endpoint.descriptor, at: endpointURL, fileIdentity: endpoint.fileIdentity)
+        }
+        source.activate()
+    }
+
+    func stop() { source.cancel() }
+    deinit { stop() }
 }
 
 /// 汇集并发 Client queues 返回的发送失败。

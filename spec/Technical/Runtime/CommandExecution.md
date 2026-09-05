@@ -4,7 +4,7 @@
 
 ## 类型对齐
 
-`ContextCommandFeatureID` 是用户配置、跨进程信封和主应用 Handler 共用的功能身份；`ContextCommandDescriptor` 为该功能提供共享名称和图标。一个 Feature 可以贡献单个 Action，也可以贡献包含叶子、子菜单和分隔线的完整菜单子树；Action 只在所属 Feature 内拥有局部身份，配置和执行仍以 Feature 为单位。Finder 对菜单树的过滤和规范化见[菜单语义](../Platform/Finder/ContextMenus.md#菜单树与启用状态)。
+`ContextCommandFeatureID` 是用户配置、跨进程信封和主应用 Handler 共用的功能身份；`ContextCommandDescriptor` 为该功能提供共享名称、图标和运行依赖。运行依赖来自命令业务声明，图标独立表达视觉来源；外部应用命令从唯一应用声明派生执行依赖与产品图标。一个 Feature 可以贡献单个 Action，也可以贡献包含叶子、子菜单和分隔线的完整菜单子树；Action 只在所属 Feature 内拥有局部身份，配置和执行仍以 Feature 为单位，叶子图标的选择不改变所属功能的运行依赖。Finder 对菜单树的过滤和规范化见[菜单语义](../Platform/Finder/ContextMenus.md#菜单树与启用状态)。
 
 每个 Finder Action 从已经冻结的语义快照直接构造其功能专用的 `ContextCommandPayload`。命令类型只表达对应 Handler 能处理的有效目标，不继续携带可形成无关 Finder 场景的通用上下文。
 

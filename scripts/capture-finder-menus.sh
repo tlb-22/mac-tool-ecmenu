@@ -27,6 +27,7 @@ source "$script_directory/lib/application-languages.sh"
 source "$script_directory/lib/user-focus.sh"
 source "$script_directory/lib/process-lifecycle.sh"
 source "$script_directory/lib/product-paths.sh"
+source "$script_directory/lib/code-signing.sh"
 
 typeset -a registered_scenario_ids=()
 typeset -a selected_scenario_ids=()
@@ -358,10 +359,8 @@ build_automation_helper() {
     if [[ "$mode" == capture ]]; then
         codesign --verify --strict "$helper_executable" 2>>"$build_log" \
             || fail "Finder automation helper signature is invalid."
-        signing_identifier="$(codesign -dv "$helper_executable" 2>&1 \
-            | sed -n 's/^Identifier=//p')"
-        team_identifier="$(codesign -dv "$helper_executable" 2>&1 \
-            | sed -n 's/^TeamIdentifier=//p')"
+        signing_identifier="$(ecmenu_code_signing_value "$helper_executable" Identifier)"
+        team_identifier="$(ecmenu_code_signing_value "$helper_executable" TeamIdentifier)"
         [[ "$signing_identifier" == "$helper_bundle_identifier" \
             && "$team_identifier" == "$resolved_team_identifier" ]] \
             || fail "Finder automation helper does not have its stable Development identity."

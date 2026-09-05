@@ -6,7 +6,7 @@
 
 `CGImageSourceCopyTypeIdentifiers()` 返回当前系统 ImageIO 声明支持的输入类型集合。该集合只能说明类型能力，不能证明某个具体文件内容有效；Finder Extension 只读取目录标志和内容类型来决定菜单是否出现，不在右键菜单构建期间解码图片。
 
-PDF 即使可能被 ImageIO 识别，也被产品语义显式排除，因为命令处理图片而不是文档页。主应用执行时先尝试打开源文件，再创建 `CGImageSource`，从而区分访问权限失败和内容无法解码。
+PDF 即使可能被 ImageIO 识别，也被产品语义显式排除，因为命令处理图片而不是文档页。主应用执行时先尝试打开源文件，再创建 `CGImageSource`，从而区分访问权限失败和内容无法解码。Foundation 在读取已经消失的源文件时可返回 `CocoaError.fileReadNoSuchFile`，它与通用的 `fileNoSuchFile` 一起映射为目标失效。
 
 ## 参数窗口、进度与并发
 
@@ -26,8 +26,12 @@ EXIF orientation `5...8` 会交换视觉宽高，因此最大宽度约束应用�
 
 新的 `CGImageDestination` 只接收重新绘制的位图和 JPEG 质量，不复制源属性字典。因此源 EXIF、GPS、XMP 和容器附加帧不会写入结果。
 
+项目在 macOS 26.6.1（25G76）使用 ImageIO 生成的样本验证了 JPEG 的 orientation `5...8` 像素方向、GIF 第一帧、HEIC 非首帧主图像，以及源相机、拍摄时间、GPS 和自定义 XMP 信息不进入输出。这些边界由 [ImageCompressionBoundaryTests](../../../Tests/ECMenuTests/ContextCommands/Features/ImageCompression/ImageCompressionBoundaryTests.swift) 覆盖；样本范围不代表所有系统支持的图片格式均已实测。
+
 ## 输出落盘与文件时间
 
 每项先在内存中完成 JPEG 编码，再用 `.withoutOverwriting` 写入最终候选路径。编码失败不会创建目标，已有文件不会被替换。
+
+目标目录写入失败时，受影响图片与失败目录是两个不同的事实：用户反馈以图片名称或数量说明其所在文件夹不可写，诊断同时保留源路径和目标目录。
 
 创建时间和修改时间在 JPEG 成功落盘后设置。时间属性失败时保留已经生成的 JPG，并把该项作为问题反馈，不回滚文件。批量成功 URL 最终一次性交给 Finder 的批量选择 API。

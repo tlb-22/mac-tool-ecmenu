@@ -31,4 +31,16 @@ final class SystemErrorTests: XCTestCase {
             .unavailable
         )
     }
+
+    /// Foundation 的通用路径错误与读取时缺失错误属于同一失效原因。
+    func testCocoaMissingFileVariantsAreUnavailable() {
+        for code in [CocoaError.Code.fileNoSuchFile, .fileReadNoSuchFile] {
+            XCTAssertEqual(
+                FileSystemErrorKind(classifying: SystemErrorSnapshot(
+                    capturing: CocoaError(code)
+                )),
+                .unavailable
+            )
+        }
+    }
 }

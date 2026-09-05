@@ -38,10 +38,20 @@ final class ContextCommandLocalizationTests: XCTestCase {
             ),
         ]
 
-        for expectation in expectations {
+        let titles = ContextMenuComposition.menu(commandClient: ContextCommandClient())
+            .nodes.flatMap(\.items).map(\.descriptor.title)
+        XCTAssertEqual(Set(titles.map(\.key)), Set(expectations.map(\.resource.key)))
+        let expectationsByKey = Dictionary(uniqueKeysWithValues: expectations.map {
+            ($0.resource.key, $0)
+        })
+        for title in titles {
+            guard let expectation = expectationsByKey[title.key] else {
+                XCTFail("Missing translation expectation for \(title.key)")
+                continue
+            }
             XCTAssertEqual(
                 localized(
-                    expectation.resource,
+                    title,
                     in: bundle,
                     language: Locale.Language(languageCode: "en")
                 ),
@@ -49,7 +59,7 @@ final class ContextCommandLocalizationTests: XCTestCase {
             )
             XCTAssertEqual(
                 localized(
-                    expectation.resource,
+                    title,
                     in: bundle,
                     language: Locale.Language(
                         languageCode: "zh",

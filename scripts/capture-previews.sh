@@ -9,6 +9,7 @@ readonly preview_operation_lock_directory="$project_root/.artifacts/scratch/prob
 readonly preview_operation_lock="$preview_operation_lock_directory/preview-operation.lock"
 
 source "$script_directory/lib/user-focus.sh"
+source "$script_directory/lib/process-lifecycle.sh"
 
 readonly derived_data_path="$project_root/.derivedData"
 readonly run_timestamp="$(date '+%Y%m%d-%H%M%S')"
@@ -141,45 +142,11 @@ cleanup() {
     terminate_active_preview
 }
 
-process_ids_for_preview_app() {
-    local candidates
-    local command_path
-    local pid
-
-    candidates="$(pgrep -f "$preview_executable" 2>/dev/null || true)"
-    if [[ -z "$candidates" ]]; then
-        return 0
-    fi
-
-    for pid in "${(@f)candidates}"; do
-        command_path="$(ps -p "$pid" -o comm= 2>/dev/null || true)"
-        if [[ "$command_path" == "$preview_executable" ]]; then
-            print "$pid"
-        fi
-    done
-}
-
 terminate_existing_previews() {
-    local process_ids
-    local pid
-
-    process_ids="$(process_ids_for_preview_app)"
-    if [[ -z "$process_ids" ]]; then
-        return 0
-    fi
-
-    for pid in "${(@f)process_ids}"; do
-        kill "$pid" 2>/dev/null || true
-    done
-
-    for _ in {1..30}; do
-        if [[ -z "$(process_ids_for_preview_app)" ]]; then
-            return 0
-        fi
-        sleep 0.1
-    done
-
-    fail "A previous Preview process did not exit: $preview_executable"
+    local process_ids="$(process_ids_for_executable "$preview_executable")"
+    terminate_process_ids "$process_ids"
+    wait_for_process_ids_to_exit "$process_ids" 30 \
+        || fail "A previous Preview process did not exit: $preview_executable"
 }
 
 wait_for_ready_window() {

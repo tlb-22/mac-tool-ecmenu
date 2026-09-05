@@ -11,6 +11,8 @@
 
 activation policy 只由配置会话决定。最小化状态页不关闭会话；参数、错误和进度等业务窗口也不改变配置会话状态。普通打开、reopen 与 Show Preferences 事件都进入同一条显示状态页的路径，不创建第二个命令宿主或第二个配置窗口。
 
+生命周期测试替换窗口和 activation policy 的系统副作用，直接执行应用事件处理路径，覆盖登录与普通打开、重复打开、最小化后重开、关闭状态页、`Command-Q` 与业务窗口并存，以及平台拒绝切换策略。窗口事实仍由 AppKit 持有，应用不维护第二份可见或最小化状态。真实登录来源和系统窗口恢复行为仍以注销、登录验收为证据。
+
 ## 登录启动
 
 [`SMAppService.mainApp`](https://developer.apple.com/documentation/servicemanagement/smappservice/mainapp) 管理主应用自身的登录项，不引入 Helper、Launch Agent 或 XPC Service。登记与取消登记只影响后续登录，不启动或终止当前进程。
@@ -24,5 +26,7 @@ Xcode 26.6（17F113）附带的 macOS 26.5 SDK 将 `keyAELaunchedAsLogInItem` �
 ## 恢复边界
 
 主进程结束后命令服务器随之消失；Finder Extension 仍在运行或仍能显示菜单，不代表执行端存在。`SMAppService` 只负责后续登录启动，不在当前会话监护或重启进程。
+
+主进程仍然运行时，IPC 初始化失败或监听终止由同一个应用侧所有者记录。用户普通打开、重新打开或显示设置时尝试恢复监听；启动成功后通知 Extension 再次拉取配置。监听的资源释放、可恢复错误与传输等待期限见 [IPC](IPC.md#等待与监听恢复)。
 
 Finder Extension 的公开 URL 打开入口在当前验证环境中不能可靠冷启动主应用，平台证据见 [Extension 生命周期](../Platform/Finder/ExtensionLifecycle.md)。因此当前会话中的恢复入口是用户普通打开应用，不另建隐藏的自动恢复通道。

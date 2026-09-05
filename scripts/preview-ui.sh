@@ -75,61 +75,7 @@ fi
 
 readonly language
 
-process_ids_for_preview_app() {
-    local candidates
-    local command_path
-    local pid
-
-    candidates="$(pgrep -f "$preview_executable" 2>/dev/null || true)"
-    if [[ -z "$candidates" ]]; then
-        return 0
-    fi
-
-    for pid in "${(@f)candidates}"; do
-        command_path="$(ps -p "$pid" -o comm= 2>/dev/null || true)"
-        if [[ "$command_path" == "$preview_executable" ]]; then
-            print "$pid"
-        fi
-    done
-}
-
-wait_for_process() {
-    local attempt
-
-    for attempt in {1..30}; do
-        if [[ -n "$(process_ids_for_preview_app)" ]]; then
-            return 0
-        fi
-        sleep 0.1
-    done
-    return 1
-}
-
-wait_for_process_exit() {
-    local attempt
-
-    for attempt in {1..30}; do
-        if [[ -z "$(process_ids_for_preview_app)" ]]; then
-            return 0
-        fi
-        sleep 0.1
-    done
-    return 1
-}
-
-terminate_preview_processes() {
-    local process_ids
-    local pid
-
-    process_ids="$(process_ids_for_preview_app)"
-    if [[ -z "$process_ids" ]]; then
-        return 0
-    fi
-
-    for pid in "${(@f)process_ids}"; do
-        kill "$pid" 2>/dev/null || true
-    done
-}
+source "$script_directory/lib/process-lifecycle.sh"
 
 mkdir -p "$log_directory"
 cd "$project_root"
@@ -155,8 +101,9 @@ if [[ "$preview_id" == --list ]]; then
     exit 0
 fi
 
-terminate_preview_processes
-if ! wait_for_process_exit; then
+previous_preview_pids="$(process_ids_for_executable "$preview_executable")"
+terminate_process_ids "$previous_preview_pids"
+if ! wait_for_process_ids_to_exit "$previous_preview_pids" 30; then
     print -u2 "Previous preview app did not exit: $preview_executable"
     exit 1
 fi
@@ -168,12 +115,12 @@ fi
 
 open -n "$app_path" --args "${launch_arguments[@]}"
 
-if ! wait_for_process; then
+if ! wait_for_process "$preview_executable"; then
     print -u2 "Preview app did not start: $preview_executable"
     exit 2
 fi
 
-preview_pids=("${(@f)$(process_ids_for_preview_app)}")
+preview_pids=("${(@f)$(process_ids_for_executable "$preview_executable")}")
 if (( ${#preview_pids[@]} != 1 )); then
     print -u2 "Expected one preview app process, found ${#preview_pids[@]}."
     exit 3
