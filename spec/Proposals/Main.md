@@ -5,3 +5,4 @@
 ## 提案
 
 - [图片 / PDF 格式转换](FormatConversion.md)
+- [命令撤销与重做](CommandUndo.md)：候选命令范围、Finder 原生能力验证与自有历史方案。

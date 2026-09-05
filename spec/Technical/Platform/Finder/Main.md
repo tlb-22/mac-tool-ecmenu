@@ -7,3 +7,4 @@
 - [管理位置](ManagedLocations.md)：管理根目录和外置卷覆盖。
 - [结果选择](ResultSelection.md)：新建或批量输出后的 Finder 选择能力。
 - [Extension 生命周期](ExtensionLifecycle.md)：URL 打开、启用状态与系统登记。
+- [撤销集成](UndoIntegration.md)：Finder 原生历史、独立撤销管理器与间接文件操作的能力边界。
