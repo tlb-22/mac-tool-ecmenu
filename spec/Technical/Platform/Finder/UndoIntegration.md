@@ -1,6 +1,6 @@
 # Finder 撤销集成边界
 
-本文件记录 Finder 原生撤销与扩展命令之间的公开能力边界。候选产品范围与实施步骤见[命令撤销与重做提案](../../../Proposals/CommandUndo.md)，当前执行职责见[命令执行](../../Runtime/CommandExecution.md)。
+本文件记录 Finder 原生撤销与扩展命令之间的公开能力边界，当前执行职责见[命令执行](../../Runtime/CommandExecution.md)。
 
 ## 证据范围
 

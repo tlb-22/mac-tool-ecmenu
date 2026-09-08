@@ -32,7 +32,7 @@ ECMenuShared/
 Tests/                          单元测试、集成测试与独立界面预览
 design/AppIcon/                 应用图标设计源与生成产物
 scripts/                        构建、运行、测试与交付入口
-spec/                           当前需求、技术知识与未来提案
+spec/                           当前需求与技术知识
 ```
 
 右键功能分别在 `ECMenuShared/Contracts/Commands/<能力>/`、`ECMenuFinderExtension/Commands/<能力>/` 和 `ECMenu/Commands/<能力>/` 保存共享契约、Finder 菜单规则与主应用用例。三端使用相同能力名。`ContextMenuComposition` 和 `ContextCommandComposition` 分别注册调用端与执行端能力；主应用描述和 Handler 工厂来自同一份声明。
