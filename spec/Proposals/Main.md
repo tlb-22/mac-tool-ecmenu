@@ -6,3 +6,4 @@
 
 - [图片 / PDF 格式转换](FormatConversion.md)
 - [命令撤销与重做](CommandUndo.md)：候选命令范围、Finder 原生能力验证与自有历史方案。
+- [架构梳理与重构](ArchitectureRefactor/Main.md)：当前功能流、模块 API 输入/输出、数据所有权、目标职责与分阶段迁移方案；尚未实施代码重构。
