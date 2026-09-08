@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import SwiftUI
 import XCTest
 @testable import ECMenu
@@ -157,6 +158,248 @@ final class FileTemplatesPageTests: XCTestCase {
         assertIdentity(middle, target: fixture.firstFileName, in: host)
     }
 
+    func testDeletionKeepsThePageAppearanceAndRejectsConcurrentActionsUntilOnlyTheTargetRowIsRemoved() async throws {
+        let fixture = try FileTemplatesPageFixture()
+        let gate = FileTemplatesNativeRemovalGate()
+        fixture.harness.removalBoundary = { try await gate.remove($0) }
+        let host = FileTemplatesNativePageHost(harness: fixture.harness)
+        defer {
+            gate.finish()
+            host.close()
+        }
+        _ = try await field(for: fixture.firstName, in: host)
+        let retainedField = try await field(for: fixture.secondName, in: host)
+        let originalTemplates = fixture.harness.templates
+        let originalFields = nativeFields(in: host.view)
+        let originalColors = originalFields.map(\.textColor)
+        let deletion = try XCTUnwrap(operationButtons(in: host).first {
+            $0.text.contains(String(localized: FileTemplatesText.delete))
+        })
+        XCTAssertTrue(deletion.press())
+        await gate.waitUntilRemoving()
+
+        // 不先刷新 NSView：入口必须立即读到删除锁，而不能依赖之后的 SwiftUI 更新。
+        let coordinator = try XCTUnwrap(retainedField.editingCoordinator)
+        coordinator.requestEditing()
+        XCTAssertFalse(fixture.harness.nameEditing.isTransitioning)
+        retainedField.selectText(nil)
+        XCTAssertFalse(fixture.harness.nameEditing.isTransitioning)
+        XCTAssertFalse(retainedField.becomeFirstResponder())
+        let point = retainedField.convert(NSPoint(x: retainedField.bounds.midX, y: retainedField.bounds.midY), to: host.view)
+        let hit = try hitView(at: point, in: host)
+        XCTAssertTrue(hit === retainedField)
+        try mouseDown(on: hit, at: point, in: host)
+        XCTAssertFalse(fixture.harness.nameEditing.isTransitioning)
+        XCTAssertNil(fixture.harness.nameEditing.draft)
+        XCTAssertNil(retainedField.currentEditor())
+
+        host.layout()
+        XCTAssertTrue(fixture.harness.isUpdating)
+        XCTAssertEqual(fixture.harness.templates, originalTemplates)
+        XCTAssertEqual(nativeFields(in: host.view).map(ObjectIdentifier.init), originalFields.map(ObjectIdentifier.init))
+        XCTAssertEqual(originalFields.map(\.textColor), originalColors)
+        XCTAssertTrue(originalFields.allSatisfy(\.isEnabled))
+        let actions = accessibilityElements(in: host.view).filter { $0.role == .button }
+        XCTAssertFalse(actions.isEmpty)
+        XCTAssertTrue(actions.allSatisfy(\.isEnabled), "Removing one row must not dim every action button")
+        XCTAssertFalse(accessibilityElements(in: host.view).contains { $0.role == .progressIndicator })
+
+        // 删除按钮保留正常外观，重复删除和其它入口仍由操作重入规则拒绝。
+        for action in actions { XCTAssertTrue(action.press()) }
+        await Task.yield()
+        XCTAssertEqual(gate.ids, [fixture.firstName.templateID])
+        XCTAssertEqual(fixture.harness.removalAttempts, [fixture.firstName.templateID])
+        XCTAssertTrue(fixture.harness.openedIDs.isEmpty)
+        XCTAssertTrue(fixture.harness.replacedIDs.isEmpty)
+        XCTAssertEqual(fixture.harness.importCount, 0)
+        XCTAssertTrue(fixture.harness.saved.isEmpty)
+
+        // 页面身份变化不应重置由状态页持有的文件操作锁。
+        host.rebuildPage()
+        let rebuiltRemovedField = try await field(for: fixture.firstName, in: host)
+        let rebuiltRetainedField = try await field(for: fixture.secondName, in: host)
+        let rebuiltDeletion = try XCTUnwrap(operationButtons(in: host).first {
+            $0.text.contains(String(localized: FileTemplatesText.delete))
+        })
+        XCTAssertTrue(rebuiltDeletion.press())
+        try XCTUnwrap(rebuiltRetainedField.editingCoordinator).requestEditing()
+        XCTAssertFalse(fixture.harness.nameEditing.isTransitioning)
+        XCTAssertNil(fixture.harness.nameEditing.draft)
+        await Task.yield()
+        XCTAssertEqual(gate.ids, [fixture.firstName.templateID])
+        XCTAssertEqual(fixture.harness.removalAttempts, [fixture.firstName.templateID])
+
+        gate.finish()
+        for _ in 0..<100 {
+            if fixture.harness.templates.count == originalTemplates.count - 1,
+               !fixture.harness.isUpdating,
+               fixture.harness.actions.allowsNameEditing(fixture.secondName, in: fixture.harness.nameEditing) { break }
+            await Task.yield()
+        }
+        // 不等待下一次 NSView 更新；操作结束后的第一次选择立即进入编辑。
+        rebuiltRetainedField.selectText(nil)
+        try await assertEditing(fixture.secondName, field: rebuiltRetainedField, host: host)
+        host.layout()
+        XCTAssertEqual(fixture.harness.templates, originalTemplates.filter { $0.id != fixture.firstName.templateID })
+        XCTAssertEqual(fixture.harness.removedIDs, [fixture.firstName.templateID])
+        XCTAssertFalse(nativeFields(in: host.view).contains { $0 === rebuiltRemovedField })
+        assertIdentity(rebuiltRetainedField, target: fixture.secondName, in: host)
+    }
+
+    func testDeletionRejectsNewEditingInsideTheSynchronousEndNotification() async throws {
+        let fixture = try FileTemplatesPageFixture()
+        let gate = FileTemplatesNativeRemovalGate()
+        fixture.harness.removalBoundary = { try await gate.remove($0) }
+        let host = FileTemplatesNativePageHost(harness: fixture.harness)
+        defer {
+            gate.finish()
+            host.close()
+        }
+        let source = try await field(for: fixture.firstName, in: host)
+        let other = try await field(for: fixture.secondName, in: host)
+        let otherCoordinator = try XCTUnwrap(other.editingCoordinator)
+        try click(source, in: host)
+        try await assertEditing(fixture.firstName, field: source, host: host)
+        try typeIntoFirstResponder("Save then delete", in: host)
+
+        var endNotificationCount = 0
+        let observer = NotificationCenter.default.publisher(
+            for: NSControl.textDidEndEditingNotification,
+            object: source
+        ).sink { _ in
+            endNotificationCount += 1
+            XCTAssertNil(fixture.harness.nameEditing.draft,
+                         "This callback must exercise the handoff after the previous draft was cleared")
+            XCTAssertFalse(fixture.harness.actions.isPerforming,
+                           "The file operation must still be finishing its previous name")
+            other.selectText(nil)
+            otherCoordinator.requestEditing()
+            XCTAssertNil(fixture.harness.nameEditing.draft)
+            XCTAssertNil(other.currentEditor(), "The end notification must not open a new native editor")
+        }
+        defer { observer.cancel() }
+
+        let deletion = try XCTUnwrap(operationButtons(in: host).first {
+            $0.text.contains(String(localized: FileTemplatesText.delete))
+        })
+        XCTAssertTrue(deletion.press())
+        await gate.waitUntilRemoving()
+        XCTAssertEqual(endNotificationCount, 1)
+        XCTAssertNil(fixture.harness.nameEditing.draft)
+        XCTAssertNil(other.currentEditor())
+        XCTAssertEqual(fixture.harness.saved, [
+            FileTemplatesNativeSave(target: fixture.firstName, value: "Save then delete"),
+        ])
+        XCTAssertEqual(gate.ids, [fixture.firstName.templateID])
+        gate.finish()
+        for _ in 0..<100 {
+            if fixture.harness.removedIDs == [fixture.firstName.templateID],
+               !fixture.harness.actions.isPerforming { break }
+            await Task.yield()
+        }
+        XCTAssertEqual(fixture.harness.removalAttempts, [fixture.firstName.templateID])
+        XCTAssertEqual(fixture.harness.removedIDs, [fixture.firstName.templateID])
+        XCTAssertNil(fixture.harness.nameEditing.draft)
+        XCTAssertNil(other.currentEditor())
+    }
+
+    func testAddingAndReplacingKeepExistingRowsVisuallyStableDuringTheOperation() async throws {
+        for action in [FileTemplatesNativeMutation.add, .replace] {
+            let fixture = try FileTemplatesPageFixture()
+            let gate = FileTemplatesNativeActionGate()
+            fixture.harness.importBoundary = { try await gate.perform() }
+            fixture.harness.replacementBoundary = { _ in try await gate.perform() }
+            let host = FileTemplatesNativePageHost(harness: fixture.harness)
+            defer {
+                gate.finish()
+                host.close()
+            }
+            let first = try await field(for: fixture.firstName, in: host)
+            let second = try await field(for: fixture.secondName, in: host)
+            let original = fixture.harness.templates
+            let originalFields = nativeFields(in: host.view)
+            let originalColors = originalFields.map(\.textColor)
+            let title = action == .add ? FileTemplatesText.add : FileTemplatesText.replace
+            let trigger = try XCTUnwrap(operationButtons(in: host).first {
+                $0.text.contains(String(localized: title))
+            })
+            XCTAssertTrue(trigger.press())
+            await gate.waitUntilPerforming()
+            host.layout()
+            XCTAssertTrue(fixture.harness.isUpdating)
+            XCTAssertEqual(fixture.harness.templates, original)
+            XCTAssertTrue(originalFields.allSatisfy(\.isEnabled))
+            XCTAssertEqual(originalFields.map(\.textColor), originalColors)
+            XCTAssertEqual(nativeFields(in: host.view).map(ObjectIdentifier.init), originalFields.map(ObjectIdentifier.init))
+            XCTAssertTrue(accessibilityElements(in: host.view).filter { $0.role == .button }.allSatisfy(\.isEnabled))
+            XCTAssertFalse(accessibilityElements(in: host.view).contains { $0.role == .progressIndicator })
+            XCTAssertTrue(trigger.press())
+            await Task.yield()
+            XCTAssertEqual(gate.callCount, 1)
+
+            gate.finish()
+            for _ in 0..<100 {
+                if !fixture.harness.isUpdating,
+                   fixture.harness.actions.allowsNameEditing(fixture.firstName, in: fixture.harness.nameEditing) { break }
+                await Task.yield()
+            }
+            XCTAssertFalse(fixture.harness.isUpdating)
+            first.selectText(nil)
+            try await assertEditing(fixture.firstName, field: first, host: host)
+            assertIdentity(first, target: fixture.firstName, in: host)
+            assertIdentity(second, target: fixture.secondName, in: host)
+            switch action {
+            case .add:
+                XCTAssertEqual(fixture.harness.importCount, 1)
+                XCTAssertEqual(Array(fixture.harness.templates.prefix(original.count)), original)
+                XCTAssertEqual(fixture.harness.templates.count, original.count + 1)
+            case .replace:
+                XCTAssertEqual(fixture.harness.replacedIDs, [fixture.firstName.templateID])
+                XCTAssertEqual(fixture.harness.templates, original)
+            }
+        }
+    }
+
+    func testFailedDeletionPreservesRowsAndReleasesTheLockForRetry() async throws {
+        let fixture = try FileTemplatesPageFixture()
+        let gate = FileTemplatesNativeRemovalGate()
+        fixture.harness.removalBoundary = { try await gate.remove($0) }
+        let host = FileTemplatesNativePageHost(harness: fixture.harness)
+        defer {
+            gate.finish()
+            host.close()
+        }
+        let first = try await field(for: fixture.firstName, in: host)
+        let retained = try await field(for: fixture.secondName, in: host)
+        let original = fixture.harness.templates
+        let deletion = try XCTUnwrap(operationButtons(in: host).first {
+            $0.text.contains(String(localized: FileTemplatesText.delete))
+        })
+        XCTAssertTrue(deletion.press())
+        await gate.waitUntilRemoving()
+        gate.finish(.failure(FileTemplatesNativeRemovalError.expected))
+        try await dismissOperationError(in: host)
+        XCTAssertEqual(fixture.harness.templates, original)
+        XCTAssertTrue(fixture.harness.removedIDs.isEmpty)
+        XCTAssertFalse(fixture.harness.isUpdating)
+        assertIdentity(first, target: fixture.firstName, in: host)
+        assertIdentity(retained, target: fixture.secondName, in: host)
+
+        fixture.harness.removalBoundary = nil
+        let retry = try XCTUnwrap(operationButtons(in: host).first {
+            $0.text.contains(String(localized: FileTemplatesText.delete))
+        })
+        XCTAssertTrue(retry.press())
+        for _ in 0..<100 {
+            if fixture.harness.removedIDs == [fixture.firstName.templateID] { break }
+            await Task.yield()
+        }
+        XCTAssertEqual(fixture.harness.removalAttempts, [fixture.firstName.templateID, fixture.firstName.templateID])
+        XCTAssertEqual(fixture.harness.removedIDs, [fixture.firstName.templateID])
+        XCTAssertEqual(fixture.harness.templates, original.filter { $0.id != fixture.firstName.templateID })
+        assertIdentity(retained, target: fixture.secondName, in: host)
+    }
+
     func testBlankAndFieldClicksKeepTheLastDestinationWhileSaving() async throws {
         for finishLast in [false, true] {
             let fixture = try FileTemplatesPageFixture()
@@ -286,6 +529,19 @@ final class FileTemplatesPageTests: XCTestCase {
         assertIdentity(name, target: fixture.firstName, in: host)
         try typeIntoFirstResponder("Corrected", in: host)
         XCTAssertEqual(fixture.harness.nameEditing.draft?.value, "Corrected")
+    }
+
+    /// 隐藏宿主通过提示框的公开错误绑定确认失败，系统弹窗展示留给实际窗口验收。
+    private func dismissOperationError(in host: FileTemplatesNativePageHost) async throws {
+        for _ in 0..<100 {
+            if let message = host.harness.actions.errorMessage {
+                XCTAssertFalse(message.isEmpty)
+                host.harness.actions.errorMessage = nil
+                return
+            }
+            await Task.yield()
+        }
+        XCTFail("A failed deletion must publish an operation error before it can be acknowledged")
     }
 
     private func assertIdentity(_ field: FileTemplateNameNativeField, target: FileTemplateNameTarget, in host: FileTemplatesNativePageHost) {
@@ -426,14 +682,47 @@ nonisolated private struct FileTemplatesNativeSave: Equatable {
 @MainActor
 private final class FileTemplatesNativePageHarness: ObservableObject {
     let nameEditing = FileTemplateNameEditingSession()
+    let actions = FileTemplatePageActions()
     @Published private(set) var templates: [FileTemplate]
     @Published private(set) var isUpdating = false
     private(set) var saved: [FileTemplatesNativeSave] = []
     private(set) var openedIDs: [FileTemplateID] = []
+    private(set) var replacedIDs: [FileTemplateID] = []
+    private(set) var importCount = 0
+    private(set) var removalAttempts: [FileTemplateID] = []
+    private(set) var removedIDs: [FileTemplateID] = []
+    var removalBoundary: ((FileTemplateID) async throws -> Void)?
+    var replacementBoundary: ((FileTemplateID) async throws -> Void)?
+    var importBoundary: (() async throws -> Void)?
     var saveBoundary: ((FileTemplatesNativeSave) async throws -> Void)?
 
     init(templates: [FileTemplate]) { self.templates = templates }
     func open(_ id: FileTemplateID) { openedIDs.append(id) }
+    func replace(_ id: FileTemplateID) async throws {
+        isUpdating = true
+        defer { isUpdating = false }
+        try await replacementBoundary?(id)
+        replacedIDs.append(id)
+        templates = Array(templates)
+    }
+
+    func importTemplate() async throws {
+        importCount += 1
+        isUpdating = true
+        defer { isUpdating = false }
+        try await importBoundary?()
+        templates.append(try FileTemplate(displayName: "Imported", defaultFileName: "imported.bin"))
+    }
+
+    func remove(_ id: FileTemplateID) async throws {
+        removalAttempts.append(id)
+        isUpdating = true
+        defer { isUpdating = false }
+        try await removalBoundary?(id)
+        let position = try XCTUnwrap(templates.firstIndex { $0.id == id })
+        templates.remove(at: position)
+        removedIDs.append(id)
+    }
 
     func update(_ id: FileTemplateID, field: FileTemplateNameField, value: String) async throws {
         let change = FileTemplatesNativeSave(target: .init(templateID: id, field: field), value: value)
@@ -449,12 +738,16 @@ private final class FileTemplatesNativePageHarness: ObservableObject {
 @MainActor
 private struct FileTemplatesNativePageContent: View {
     @ObservedObject var harness: FileTemplatesNativePageHarness
+    let pageID: UUID
     var body: some View {
         FileTemplatesPage(
-            state: .ready(harness.templates), isUpdating: harness.isUpdating, nameEditing: harness.nameEditing,
-            importTemplate: {}, updateName: { try await harness.update($0, field: $1, value: $2) },
-            openTemplate: { harness.open($0) }, replaceTemplate: { _ in }, removeTemplate: { _ in }, reload: {}
+            state: .ready(harness.templates), isUpdating: harness.isUpdating,
+            nameEditing: harness.nameEditing, actions: harness.actions,
+            importTemplate: { try await harness.importTemplate() }, updateName: { try await harness.update($0, field: $1, value: $2) },
+            openTemplate: { harness.open($0) }, replaceTemplate: { try await harness.replace($0) },
+            removeTemplate: { try await harness.remove($0) }, reload: {}
         )
+        .id(pageID)
     }
 }
 
@@ -468,7 +761,7 @@ private final class FileTemplatesNativePageHost {
     init(harness: FileTemplatesNativePageHarness) {
         self.harness = harness
         let frame = NSRect(x: 0, y: 0, width: 720, height: 420)
-        view = NSHostingView(rootView: FileTemplatesNativePageContent(harness: harness))
+        view = NSHostingView(rootView: FileTemplatesNativePageContent(harness: harness, pageID: UUID()))
         view.frame = frame
         window = NSWindow(contentRect: frame, styleMask: [.titled], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
@@ -477,6 +770,10 @@ private final class FileTemplatesNativePageHost {
         layout()
     }
     func layout() { view.layoutSubtreeIfNeeded() }
+    func rebuildPage() {
+        view.rootView = FileTemplatesNativePageContent(harness: harness, pageID: UUID())
+        layout()
+    }
     func close() {
         harness.nameEditing.cancelEditing()
         window.contentView = nil
@@ -535,4 +832,73 @@ private enum FileTemplatesBlankArea {
     case belowLastRow
     case outerMargin
     case footer
+}
+
+@MainActor
+private final class FileTemplatesNativeRemovalGate {
+    private(set) var ids: [FileTemplateID] = []
+    private var entered: CheckedContinuation<Void, Never>?
+    private var completion: CheckedContinuation<Void, Error>?
+
+    func remove(_ id: FileTemplateID) async throws {
+        ids.append(id)
+        guard ids.count == 1 else {
+            XCTFail("An in-flight deletion must reject repeated file actions")
+            return
+        }
+        try await withCheckedThrowingContinuation { continuation in
+            completion = continuation
+            entered?.resume()
+            entered = nil
+        }
+    }
+
+    func waitUntilRemoving() async {
+        if completion != nil { return }
+        await withCheckedContinuation { entered = $0 }
+    }
+
+    func finish(_ result: Result<Void, Error> = .success(())) {
+        completion?.resume(with: result)
+        completion = nil
+    }
+}
+
+private enum FileTemplatesNativeRemovalError: Error {
+    case expected
+}
+
+private enum FileTemplatesNativeMutation {
+    case add
+    case replace
+}
+
+@MainActor
+private final class FileTemplatesNativeActionGate {
+    private(set) var callCount = 0
+    private var entered: CheckedContinuation<Void, Never>?
+    private var completion: CheckedContinuation<Void, Error>?
+
+    func perform() async throws {
+        callCount += 1
+        guard callCount == 1 else {
+            XCTFail("An in-flight file operation must reject repeated actions")
+            return
+        }
+        try await withCheckedThrowingContinuation { continuation in
+            completion = continuation
+            entered?.resume()
+            entered = nil
+        }
+    }
+
+    func waitUntilPerforming() async {
+        if completion != nil { return }
+        await withCheckedContinuation { entered = $0 }
+    }
+
+    func finish() {
+        completion?.resume()
+        completion = nil
+    }
 }

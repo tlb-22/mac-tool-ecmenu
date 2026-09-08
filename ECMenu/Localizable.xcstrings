@@ -865,6 +865,24 @@
         }
       }
     },
+    "fileTemplates.action.replace.help": {
+      "comment": "Explains how the template file is replaced",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Replace the template file"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "更换模版文件"
+          }
+        }
+      }
+    },
     "fileTemplates.empty.description": {
       "comment": "Guidance for adding the first file template",
       "extractionState": "manual",

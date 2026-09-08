@@ -286,6 +286,7 @@ struct StatusPageContent: View {
 
     /// 草稿随状态页窗口保留；侧栏切换先完成当前名称提交。
     @StateObject private var templateNameEditing = FileTemplateNameEditingSession()
+    @StateObject private var templateActions = FileTemplatePageActions()
 
     private var paneSelection: Binding<StatusPagePane> {
         Binding(get: { selectedPane }, set: selectPane)
@@ -379,6 +380,7 @@ struct StatusPageContent: View {
                 state: fileTemplateState,
                 isUpdating: isUpdatingFileTemplates,
                 nameEditing: templateNameEditing,
+                actions: templateActions,
                 importTemplate: importTemplate,
                 updateName: updateTemplateName,
                 openTemplate: openTemplate,

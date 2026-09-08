@@ -13,6 +13,8 @@ enum FileTemplatesStyle {
     static let nameLeadingPadding: CGFloat = 4
     /// 打开、更换和删除操作之间的间距。
     static let actionSpacing: CGFloat = 8
+    /// 仅在文件读写持续一段时间后显示进度，避免短操作闪现指示器。
+    static let operationProgressDelay: Duration = .milliseconds(300)
 }
 
 /// 模板管理的呈现层；每次名称编辑和文件操作分别提交。
@@ -20,24 +22,13 @@ struct FileTemplatesPage: View {
     let state: FileTemplatePageState
     let isUpdating: Bool
     @ObservedObject var nameEditing: FileTemplateNameEditingSession
+    @ObservedObject var actions: FileTemplatePageActions
     let importTemplate: () async throws -> Void
     let updateName: (FileTemplateID, FileTemplateNameField, String) async throws -> Void
     let openTemplate: (FileTemplateID) async throws -> Void
     let replaceTemplate: (FileTemplateID) async throws -> Void
     let removeTemplate: (FileTemplateID) async throws -> Void
     let reload: () async -> Void
-
-    @State private var operationError: String?
-    private enum FileActionState {
-        case idle
-        case waitingForName
-        case performing
-    }
-
-    @State private var fileActionState = FileActionState.idle
-
-    // 只有文件操作使操作区进入忙碌状态；名称之间的焦点切换保持页面外观稳定。
-    private var isPerformingFileAction: Bool { fileActionState == .performing }
 
     var body: some View {
         VStack(spacing: StatusPageStyle.sectionSpacing) {
@@ -72,13 +63,11 @@ struct FileTemplatesPage: View {
                             Image(systemName: "plus")
                         }
                     }
-                    .disabled(isPerformingFileAction)
 
                     Spacer()
 
-                    if isPerformingFileAction && isUpdating {
-                        ProgressView()
-                            .controlSize(.small)
+                    if actions.isPerforming && isUpdating {
+                        FileTemplateOperationProgress()
                     }
                 }
             }
@@ -91,17 +80,17 @@ struct FileTemplatesPage: View {
         .alert(
             Text(FileTemplatesText.operationFailed),
             isPresented: Binding(
-                get: { operationError != nil },
-                set: { if !$0 { operationError = nil } }
+                get: { actions.errorMessage != nil },
+                set: { if !$0 { actions.errorMessage = nil } }
             )
         ) {
             Button {
-                operationError = nil
+                actions.errorMessage = nil
             } label: {
                 Text(FileTemplatesText.ok)
             }
         } message: {
-            Text(verbatim: operationError ?? "")
+            Text(verbatim: actions.errorMessage ?? "")
         }
     }
 
@@ -163,6 +152,7 @@ struct FileTemplatesPage: View {
                 } label: {
                     Text(FileTemplatesText.replace)
                 }
+                .help(Text(FileTemplatesText.replaceHelp))
 
                 Button(role: .destructive) {
                     perform { try await removeTemplate(template.id) }
@@ -174,43 +164,52 @@ struct FileTemplatesPage: View {
                 .help(Text(FileTemplatesText.delete))
                 .accessibilityLabel(Text(FileTemplatesText.delete))
             }
-            .disabled(isPerformingFileAction)
         }
         .padding(.horizontal, FileTemplatesStyle.rowHorizontalPadding)
         .padding(.vertical, FileTemplatesStyle.rowVerticalPadding)
     }
 
     private func name(_ template: FileTemplate, field: FileTemplateNameField) -> some View {
-        VStack(alignment: .leading, spacing: FileTemplatesStyle.rowNameSpacing) {
+        let target = FileTemplateNameTarget(templateID: template.id, field: field)
+        return VStack(alignment: .leading, spacing: FileTemplatesStyle.rowNameSpacing) {
             FileTemplateNameTextField(
                 template: template,
                 field: field,
                 session: nameEditing,
-                isEnabled: !isPerformingFileAction,
+                allowsEditing: { actions.allowsNameEditing(target, in: nameEditing) },
                 save: { value in try await updateName(template.id, field, value) }
             )
             .frame(height: FileTemplatesStyle.nameHeight)
 
             if let draft = nameEditing.draft,
-               draft.target == FileTemplateNameTarget(templateID: template.id, field: field) {
+               draft.target == target {
                 FileTemplateNameError(draft: draft)
             }
         }
     }
 
     private func perform(_ operation: @escaping () async throws -> Void) {
-        guard fileActionState == .idle else { return }
-        fileActionState = .waitingForName
-        Task {
-            defer { fileActionState = .idle }
-            guard await nameEditing.finishEditing() else { return }
-            fileActionState = .performing
-            do {
-                try await operation()
-            } catch {
-                operationError = error.localizedDescription
+        actions.perform(finishing: nameEditing, operation: operation)
+    }
+}
+
+/// 短操作保持底部稳定；视图移除时取消尚未到期的进度显示。
+private struct FileTemplateOperationProgress: View {
+    @State private var isVisible = false
+
+    var body: some View {
+        ProgressView()
+            .controlSize(.small)
+            .opacity(isVisible ? 1 : 0)
+            .accessibilityHidden(!isVisible)
+            .task {
+                do {
+                    try await Task.sleep(for: FileTemplatesStyle.operationProgressDelay)
+                } catch {
+                    return
+                }
+                isVisible = true
             }
-        }
     }
 }
 
@@ -270,6 +269,10 @@ enum FileTemplatesText {
     static let replace = LocalizedStringResource(
         "fileTemplates.action.replace", defaultValue: "Replace…",
         comment: "Chooses another ordinary file to replace the saved template"
+    )
+    static let replaceHelp = LocalizedStringResource(
+        "fileTemplates.action.replace.help", defaultValue: "Replace the template file",
+        comment: "Explains how the template file is replaced"
     )
     static let add = LocalizedStringResource(
         "fileTemplates.action.add", defaultValue: "Add Template…",

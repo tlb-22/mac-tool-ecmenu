@@ -6,11 +6,11 @@ struct FileTemplateNameTextField: NSViewRepresentable {
     let template: FileTemplate
     let field: FileTemplateNameField
     let session: FileTemplateNameEditingSession
-    let isEnabled: Bool
+    let allowsEditing: () -> Bool
     let save: (String) async throws -> Void
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(template: template, field: field, session: session, save: save)
+        Coordinator(template: template, field: field, session: session, allowsEditing: allowsEditing, save: save)
     }
 
     func makeNSView(context: Context) -> FileTemplateNameNativeField {
@@ -21,8 +21,11 @@ struct FileTemplateNameTextField: NSViewRepresentable {
         let coordinator = context.coordinator
         precondition(coordinator.target == FileTemplateNameTarget(templateID: template.id, field: field))
         coordinator.session = session
+        coordinator.allowsEditing = allowsEditing
         coordinator.save = save
-        nativeField.isEnabled = isEnabled
+        let allowsEditing = allowsEditing()
+        if nativeField.isEditable != allowsEditing { nativeField.isEditable = allowsEditing }
+        if nativeField.isSelectable != allowsEditing { nativeField.isSelectable = allowsEditing }
         if nativeField.currentEditor() == nil, !session.isEditing(coordinator) {
             let value = field.value(in: template)
             if nativeField.stringValue != value { nativeField.stringValue = value }
@@ -46,7 +49,11 @@ struct FileTemplateNameTextField: NSViewRepresentable {
         let target: FileTemplateNameTarget
         let nativeField: FileTemplateNameNativeField
         var session: FileTemplateNameEditingSession
+        var allowsEditing: () -> Bool
         var save: (String) async throws -> Void
+
+        // 在事件入口读取当前阶段，避免下一次视图更新前开放并发编辑。
+        var canBeginEditing: Bool { allowsEditing() }
 
         var displayedValue: String {
             nativeField.currentEditor()?.string ?? nativeField.stringValue
@@ -56,11 +63,13 @@ struct FileTemplateNameTextField: NSViewRepresentable {
             template: FileTemplate,
             field: FileTemplateNameField,
             session: FileTemplateNameEditingSession,
+            allowsEditing: @escaping () -> Bool,
             save: @escaping (String) async throws -> Void
         ) {
             target = FileTemplateNameTarget(templateID: template.id, field: field)
             nativeField = FileTemplateNameNativeField(frame: .zero)
             self.session = session
+            self.allowsEditing = allowsEditing
             self.save = save
             super.init()
 
@@ -90,6 +99,7 @@ struct FileTemplateNameTextField: NSViewRepresentable {
         }
 
         func requestEditing() {
+            guard canBeginEditing else { return }
             session.requestEditing(self, save: save)
         }
 
@@ -103,7 +113,10 @@ struct FileTemplateNameTextField: NSViewRepresentable {
         }
 
         func beginEditing(_ value: String) {
-            guard nativeField.window != nil, nativeField.isEnabled else { return }
+            guard nativeField.window != nil, nativeField.isEnabled, canBeginEditing else { return }
+            // 文件操作可能刚完成，原生控件的下一次更新尚未发生。
+            if !nativeField.isEditable { nativeField.isEditable = true }
+            if !nativeField.isSelectable { nativeField.isSelectable = true }
             if let editor = nativeField.currentEditor() {
                 if editor.string != value { editor.string = value }
             } else if nativeField.stringValue != value {
@@ -195,7 +208,7 @@ final class FileTemplateNameNativeField: NSTextField {
     }
 
     override func mouseDown(with event: NSEvent) {
-        guard isEnabled, let coordinator = editingCoordinator else { return }
+        guard isEnabled, let coordinator = editingCoordinator, coordinator.canBeginEditing else { return }
         if coordinator.session.isEditing(coordinator), !coordinator.session.isTransitioning {
             super.mouseDown(with: event)
         } else {
@@ -204,7 +217,7 @@ final class FileTemplateNameNativeField: NSTextField {
     }
 
     private var isEditingApproved: Bool {
-        guard isEnabled, let coordinator = editingCoordinator else { return false }
+        guard isEnabled, let coordinator = editingCoordinator, coordinator.canBeginEditing else { return false }
         guard coordinator.session.isEditing(coordinator) else {
             coordinator.requestEditing()
             return false

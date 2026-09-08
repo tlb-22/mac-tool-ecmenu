@@ -6,7 +6,7 @@
 
 预览不是自动化 UI 测试。唯一 Composition 注册全部 Preview ID，稳定 runtime 解析 ID、验证注册唯一性并维持对应会话；各 Case 以独立 ID 固定一种可见状态，并复用生产呈现类型或呈现边界。完整测试保证 Preview target 可编译且入口可列出，可见结果仍由人工检查。
 
-异步输入交接使用[真实模板页面测试](../../Tests/ECMenuTests/Settings/StatusPage/FileTemplatesPageTests.swift)验证：在隐藏的 `NSWindow` / `NSHostingView` 中向实际名称控件发送鼠标事件，并通过窗口的原生 field editor 输入，检查控件身份、`firstResponder`、输入落点、空白点击退出及保存失败后的恢复。挂起保存的用例检查连续点击的最终目标、操作按钮可用性和页面进度状态。测试只访问本进程自建窗口，不显示窗口、获取桌面焦点或要求辅助功能授权；固定内存快照的预览不覆盖异步交接。
+异步输入交接使用[真实模板页面测试](../../Tests/ECMenuTests/Settings/StatusPage/FileTemplatesPageTests.swift)验证：在隐藏的 `NSWindow` / `NSHostingView` 中向实际名称控件发送鼠标事件，并通过窗口的原生 field editor 输入，检查控件身份、`firstResponder`、输入落点、空白点击退出及保存失败后的恢复。挂起保存的用例检查连续点击的最终目标、操作按钮可用性和页面进度状态；文件操作用例覆盖添加、更换和删除时的控件身份与外观、重复请求拦截、页面重建后保留操作锁，以及失败重试。测试只访问本进程自建窗口，不显示窗口、获取桌面焦点或要求辅助功能授权；固定内存快照的预览不覆盖异步交接。
 
 项目观察（2026-09-08，macOS 26.6.2、Xcode 26.6）：SwiftUI 的 `AccessibilityNode` / `AccessibilityLazyLayoutNode` 实现了公开的 Objective-C 可访问性方法，但没有声明 `NSAccessibilityProtocol` 协议；按协议转换过滤子节点会遗漏真实控件。宿主测试通过原生视图树定位名称控件，经公开可访问性方法动态分派检查 SwiftUI 操作按钮。节点具体类名只用于说明本次观察，测试不依赖私有类或选择器，也不将该协议声明情况视为跨系统版本保证。
 
