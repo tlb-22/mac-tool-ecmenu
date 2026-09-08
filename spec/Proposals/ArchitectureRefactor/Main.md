@@ -17,7 +17,7 @@
 2. [新建 TXT 全链路](Current/NewFile.md)：从 Finder 右键到文件落盘，适合作为第一条详细流程。
 3. [配置与模板管理](Current/ConfigurationAndTemplates.md)：修改开关、导入、编辑名称、打开、更换、删除与重试。
 4. [结构评估](Assessment.md)：有源码依据的问题、保留项与影响。
-5. [目标架构](Target/Main.md)：依赖关系、目录、模块契约和目标执行流。
+5. [目标架构](Target/Main.md)：依赖关系、[目录组织规则](Target/DirectoryRules.md)、模块契约和目标执行流。
 6. [迁移与验证](Migration.md)：实施顺序、每步完成标准、测试和平台验收边界。
 
 各当前流程都附有模块输入/输出及外部 API 表。其他流程和开发工具从当前系统总览进入。

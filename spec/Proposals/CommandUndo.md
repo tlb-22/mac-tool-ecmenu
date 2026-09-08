@@ -1,4 +1,4 @@
-# 命令撤销与重做【待决策】
+# 命令撤销与重做【暂不实现】
 
 本提案不属于当前产品行为和验收范围。目标是在 Finder 工作流中恢复 ECMenu 对文件造成的变化；平台能力与证据限制见 [Finder 撤销集成边界](../Technical/Platform/Finder/UndoIntegration.md)。
 

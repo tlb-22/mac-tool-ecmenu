@@ -36,33 +36,37 @@
 
 ## 建议目录
 
+目录职责与拆分条件见[目录组织规则](DirectoryRules.md)。下方按实际能力展示所需分层，简单能力保留少量文件。
+
 ```text
 ECMenu/
 ├── App/                              入口、生命周期、唯一依赖装配
 │   ├── ApplicationComposition.swift
 │   └── AppDelegate.swift
 ├── Settings/                         设置外壳、窗口、导航与页面装配
-├── Features/
-│   ├── ApplicationSettings/          登录项与系统设置入口、通用设置页
-│   ├── MenuConfiguration/
-│   │   ├── Application/              配置变更、快照投影、失效发布
-│   │   ├── Persistence/              UserDefaults 读写
-│   │   └── Presentation/             右键菜单设置页
-│   ├── FileTemplates/
-│   │   ├── Domain/                   模板元数据、名称规则、内容/变更结果
-│   │   ├── Application/              操作协调、只读接口、提交结果发布
-│   │   ├── Persistence/              actor、索引、文件副本、独立迁移
-│   │   └── Presentation/             列表、文件操作会话、名称编辑与控件
+├── ApplicationSettings/             登录项与系统设置入口
+│   ├── Platform/                     系统状态查询、登记与设置入口适配
+│   └── Presentation/                 通用设置页及交互状态
+├── MenuConfiguration/
+│   ├── Application/                  配置变更、快照投影、失效发布
+│   ├── Persistence/                  UserDefaults 读写
+│   └── Presentation/                 右键菜单设置页
+├── FileTemplates/
+│   ├── Domain/                       模板元数据、名称规则、内容/变更结果
+│   ├── Application/                  操作协调、读取与提交结果发布
+│   ├── Persistence/                  actor、索引、文件副本、独立迁移
+│   └── Presentation/                 列表、文件操作会话、名称编辑与控件
+├── Commands/                         Finder 发起的文件操作
 │   ├── NewFile/                      用例与反馈；简单能力使用少量文件
 │   ├── CopyPath/                     计划、用例、剪贴板边界、反馈
 │   ├── Visibility/                   共用隐藏/显示规则、用例、属性边界、反馈
 │   ├── OpenInApplication/            共用用例、Workspace 适配、反馈
 │   └── ImageCompression/
 │       ├── Domain/                   设置、计划、图像尺寸与结果
-│       ├── Application/              参数会话和批量用例
+│       ├── Application/              请求参数与批量操作协调
 │       ├── Persistence/              最后确认参数
 │       ├── Platform/                 ImageIO / 像素处理与文件输出边界
-│       └── Presentation/             参数窗口/表单和结果文案
+│       └── Presentation/             参数窗口会话、表单和结果文案
 ├── CommandRuntime/                   类型恢复、Invocation、任务生命周期
 │   └── Progress/                     进度事实、Reporter、Center
 ├── Feedback/                         通用警告与进度窗口适配
@@ -72,7 +76,7 @@ ECMenu/
 ECMenuFinderExtension/
 ├── App/                              FinderSync 与管理位置
 ├── Menu/                             上下文读取、菜单构建/渲染、动作绑定
-├── Features/
+├── Commands/                         各命令的菜单贡献与可用条件
 │   ├── NewFile/
 │   ├── CopyPath/
 │   ├── Visibility/
@@ -84,11 +88,15 @@ ECMenuFinderExtension/
 ECMenuShared/
 ├── Contracts/
 │   ├── FileSystem/                   绝对路径和非空选择集
-│   ├── Commands/                     Feature 身份、descriptor、payload/envelope
+│   ├── Commands/                     共用 Feature 身份、descriptor、payload/envelope
+│   │   ├── NewFile/                  对应能力的类型化请求
+│   │   ├── CopyPath/
+│   │   ├── Visibility/
+│   │   ├── OpenInApplication/
+│   │   └── ImageCompression/
+│   ├── FileTemplates/                仅模板 ID 与菜单描述
 │   ├── MenuConfiguration/            开关值与完整菜单快照
-│   ├── IPC/                          请求种类与跨进程值契约
-│   └── Features/                     NewFile 等对应功能请求
-│       └── FileTemplates/            仅模板 ID 与菜单描述
+│   └── IPC/                          请求种类与跨进程值契约
 └── Platform/
     ├── IPC/                          端点身份、对端认证、framing、连接与监听
     ├── Rendering/                    共用 AppKit 图标画布原语
@@ -110,15 +118,15 @@ NewFile、CopyPath、Visibility、OpenInApplication、ImageCompression 三端使
 | 现有位置 | 目标位置 / 处理 |
 |---|---|
 | `ECMenu/App` + `ContextCommandComposition` | 生命周期继续在 App；实例装配归 ApplicationComposition；注册顺序与声明保留 |
-| `Settings/StatusPage/StatusPage.swift` | Settings 保留外壳；通用、菜单配置、模板内容移动到相应 Feature 呈现；读系统和文件选择转明确操作边界 |
+| `Settings/StatusPage/StatusPage.swift` | Settings 保留外壳；通用、菜单配置、模板内容移动到相应能力的 Presentation；读系统和文件选择转明确操作边界 |
 | `Settings/StatusPage/FileTemplate*` + `ECMenu/FileTemplates` | 合并在 FileTemplates 能力内，按领域/操作/存储/呈现拆开；控件身份与会话生命周期保持 |
 | `ECMenuShared/FileTemplates/FileTemplate.swift` | 拆出共享 ID；完整模型和管理校验移主应用 FileTemplates Domain，菜单描述继续共享 |
 | `ECMenu/MenuConfiguration` + `ApplicationIPCServer.menuSnapshot` | 配置能力的 Application/Persistence，IPC 注入快照读取闭包 |
-| `ContextCommands/Features/<能力>` | `Features/<能力>`；先明确完成结果，再按独立职责拆文件 |
+| `ContextCommands/Features/<能力>` | `Commands/<能力>`；先明确完成结果，再按独立职责拆文件 |
 | `ContextCommandExecution.swift` | CommandRuntime，按注册/Invocation/Router 的复杂度拆文件；保留类型关系 |
 | `ContextCommands/Presentation/Progress` | 状态/Reporter/Center 归 CommandRuntime/Progress；NSPanel 与行视图归 Feedback |
 | `ContextCommands/FileNaming.swift`、`SystemError.swift` | FileSystem，共用定义保持单一来源 |
-| Extension `ContextMenu` | 通用 Menu 与同级 Features；Controller 保留冻结动作与上下文，并明确 tag 生命周期和有界淘汰 |
+| Extension `ContextMenu` | 通用 Menu 与同级 Commands；Controller 保留冻结动作与上下文，并明确 tag 生命周期和有界淘汰 |
 | Shared `IPC` / `Rendering` / `Logging` | Contracts 与 Platform 区分，资源所有权保持原有单一边界 |
 
 Xcode 使用文件系统同步组，目录变化仍须核对 target membership 和 `membershipExceptions`；尤其 Preview 与集成 Sender 只编译所需源码。[project.pbxproj](../../../../ECMenu.xcodeproj/project.pbxproj)、[预览边界](../../../Technical/PreviewTarget.md)。
