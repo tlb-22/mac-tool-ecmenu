@@ -43,11 +43,30 @@ struct FinderMenuAutomationMain {
     private static func capture(_ request: CLICommand.CaptureRequest) async -> Never {
         let session = FinderMenuSession(context: request.context)
         do {
-            let menu = try session.prepare()
-            try await MenuScreenshot.capture(menu, to: request.outputURL)
-            try session.verifyAfterCapture()
+            let rootMenu = try session.prepare()
+            let capturedMenu: MenuSnapshot
+            if let templateAction = request.templateAction {
+                let submenu = try session.prepareTemplateSubmenu(
+                    parentTitle: templateAction.parentTitle
+                )
+                capturedMenu = submenu.snapshot
+                try await MenuScreenshot.capture(capturedMenu, to: request.outputURL)
+                try session.verifyTemplateSubmenu(submenu)
+                try session.performTemplate(
+                    named: templateAction.templateTitle,
+                    in: submenu,
+                    expectedFileURL: templateAction.expectedFileURL
+                )
+                ProtocolOutput.line(
+                    "CREATED\t\(Data(templateAction.expectedFileURL.path.utf8).base64EncodedString())"
+                )
+            } else {
+                capturedMenu = rootMenu
+                try await MenuScreenshot.capture(capturedMenu, to: request.outputURL)
+                try session.verifyAfterCapture()
+            }
             try session.closeOwnedUI()
-            ProtocolOutput.captured(menu)
+            ProtocolOutput.captured(capturedMenu)
             Darwin.exit(EXIT_SUCCESS)
         } catch let primaryError {
             report(primaryError)

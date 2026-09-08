@@ -216,13 +216,28 @@ nonisolated struct FinderContextMenuActionID: Hashable, Sendable {
     let localID: ContextMenuActionLocalID
 }
 
+/// 区分产品本地化文案和必须原样显示的用户名称。
+nonisolated enum ContextMenuActionTitle: Equatable, Sendable {
+    case localized(LocalizedStringResource)
+    case verbatim(String)
+
+    var string: String {
+        switch self {
+        case .localized(let resource):
+            String(localized: resource)
+        case .verbatim(let value):
+            value
+        }
+    }
+}
+
 /// Finder 渲染一个具体 Action 所需的无框架值。
 nonisolated struct FinderContextMenuActionDescriptor: Equatable, Sendable {
     /// 功能身份与局部 Action 身份组成的运行时键。
     let id: FinderContextMenuActionID
 
     /// Finder 菜单叶子显示的名称。
-    let title: LocalizedStringResource
+    let title: ContextMenuActionTitle
 
     /// Finder 菜单叶子显示的图标来源。
     let icon: ContextCommandIcon
@@ -236,8 +251,8 @@ struct ContextMenuAction<Command: ContextCommandPayload> {
     /// Feature 内唯一的局部身份。
     let id: ContextMenuActionLocalID
 
-    /// 菜单叶子的产品名称。
-    let title: LocalizedStringResource
+    /// 产品本地化名称或用户定义的模板显示名。
+    let title: ContextMenuActionTitle
 
     /// 菜单叶子的图标来源。
     let icon: ContextCommandIcon
@@ -257,7 +272,27 @@ struct ContextMenuAction<Command: ContextCommandPayload> {
         icon: ContextCommandIcon,
         command: @escaping (FinderContextMenuEvaluationContext) -> Command?
     ) {
-        precondition(!title.key.isEmpty)
+        self.init(
+            id: id,
+            title: .localized(title),
+            icon: icon,
+            command: command
+        )
+    }
+
+    /// 显式区分动态用户名称与本地化资源。
+    init(
+        id: String,
+        title: ContextMenuActionTitle,
+        icon: ContextCommandIcon,
+        command: @escaping (FinderContextMenuEvaluationContext) -> Command?
+    ) {
+        switch title {
+        case .localized(let resource):
+            precondition(!resource.key.isEmpty)
+        case .verbatim(let value):
+            precondition(!value.isEmpty)
+        }
         switch icon {
         case .systemSymbol(let name):
             precondition(!name.isEmpty)
@@ -419,10 +454,6 @@ enum FinderContextMenuBuilder {
                 )
             }
         }
-        precondition(
-            !nodes.flatMap({ $0.items }).isEmpty,
-            "A Finder context-menu Feature must declare at least one Action"
-        )
         return nodes
     }
 

@@ -13,7 +13,7 @@ final class ContextCommandCompositionTests: XCTestCase {
         XCTAssertEqual(
             ContextCommandComposition.handlers.descriptors,
             [
-                CreateNewTextFileCommand.descriptor,
+                CreateNewFileCommand.descriptor,
                 CopyPathCommand.descriptor,
                 HideItemsCommand.descriptor,
                 ShowItemsCommand.descriptor,

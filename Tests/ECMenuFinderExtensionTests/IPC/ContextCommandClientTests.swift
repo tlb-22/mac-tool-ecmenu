@@ -8,7 +8,10 @@ final class ContextCommandClientTests: XCTestCase {
     func testUnavailableTransportReportsFailureOnce() throws {
         var signals = 0
         let client = ContextCommandClient(transport: nil, signalFailure: { signals += 1 })
-        client.send(CreateNewTextFileCommand(directoryPath: try XCTUnwrap(AbsoluteFilePath(path: "/test"))))
+        client.send(CreateNewFileCommand(
+            directoryPath: try XCTUnwrap(AbsoluteFilePath(path: "/test")),
+            templateID: FileTemplateID()
+        ))
         XCTAssertEqual(signals, 1)
     }
 
@@ -18,7 +21,10 @@ final class ContextCommandClientTests: XCTestCase {
         let failed = expectation(description: "One delivery failure")
         failed.assertForOverFulfill = true
         let client = ContextCommandClient(transport: transport, signalFailure: { failed.fulfill() })
-        client.send(CreateNewTextFileCommand(directoryPath: try XCTUnwrap(AbsoluteFilePath(path: "/test"))))
+        client.send(CreateNewFileCommand(
+            directoryPath: try XCTUnwrap(AbsoluteFilePath(path: "/test")),
+            templateID: FileTemplateID()
+        ))
         await fulfillment(of: [failed], timeout: 1)
         XCTAssertEqual(transport.recordedRequests.count, 1)
     }
@@ -27,22 +33,21 @@ final class ContextCommandClientTests: XCTestCase {
     func testClientSendsCommandExactlyOnce() throws {
         let transport = RecordingContextCommandTransport()
         let client = ContextCommandClient(transport: transport)
-        let expected = CreateNewTextFileCommand(
+        let templateID = FileTemplateID()
+        let expected = CreateNewFileCommand(
             directoryPath: try XCTUnwrap(
                 AbsoluteFilePath(path: "/test/parent")
-            )
+            ),
+            templateID: templateID
         )
 
         client.send(expected)
 
         let requests = transport.recordedRequests
         XCTAssertEqual(requests.count, 1)
-        XCTAssertEqual(
-            try requests[0].command.decode(
-                as: CreateNewTextFileCommand.self
-            ),
-            expected
-        )
+        let decoded = try requests[0].command.decode(as: CreateNewFileCommand.self)
+        XCTAssertEqual(decoded, expected)
+        XCTAssertEqual(decoded.templateID, templateID)
     }
 }
 

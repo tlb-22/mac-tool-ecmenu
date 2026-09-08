@@ -23,11 +23,11 @@ final class CommandAlertContentTests: XCTestCase {
     }
 
     /// 权限不足和只读位置使用同一文案，且不暴露路径或系统诊断。
-    func testNewTextFileUnifiesWritePermissionFailures() throws {
+    func testNewFileUnifiesWritePermissionFailures() throws {
         let directoryURL = url("/private/test/secret/文稿")
         let permissionContent = try XCTUnwrap(
-            CreateNewTextFileAlertContent.make(
-                for: CreateNewTextFileFailure(
+            CreateNewFileAlertContent.make(
+                for: CreateNewFileFailure.destination(
                     directoryURL: directoryURL,
                     systemError: diagnosticError(kind: .permissionDenied)
                 ),
@@ -35,8 +35,8 @@ final class CommandAlertContentTests: XCTestCase {
             )
         )
         let readOnlyContent = try XCTUnwrap(
-            CreateNewTextFileAlertContent.make(
-                for: CreateNewTextFileFailure(
+            CreateNewFileAlertContent.make(
+                for: CreateNewFileFailure.destination(
                     directoryURL: directoryURL,
                     systemError: diagnosticError(kind: .readOnlyFileSystem)
                 ),
@@ -48,24 +48,40 @@ final class CommandAlertContentTests: XCTestCase {
         XCTAssertEqual(
             permissionContent,
             CommandAlertContent(
-                body: "无法新建 TXT：“文稿”没有写入权限。",
+                body: "无法新建文件：“文稿”没有写入权限。",
                 locale: simplifiedChinese
             )
         )
         XCTAssertEqual(
             try XCTUnwrap(
-                CreateNewTextFileAlertContent.make(
-                    for: CreateNewTextFileFailure(
+                CreateNewFileAlertContent.make(
+                    for: CreateNewFileFailure.destination(
                         directoryURL: directoryURL,
                         systemError: diagnosticError(kind: .permissionDenied)
                     ),
                     locale: english
                 )
             ).body,
-            "Couldn’t create a TXT file because “文稿” isn’t writable."
+            "Couldn’t create a file because “文稿” isn’t writable."
         )
         XCTAssertFalse(permissionContent.body.contains(directoryURL.path))
         XCTAssertFalse(permissionContent.body.contains(Self.diagnosticMarker))
+    }
+
+    /// 模板读取失败不能借用目标目录的写入权限提示。
+    func testNewFileTemplateFailuresNeverReportDestinationPermissions() {
+        for kind in [FileSystemErrorKind.permissionDenied, .readOnlyFileSystem, .unavailable, .other] {
+            let failure = CreateNewFileFailure.template(FileTemplateID(), diagnosticError(kind: kind))
+            XCTAssertNil(CreateNewFileAlertContent.make(for: failure, locale: simplifiedChinese))
+            XCTAssertNil(CreateNewFileAlertContent.make(for: failure, locale: english))
+        }
+        for kind in [FileSystemErrorKind.unavailable, .other] {
+            let failure = CreateNewFileFailure.destination(
+                directoryURL: url("/private/test/secret/文稿"),
+                systemError: diagnosticError(kind: kind)
+            )
+            XCTAssertNil(CreateNewFileAlertContent.make(for: failure, locale: simplifiedChinese))
+        }
     }
 
     /// 单项显示名称；批量中存在成功项时显示“部分”并按数量汇总。

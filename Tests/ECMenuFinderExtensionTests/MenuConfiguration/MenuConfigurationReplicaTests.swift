@@ -9,38 +9,103 @@ final class MenuConfigurationReplicaTests: XCTestCase {
         let suiteName = "MenuConfigurationReplicaTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
-        let cached = MenuConfiguration(isEnabled: false)
-        let cachedData = MenuConfigurationChannel.encodedData(for: cached)
-        defaults.set(cachedData, forKey: MenuConfigurationChannel.persistedConfigurationKey)
+        let template = FileTemplateMenuItem(id: FileTemplateID(), displayName: "Notes")
+        let cached = MenuConfigurationSnapshot(
+            configuration: MenuConfiguration(isEnabled: false),
+            fileTemplates: [template]
+        )
+        let cachedData = MenuConfigurationSnapshotCache.encode(cached)
+        defaults.set(cachedData, forKey: MenuConfigurationSnapshotCache.key)
         let transport = ControlledMenuConfigurationTransport()
         let replica = MenuConfigurationReplica(defaults: defaults, transport: transport)
 
         transport.completeNext(with: .failure(ApplicationIPCError.deadlineExceeded))
-        for _ in 0..<100 where replica.isRefreshing { await Task.yield() }
-        XCTAssertFalse(replica.isRefreshing)
+        await waitForRefresh(in: replica)
         XCTAssertFalse(replica.isEnabled)
-        XCTAssertEqual(defaults.data(forKey: MenuConfigurationChannel.persistedConfigurationKey), cachedData)
+        XCTAssertEqual(replica.fileTemplates, [template])
+        XCTAssertEqual(defaults.data(forKey: MenuConfigurationSnapshotCache.key), cachedData)
         replica.refreshConfiguration()
         await waitForRequestCount(2, in: transport)
         XCTAssertFalse(replica.isEnabled)
-        XCTAssertEqual(defaults.data(forKey: MenuConfigurationChannel.persistedConfigurationKey), cachedData)
+        XCTAssertEqual(replica.fileTemplates, [template])
+        XCTAssertEqual(defaults.data(forKey: MenuConfigurationSnapshotCache.key), cachedData)
 
         transport.completeNext(with: .success(.standard))
-        for _ in 0..<100 where !replica.isEnabled { await Task.yield() }
+        await waitForRefresh(in: replica)
         XCTAssertTrue(replica.isEnabled)
-        let stored = try XCTUnwrap(defaults.data(forKey: MenuConfigurationChannel.persistedConfigurationKey))
-        XCTAssertEqual(try MenuConfigurationChannel.decodedConfiguration(from: stored), .standard)
+        XCTAssertTrue(replica.fileTemplates.isEmpty)
+        let stored = try XCTUnwrap(defaults.data(forKey: MenuConfigurationSnapshotCache.key))
+        XCTAssertEqual(try MenuConfigurationSnapshotCache.decode(stored), .standard)
     }
 
     func testInvalidCacheStartsWithStandardConfigurationWhenTransportIsUnavailable() throws {
         let suiteName = "MenuConfigurationReplicaTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
-        defaults.set(Data("{}".utf8), forKey: MenuConfigurationChannel.persistedConfigurationKey)
+        defaults.set(Data("{}".utf8), forKey: MenuConfigurationSnapshotCache.key)
         let replica = MenuConfigurationReplica(defaults: defaults, transport: nil)
         XCTAssertTrue(replica.isEnabled)
+        XCTAssertTrue(replica.fileTemplates.isEmpty)
         replica.refreshConfiguration()
         XCTAssertTrue(replica.isEnabled)
+        XCTAssertTrue(replica.fileTemplates.isEmpty)
+    }
+
+    /// 旧扩展缓存只迁移已有开关；真实模板库必须由主应用发布。
+    func testLegacyCacheMigratesVisibilityWithoutInventingTemplates() throws {
+        let suiteName = "MenuConfigurationReplicaTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let legacy = MenuConfiguration(
+            isEnabled: false,
+            hiddenFeatureIDs: ["new-text-file"]
+        )
+        defaults.set(
+            MenuConfigurationChannel.encodedData(for: legacy),
+            forKey: MenuConfigurationChannel.persistedConfigurationKey
+        )
+
+        let replica = MenuConfigurationReplica(defaults: defaults, transport: nil)
+
+        XCTAssertFalse(replica.isEnabled)
+        XCTAssertFalse(replica.isVisible(CreateNewFileCommand.descriptor.id))
+        XCTAssertTrue(replica.fileTemplates.isEmpty)
+        XCTAssertNil(defaults.object(forKey: MenuConfigurationChannel.persistedConfigurationKey))
+        let stored = try XCTUnwrap(defaults.data(forKey: MenuConfigurationSnapshotCache.key))
+        XCTAssertEqual(
+            try MenuConfigurationSnapshotCache.decode(stored),
+            MenuConfigurationSnapshot(configuration: legacy, fileTemplateState: .unavailable)
+        )
+    }
+
+    /// 同名模板以独立身份和原顺序恢复，已有新版快照优先于旧缓存。
+    func testSnapshotCacheRestoresDuplicateNamesAndDistinctIdentities() throws {
+        let suiteName = "MenuConfigurationReplicaTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let templates = [
+            FileTemplateMenuItem(id: FileTemplateID(), displayName: "TXT"),
+            FileTemplateMenuItem(id: FileTemplateID(), displayName: "TXT"),
+        ]
+        let snapshot = MenuConfigurationSnapshot(
+            configuration: .standard,
+            fileTemplates: templates
+        )
+        defaults.set(
+            MenuConfigurationSnapshotCache.encode(snapshot),
+            forKey: MenuConfigurationSnapshotCache.key
+        )
+        defaults.set(
+            MenuConfigurationChannel.encodedData(for: MenuConfiguration(isEnabled: false)),
+            forKey: MenuConfigurationChannel.persistedConfigurationKey
+        )
+
+        let replica = MenuConfigurationReplica(defaults: defaults, transport: nil)
+
+        XCTAssertTrue(replica.isEnabled)
+        XCTAssertEqual(replica.fileTemplates, templates)
+        XCTAssertEqual(replica.fileTemplates.map(\.displayName), ["TXT", "TXT"])
+        XCTAssertNotEqual(replica.fileTemplates[0].id, replica.fileTemplates[1].id)
     }
 
     func testConcurrentRefreshSignalsCoalesceAndSkipStaleResponse() async throws {
@@ -60,24 +125,42 @@ final class MenuConfigurationReplicaTests: XCTestCase {
         replica.refreshConfiguration()
         XCTAssertEqual(transport.requestCount, 1)
 
-        let stale = MenuConfiguration(isEnabled: false)
+        let stale = MenuConfigurationSnapshot(
+            configuration: MenuConfiguration(isEnabled: false),
+            fileTemplates: [FileTemplateMenuItem(id: FileTemplateID(), displayName: "Stale")]
+        )
         transport.completeNext(with: .success(stale))
         await waitForRequestCount(2, in: transport)
 
-        // 第一份响应在拉取期间收到过新信号，因此不能应用。
         XCTAssertTrue(replica.isEnabled)
-        XCTAssertTrue(replica.isVisible(.init(rawValue: "new-text-file")))
+        XCTAssertTrue(replica.isVisible(CreateNewFileCommand.descriptor.id))
+        XCTAssertTrue(replica.fileTemplates.isEmpty)
 
-        let latest = MenuConfiguration(
-            isEnabled: true,
-            hiddenFeatureIDs: ["new-text-file"]
+        let templates = [
+            FileTemplateMenuItem(id: FileTemplateID(), displayName: "TXT"),
+            FileTemplateMenuItem(id: FileTemplateID(), displayName: "TXT"),
+        ]
+        let latest = MenuConfigurationSnapshot(
+            configuration: MenuConfiguration(
+                isEnabled: true,
+                hiddenFeatureIDs: ["new-text-file"]
+            ),
+            fileTemplates: templates
         )
         transport.completeNext(with: .success(latest))
-        await Task.yield()
+        await waitForRefresh(in: replica)
 
         XCTAssertEqual(transport.requestCount, 2)
         XCTAssertTrue(replica.isEnabled)
-        XCTAssertFalse(replica.isVisible(.init(rawValue: "new-text-file")))
+        XCTAssertFalse(replica.isVisible(CreateNewFileCommand.descriptor.id))
+        XCTAssertEqual(replica.fileTemplates, templates)
+        let stored = try XCTUnwrap(defaults.data(forKey: MenuConfigurationSnapshotCache.key))
+        XCTAssertEqual(try MenuConfigurationSnapshotCache.decode(stored), latest)
+    }
+
+    private func waitForRefresh(in replica: MenuConfigurationReplica) async {
+        for _ in 0..<100 where replica.isRefreshing { await Task.yield() }
+        XCTAssertFalse(replica.isRefreshing)
     }
 
     private func waitForRequestCount(
@@ -97,7 +180,7 @@ nonisolated private final class ControlledMenuConfigurationTransport:
     @unchecked Sendable
 {
     typealias Completion = @Sendable (
-        Result<MenuConfiguration, Error>
+        Result<MenuConfigurationSnapshot, Error>
     ) -> Void
 
     private let lock = NSLock()
@@ -118,7 +201,7 @@ nonisolated private final class ControlledMenuConfigurationTransport:
     }
 
     func completeNext(
-        with result: Result<MenuConfiguration, Error>
+        with result: Result<MenuConfigurationSnapshot, Error>
     ) {
         lock.lock()
         let completion = completions.removeFirst()

@@ -26,11 +26,11 @@ final class FinderContextMenuController {
         height: menuIconCanvasLength
     )
 
-    /// 跨连续菜单请求保留的最近 action 数量，避免未点击菜单无限积累。
+    /// 跨请求保留旧 action 的数量预算；单个菜单超过预算时仍完整保留。
     private static let maximumRetainedActions = 256
 
-    /// 由 Finder Extension 拥有的菜单顺序、分组和层级声明。
-    private let menu: FinderContextMenuDefinition
+    /// 每次菜单请求根据当前配置构造不可变声明，不跨请求缓存模板列表。
+    private let makeMenu: () -> FinderContextMenuDefinition
 
     /// 查询产品当前是否应向 Finder 贡献任何右键菜单的纯边界。
     private let isMenuEnabled: () -> Bool
@@ -57,11 +57,30 @@ final class FinderContextMenuController {
 
     /// 使用菜单声明树和纯配置查询创建稳定运行时。
     /// - Parameters:
-    ///   - menu: 产品声明的菜单项、顺序、分组和层级。
+    ///   - makeMenu: 按本次配置构造菜单项、顺序、分组和层级。
     ///   - isFeatureVisible: 查询一个功能是否应出现在 Finder 菜单中。
     ///   - isMenuEnabled: 查询产品总开关是否允许贡献右键菜单。
     ///   - isApplicationAvailable: 查询一个固定应用依赖是否可用。
     init(
+        makeMenu: @escaping () -> FinderContextMenuDefinition,
+        isFeatureVisible: @escaping (ContextCommandFeatureID) -> Bool,
+        isMenuEnabled: @escaping () -> Bool = { true },
+        isApplicationAvailable: @escaping (
+            ContextCommandApplicationRequirement
+        ) -> Bool = { requirement in
+            NSWorkspace.shared.urlForApplication(
+                withBundleIdentifier: requirement.bundleIdentifier
+            ) != nil
+        }
+    ) {
+        self.makeMenu = makeMenu
+        self.isFeatureVisible = isFeatureVisible
+        self.isMenuEnabled = isMenuEnabled
+        self.isApplicationAvailable = isApplicationAvailable
+    }
+
+    /// 为固定声明树提供不依赖动态配置的构建入口。
+    convenience init(
         menu: FinderContextMenuDefinition,
         isFeatureVisible: @escaping (ContextCommandFeatureID) -> Bool,
         isMenuEnabled: @escaping () -> Bool = { true },
@@ -73,22 +92,24 @@ final class FinderContextMenuController {
             ) != nil
         }
     ) {
-        self.menu = menu
-        self.isFeatureVisible = isFeatureVisible
-        self.isMenuEnabled = isMenuEnabled
-        self.isApplicationAvailable = isApplicationAvailable
+        self.init(
+            makeMenu: { menu },
+            isFeatureVisible: isFeatureVisible,
+            isMenuEnabled: isMenuEnabled,
+            isApplicationAvailable: isApplicationAvailable
+        )
     }
 
     /// 把 Extension 配置副本适配为 Controller 使用的纯查询边界。
     /// - Parameters:
-    ///   - menu: 产品声明的菜单项、顺序、分组和层级。
+    ///   - makeMenu: 按本次配置构造菜单项、顺序、分组和层级。
     ///   - configuration: Extension 持有的可见性配置副本。
     convenience init(
-        menu: FinderContextMenuDefinition,
+        makeMenu: @escaping () -> FinderContextMenuDefinition,
         configuration: MenuConfigurationReplica
     ) {
         self.init(
-            menu: menu,
+            makeMenu: makeMenu,
             isFeatureVisible: { [configuration] featureID in
                 configuration.isVisible(featureID)
             },
@@ -133,12 +154,13 @@ final class FinderContextMenuController {
         guard isMenuEnabled() else {
             return nil
         }
+        let definition = makeMenu()
         let evaluationContext = FinderContextMenuEvaluationContext(
             snapshot: snapshot
         )
         let nodes: [ContextMenuNode<PreparedContextMenuAction>] =
             ContextMenuNodeResolver.compactMapItems(
-                in: menu.nodes
+                in: definition.nodes
             ) { [isFeatureVisible, isApplicationAvailable] action in
                 let descriptor = action.descriptor
                 guard isFeatureVisible(descriptor.id.featureID) else {
@@ -165,6 +187,7 @@ final class FinderContextMenuController {
                 )
             )
         }
+        discardOldActions(keepingAtLeast: nodes.flatMap(\.items).count)
         return menu
     }
 
@@ -177,19 +200,19 @@ final class FinderContextMenuController {
         case .item(let preparedAction):
             let descriptor = preparedAction.descriptor
             let menuItem = NSMenuItem(
-                title: String(localized: descriptor.title),
+                title: descriptor.title.string,
                 action: action,
                 keyEquivalent: ""
             )
             menuItem.isEnabled = true
             menuItem.tag = retain(preparedAction)
-            menuItem.image = menuIcon(for: descriptor)
+            menuItem.image = menuIcon(for: descriptor.icon)
             return menuItem
 
         case .separator:
             return .separator()
 
-        case .submenu(let title, let children):
+        case .submenu(let title, let icon, let children):
             let localizedTitle = String(localized: title)
             let parent = NSMenuItem(
                 title: localizedTitle,
@@ -204,17 +227,18 @@ final class FinderContextMenuController {
                 )
             }
             parent.submenu = submenu
+            parent.image = icon.flatMap { menuIcon(for: $0) }
             return parent
         }
     }
 
     /// 把共享的无框架图标声明解析为 Finder 可以显示的 AppKit 图像。
-    /// - Parameter descriptor: 当前具体 Action 的产品描述。
+    /// - Parameter icon: 当前菜单项的图标声明。
     /// - Returns: SF Symbol、实际应用图标或图标读取失败占位符。
     private func menuIcon(
-        for descriptor: FinderContextMenuActionDescriptor
+        for icon: ContextCommandIcon
     ) -> NSImage? {
-        switch descriptor.icon {
+        switch icon {
         case .systemSymbol(let name):
             return systemSymbol(named: name)
 
@@ -314,11 +338,16 @@ final class FinderContextMenuController {
         preparedActionsByTag[tag] = preparedAction
         retainedActionTags.append(tag)
 
-        while retainedActionTags.count > Self.maximumRetainedActions {
+        return tag
+    }
+
+    /// 只在整份菜单注册后淘汰旧调用，保证当前菜单中的所有模板均可执行。
+    private func discardOldActions(keepingAtLeast currentActionCount: Int) {
+        let retainedCount = max(Self.maximumRetainedActions, currentActionCount)
+        while retainedActionTags.count > retainedCount {
             let expiredTag = retainedActionTags.removeFirst()
             preparedActionsByTag.removeValue(forKey: expiredTag)
         }
-        return tag
     }
 
     /// 取出本次 action 的已准备调用，并释放路由记录。

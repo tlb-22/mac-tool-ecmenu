@@ -2,8 +2,6 @@
 
 ECMenu 是一个提供高频文件操作的 macOS Finder 右键扩展。功能入口位于一级菜单，新建文件通过一层子菜单选择用户模板；正常执行保持静默，产品以原生、低配置和可预测为原则。
 
-[新建文件与模板管理](Requirements/Features/NewFile.md)已确认，待实现。
-
 ## 阅读路径
 
 - [当前需求](Requirements/Main.md)：产品行为与验收边界。

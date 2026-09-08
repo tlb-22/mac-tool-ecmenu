@@ -47,6 +47,12 @@ Xcode 26.6 附带的 macOS 26.5 SDK 声明：
 - 英文与简体中文各四个场景的完整连续运行都得到具有 alpha、无背景、无 hover 的图片；在初始没有 Finder 窗口时，语言切换、每个场景和最终恢复后均为零窗口。
 - Finder Extension 由 PluginKit 启动时，命令行包含系统注入的 `-AppleLanguages`。本机另一个具有按应用语言设置的 PluginKit 扩展得到 containing app 的语言数组，而扩展自身偏好域没有该键；据此推断 ECMenu 应修改 Debug containing app，而不是 `.finderext` 的应用域。运行时仍以当前目标语言的真实 Finder 与 ECMenu 菜单标题作为最终判据。
 
+### 模板子菜单
+
+2026-09-08 在 macOS 26.6.2（25G83）、Xcode 26.6（17F113）下，简体中文 TXT 子菜单完成独立窗口截图、叶子点击及零字节 `untitled.txt` 创建；helper 的 AX Finder 普通窗口计数在验收前后均为零。这是该环境中的实测结果。
+
+AX 子节点已有 frame 不能独立证明子菜单已经显示。模板子菜单在悬停前订阅通知，只接受本次 `AXMenuOpened` 携带的对应子菜单，再等待其 frame 与标题稳定。AX 菜单状态和 ScreenCaptureKit 窗口公布按异步边界处理：初次枚举未命中时，在两秒预算内重新枚举，始终要求屏幕可见、Finder PID 和精确 frame 唯一匹配；超时报告 AX frame 与候选窗口信息。这是项目的等待策略，不是 Apple 对两个 API 同步时序的保证。
+
 macOS 或 Xcode 升级后，至少重新验证 Finder 的 AX 树、激活时的窗口行为、菜单 `SCWindow` 匹配、透明度与截图边界，以及“前往文件夹”sheet 的交互路径。
 
 ## 双语语言事务
@@ -67,6 +73,12 @@ macOS 或 Xcode 升级后，至少重新验证 Finder 的 AX 树、激活时的�
 4. 截图后再次验证 Finder 前台、本轮窗口为 main、选择未变且菜单快照相同。成功或失败都只按 session 已拥有的状态关闭本轮菜单、sheet 和窗口；一个清理步骤失败时仍继续后续清理，同时返回最早失败。
 
 真实 Finder 场景串行执行，并用进程锁排除其他截图任务。运行期间桌面必须已解锁，操作者不得切换焦点或操作 Finder；所有权、焦点、选择或菜单发生变化时，本次截图失败。
+
+## 显式模板执行验收
+
+`FinderMenuAutomation create-file` 使用调用者给出的父菜单标题、模板显示名和预期文件名，打开目录背景菜单及其一层子菜单，捕获子菜单独立窗口，复核父子菜单与来源选择后点击唯一匹配的叶子。参数入口见[开发脚本](../../scripts/Main.md#finder-菜单截图)。验收目录必须已有一个可用于打开 Finder 的项目，预期输出文件必须尚不存在；重复命名验收可依次指定 `untitled.txt` 和 `untitled_copy.txt`。
+
+执行成功须同时观察到普通文件生成和 Finder 选中新文件，随后才关闭本轮认领的窗口，避免结果选择仍在处理时提前关闭来源窗口。成功与失败均沿用 session 的菜单、sheet 和窗口清理；只操作本轮精确认领的 AX 对象。调用者保持桌面无并行操作，并在前后使用 helper 的 `finder-windows` 核对普通浏览器窗口数量。该入口按显示名定位测试目标，因此要求当前验收叶子名称可唯一匹配；产品模板身份仍由稳定 ID 区分。
 
 ## 权限与 CI 边界
 

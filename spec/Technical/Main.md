@@ -13,6 +13,7 @@ ECMenu/                         主应用
 ├── App/                        进程与配置会话生命周期
 ├── Settings/                   设置界面与系统适配器
 ├── MenuConfiguration/          配置真相源
+├── FileTemplates/              模板库、文件副本与管理状态
 ├── IPC/                        应用侧进程边界
 └── ContextCommands/            命令执行与用户反馈
 ECMenuFinderExtension/          Finder Extension

@@ -39,7 +39,8 @@ final class ApplicationIPCServer {
     ///   - menuConfiguration: 主应用菜单配置的真相源。
     convenience init(
         router: ContextCommandRouter,
-        menuConfiguration: MenuConfigurationController
+        menuConfiguration: MenuConfigurationController,
+        fileTemplates: FileTemplateLibrary
     ) {
         self.init(makeTransport: { didFail in
             try AuthenticatedLocalSocketServer(
@@ -57,12 +58,36 @@ final class ApplicationIPCServer {
                 },
                 menuConfigurationProvider: { reply in
                     Task { @MainActor in
-                        reply(menuConfiguration.configuration)
+                        reply(.success(await Self.menuSnapshot(
+                            configuration: { menuConfiguration.configuration },
+                            fileTemplates: fileTemplates
+                        )))
                     }
                 },
                 didFail: didFail
             )
         }, didStart: MenuConfigurationChannel.signalConfigurationChange)
+    }
+
+    /// 模板库不可用时仍同步当前开关，只暂停依赖该库的新建文件菜单。
+    static func menuSnapshot(
+        configuration: () -> MenuConfiguration,
+        fileTemplates: FileTemplateLibrary
+    ) async -> MenuConfigurationSnapshot {
+        let templateState: FileTemplateMenuState
+        do {
+            templateState = .available(try await fileTemplates.load().map {
+                FileTemplateMenuItem(id: $0.id, displayName: $0.displayName)
+            })
+        } catch {
+            templateState = .unavailable
+            Logger(subsystem: ApplicationLogging.subsystem, category: "ApplicationIPC")
+                .error("Could not read file templates for the menu: \(error.localizedDescription, privacy: .private)")
+        }
+        return MenuConfigurationSnapshot(
+            configuration: configuration(),
+            fileTemplateState: templateState
+        )
     }
 
     init(makeTransport: @escaping MakeTransport, didStart: @escaping () -> Void) {

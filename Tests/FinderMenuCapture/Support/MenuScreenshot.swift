@@ -49,24 +49,35 @@ enum MenuScreenshot {
     }
 
     private static func menuWindow(matching menu: MenuSnapshot) async throws -> SCWindow {
-        let content: SCShareableContent
-        do {
-            content = try await SCShareableContent.current
-        } catch {
-            throw AutomationFailure.screenshotFailed(error.localizedDescription)
+        let deadline = Date().addingTimeInterval(AutomationTiming.stability)
+        while true {
+            let content: SCShareableContent
+            do {
+                content = try await SCShareableContent.current
+            } catch {
+                throw AutomationFailure.screenshotFailed(error.localizedDescription)
+            }
+            let finderWindows = content.windows.filter {
+                $0.owningApplication?.processID == menu.processIdentifier
+            }
+            let matches = finderWindows.filter {
+                $0.isOnScreen && framesMatch($0.frame, menu.rect)
+            }
+            if matches.count == 1 { return matches[0] }
+            guard matches.isEmpty, Date() < deadline else {
+                let candidates = finderWindows.map {
+                    "id=\($0.windowID), onScreen=\($0.isOnScreen), frame=\($0.frame)"
+                }.joined(separator: "; ")
+                throw AutomationFailure.screenshotFailed(
+                    "Expected one Finder menu window, found \(matches.count). "
+                        + "AX menu frame=(\(menu.rect.x), \(menu.rect.y), "
+                        + "\(menu.rect.width), \(menu.rect.height)); "
+                        + "Finder window candidates: \(candidates)"
+                )
+            }
+            // AX 菜单已打开后，窗口服务器可能尚未公布对应的可捕获窗口。
+            try await Task.sleep(for: .seconds(AutomationTiming.poll))
         }
-
-        let matches = content.windows.filter { window in
-            window.isOnScreen
-                && window.owningApplication?.processID == menu.processIdentifier
-                && framesMatch(window.frame, menu.rect)
-        }
-        guard matches.count == 1 else {
-            throw AutomationFailure.screenshotFailed(
-                "Expected one Finder menu window, found \(matches.count)."
-            )
-        }
-        return matches[0]
     }
 
     private static func framesMatch(_ frame: CGRect, _ rect: MenuRect) -> Bool {

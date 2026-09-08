@@ -70,7 +70,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         router: ContextCommandRouter(
             handlers: ContextCommandComposition.handlers
         ),
-        menuConfiguration: menuConfiguration
+        menuConfiguration: menuConfiguration,
+        fileTemplates: ContextCommandComposition.fileTemplateLibrary
     )
 
     /// 配置界面和 Finder Extension 共享的菜单配置真相源。
@@ -79,10 +80,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// 主应用登录项登记与系统批准状态的唯一所有者。
     private lazy var loginItemController = LoginItemController()
 
+    /// 配置页只观察模板库已提交快照，变更通知触发 Extension 定向拉取。
+    private lazy var fileTemplates = FileTemplateController(
+        library: ContextCommandComposition.fileTemplateLibrary,
+        didChange: { _ in MenuConfigurationChannel.signalConfigurationChange() }
+    )
+
     /// 唯一 Status Page 窗口的明确所有者。
     private lazy var statusPageWindowController = StatusPageWindowController(
         menuConfiguration: menuConfiguration,
         loginItemController: loginItemController,
+        fileTemplates: fileTemplates,
         didClose: { [weak self] in
             self?.handleConfigurationWindowDidClose()
         }

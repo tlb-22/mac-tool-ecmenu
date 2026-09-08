@@ -7,7 +7,7 @@ private enum READMEStatusPagePreviewState {
     static func make() -> StatusPagePreviewState {
         var applicationIcons: [String: NSImage] = [:]
 
-        for descriptor in ContextCommandComposition.handlers.descriptors {
+        for descriptor in ContextCommandComposition.descriptors {
             guard let application = descriptor.requiredApplication else {
                 continue
             }

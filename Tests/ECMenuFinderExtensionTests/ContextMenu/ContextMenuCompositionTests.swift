@@ -8,7 +8,10 @@ final class ContextMenuCompositionTests: XCTestCase {
     /// Finder Feature 的稳定 ID 应与两端共同测试基线完全一致。
     func testCurrentProductFeatures() {
         let menu = ContextMenuComposition.menu(
-            commandClient: ContextCommandClient()
+            commandClient: ContextCommandClient(),
+            fileTemplates: [
+                FileTemplateMenuItem(id: FileTemplateID(), displayName: "TXT"),
+            ]
         )
         let featureIDs = menu.nodes
             .flatMap { $0.items }
@@ -608,6 +611,160 @@ final class ContextMenuCompositionTests: XCTestCase {
                 .descriptor.id.localID.rawValue,
             "enabled"
         )
+    }
+
+    /// 同名模板以原始文字显示，各叶子按稳定身份投递，并保留当前列表顺序。
+    func testTemplateSubmenuPreservesDuplicateNamesAndDistinctIdentities() throws {
+        let transport = RecordingContextCommandTransport()
+        let templates = [
+            FileTemplateMenuItem(id: FileTemplateID(), displayName: "command.copyPath"),
+            FileTemplateMenuItem(id: FileTemplateID(), displayName: "command.copyPath"),
+        ]
+        let directory = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        let targetPath = absolutePath(directory.path)
+        let controller = FinderContextMenuController(
+            makeMenu: {
+                FinderContextMenuDefinition {
+                    CreateNewFileFeature(
+                        commandClient: ContextCommandClient(transport: transport),
+                        fileTemplates: templates
+                    )
+                }
+            },
+            isFeatureVisible: { _ in true }
+        )
+        let menu = try XCTUnwrap(controller.menu(
+            for: .container(path: targetPath),
+            action: #selector(NSApplication.terminate(_:))
+        ))
+        let parent = try XCTUnwrap(menu.items.first)
+        let submenu = try XCTUnwrap(parent.submenu)
+
+        XCTAssertEqual(menu.items.count, 1)
+        XCTAssertEqual(parent.title, localizedTitle(CreateNewFileCommand.descriptor))
+        XCTAssertNotNil(parent.image)
+        XCTAssertNil(controller.preparedAction(for: parent))
+        XCTAssertEqual(submenu.items.map(\.title), templates.map(\.displayName))
+        XCTAssertTrue(submenu.items.allSatisfy { $0.submenu == nil })
+        XCTAssertNotEqual(submenu.items[0].tag, submenu.items[1].tag)
+        submenu.items.forEach { controller.perform($0) }
+
+        let commands = try transport.recordedRequests.map {
+            try $0.command.decode(as: CreateNewFileCommand.self)
+        }
+        XCTAssertEqual(commands.map(\.templateID), templates.map(\.id))
+        XCTAssertEqual(commands.map(\.directoryPath), [targetPath, targetPath])
+    }
+
+    /// 新菜单立即使用当前模板清单，旧菜单仍绑定原模板与原目标。
+    func testTemplateChangesAffectNextMenuWithoutRebindingOldActions() throws {
+        let transport = RecordingContextCommandTransport()
+        let first = FileTemplateMenuItem(id: FileTemplateID(), displayName: "TXT")
+        let second = FileTemplateMenuItem(id: FileTemplateID(), displayName: "Markdown")
+        var templates = [first]
+        let directory = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        let firstPath = absolutePath(directory.path)
+        let secondPath = absolutePath(directory.deletingLastPathComponent().path)
+        let controller = FinderContextMenuController(
+            makeMenu: {
+                FinderContextMenuDefinition {
+                    CreateNewFileFeature(
+                        commandClient: ContextCommandClient(transport: transport),
+                        fileTemplates: templates
+                    )
+                }
+            },
+            isFeatureVisible: { _ in true }
+        )
+        let oldMenu = try XCTUnwrap(controller.menu(
+            for: .container(path: firstPath),
+            action: #selector(NSApplication.terminate(_:))
+        ))
+        let oldItem = try XCTUnwrap(oldMenu.items.first?.submenu?.items.first)
+        templates = [second]
+        let newMenu = try XCTUnwrap(controller.menu(
+            for: .sidebar(path: secondPath),
+            action: #selector(NSApplication.terminate(_:))
+        ))
+        let newItem = try XCTUnwrap(newMenu.items.first?.submenu?.items.first)
+
+        XCTAssertEqual(oldItem.title, first.displayName)
+        XCTAssertEqual(newItem.title, second.displayName)
+        controller.perform(oldItem)
+        controller.perform(newItem)
+        let commands = try transport.recordedRequests.map {
+            try $0.command.decode(as: CreateNewFileCommand.self)
+        }
+        XCTAssertEqual(commands.map(\.templateID), [first.id, second.id])
+        XCTAssertEqual(commands.map(\.directoryPath), [firstPath, secondPath])
+    }
+
+    /// 空模板库、隐藏开关和多选都移除整个父菜单。
+    func testTemplateSubmenuDisappearsForEmptyLibraryHiddenFeatureOrMultipleSelection() throws {
+        var templates: [FileTemplateMenuItem] = []
+        var isVisible = true
+        let controller = FinderContextMenuController(
+            makeMenu: {
+                FinderContextMenuDefinition {
+                    CreateNewFileFeature(
+                        commandClient: ContextCommandClient(),
+                        fileTemplates: templates
+                    )
+                }
+            },
+            isFeatureVisible: { featureID in
+                XCTAssertEqual(featureID, CreateNewFileCommand.descriptor.id)
+                return isVisible
+            }
+        )
+        let directory = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        let snapshot = FinderContextSnapshot.container(path: absolutePath(directory.path))
+        XCTAssertNil(controller.menu(
+            for: snapshot,
+            action: #selector(NSApplication.terminate(_:))
+        ))
+        templates = [FileTemplateMenuItem(id: FileTemplateID(), displayName: "TXT")]
+        XCTAssertNotNil(controller.menu(
+            for: snapshot,
+            action: #selector(NSApplication.terminate(_:))
+        ))
+        isVisible = false
+        XCTAssertNil(controller.menu(
+            for: snapshot,
+            action: #selector(NSApplication.terminate(_:))
+        ))
+        isVisible = true
+        let selection = try XCTUnwrap(FinderItemSelection(paths: ["/a", "/b"]))
+        XCTAssertNil(controller.menu(
+            for: .items(selection: selection),
+            action: #selector(NSApplication.terminate(_:))
+        ))
+    }
+
+    /// 用户模板数可以超过旧菜单缓存预算，本次菜单的任何叶子都不能被提前淘汰。
+    func testLargeTemplateMenuRetainsEveryCurrentAction() throws {
+        let templates = (0..<300).map { index in
+            FileTemplateMenuItem(id: FileTemplateID(), displayName: "Template \(index)")
+        }
+        let controller = FinderContextMenuController(
+            menu: FinderContextMenuDefinition {
+                CreateNewFileFeature(
+                    commandClient: ContextCommandClient(),
+                    fileTemplates: templates
+                )
+            },
+            isFeatureVisible: { _ in true }
+        )
+        let directory = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        let menu = try XCTUnwrap(controller.menu(
+            for: .container(path: absolutePath(directory.path)),
+            action: #selector(NSApplication.terminate(_:))
+        ))
+        let submenu = try XCTUnwrap(menu.items.first?.submenu)
+        XCTAssertEqual(submenu.items.count, templates.count)
+        XCTAssertTrue(submenu.items.allSatisfy {
+            controller.preparedAction(for: $0) != nil
+        })
     }
 
     /// 构造只含两个可见性功能的真实 AppKit 菜单。

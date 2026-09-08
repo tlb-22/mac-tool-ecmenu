@@ -14,9 +14,9 @@ final class ContextCommandLocalizationTests: XCTestCase {
             simplifiedChinese: String
         )] = [
             (
-                CreateNewTextFileCommand.descriptor.title,
-                "New TXT File",
-                "新建 TXT"
+                CreateNewFileCommand.descriptor.title,
+                "New File",
+                "新建文件"
             ),
             (CopyPathCommand.descriptor.title, "Copy Path", "拷贝路径"),
             (HideItemsCommand.descriptor.title, "Hide Items", "隐藏项目"),
@@ -38,8 +38,11 @@ final class ContextCommandLocalizationTests: XCTestCase {
             ),
         ]
 
-        let titles = ContextMenuComposition.menu(commandClient: ContextCommandClient())
-            .nodes.flatMap(\.items).map(\.descriptor.title)
+        let menu = ContextMenuComposition.menu(
+            commandClient: ContextCommandClient(),
+            fileTemplates: [FileTemplateMenuItem(id: FileTemplateID(), displayName: "TXT")]
+        )
+        let titles = menu.nodes.flatMap(localizedTitles)
         XCTAssertEqual(Set(titles.map(\.key)), Set(expectations.map(\.resource.key)))
         let expectationsByKey = Dictionary(uniqueKeysWithValues: expectations.map {
             ($0.resource.key, $0)
@@ -68,6 +71,23 @@ final class ContextCommandLocalizationTests: XCTestCase {
                 ),
                 expectation.simplifiedChinese
             )
+        }
+    }
+
+    /// 产品标题包括父菜单，用户提供的模板名称不进入翻译资源。
+    private func localizedTitles(
+        in node: ContextMenuNode<AnyContextMenuAction>
+    ) -> [LocalizedStringResource] {
+        switch node {
+        case .item(let action):
+            if case .localized(let resource) = action.descriptor.title {
+                return [resource]
+            }
+            return []
+        case .separator:
+            return []
+        case .submenu(let title, _, let children):
+            return [title] + children.flatMap(localizedTitles)
         }
     }
 

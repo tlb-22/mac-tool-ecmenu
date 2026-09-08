@@ -11,7 +11,7 @@ source \
 source \
     "$_finder_menu_capture_definition_directory/Features/CopyPath/CopyPathCaptureExpectations.sh"
 source \
-    "$_finder_menu_capture_definition_directory/Features/NewTextFile/NewTextFileCaptureExpectations.sh"
+    "$_finder_menu_capture_definition_directory/Features/NewFile/NewFileCaptureExpectations.sh"
 source \
     "$_finder_menu_capture_definition_directory/Features/Visibility/VisibilityCaptureExpectations.sh"
 
@@ -21,7 +21,7 @@ typeset -gra _finder_menu_capture_scenario_providers=(
 )
 
 typeset -gra _finder_menu_capture_expectation_providers=(
-    finder_menu_capture_new_text_file
+    finder_menu_capture_new_file
     finder_menu_capture_copy_path
     finder_menu_capture_visibility
     finder_menu_capture_image_compression

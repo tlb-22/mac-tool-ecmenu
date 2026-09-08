@@ -133,7 +133,7 @@ nonisolated enum MenuConfigurationChannel {
         "\(ApplicationIPC.applicationSigningIdentifier).menu-configuration.did-change"
     )
 
-    /// 两个进程各自缓存配置快照时使用的稳定偏好键；格式版本保存在值内部。
+    /// 主应用保存菜单开关时使用的稳定偏好键；格式版本保存在值内部。
     static let persistedConfigurationKey = "menu-configuration-v1"
 
     /// 把配置编码为持久化或传输使用的数据。

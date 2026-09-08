@@ -46,20 +46,20 @@ enum ContextCommandSender {
             return
         }
 
-        if arguments.count == 1, let path = arguments.first {
-            guard let directoryPath = AbsoluteFilePath(path: path) else {
-                throw SenderFailure(message: "Expected an absolute directory path")
+        if arguments.count == 3, arguments[0] == "--new-file" {
+            guard let uuid = UUID(uuidString: arguments[1]),
+                  let directoryPath = AbsoluteFilePath(path: arguments[2]) else {
+                throw SenderFailure(message: "Expected a template UUID and an absolute directory path")
             }
-            try deliver(
-                CreateNewTextFileCommand(
-                    directoryPath: directoryPath
-                )
-            )
+            try deliver(CreateNewFileCommand(
+                directoryPath: directoryPath,
+                templateID: FileTemplateID(rawValue: uuid)
+            ))
             return
         }
 
         throw SenderFailure(
-            message: "Expected DIRECTORY, --menu-configuration, --wait-for-menu-configuration, or an item operation with absolute paths"
+            message: "Expected --new-file TEMPLATE_UUID DIRECTORY, --menu-configuration, --wait-for-menu-configuration, or an item operation with absolute paths"
         )
     }
 
@@ -74,21 +74,24 @@ enum ContextCommandSender {
 
     /// 通过已验证 IPC 端点拉取菜单配置快照。
     private static func fetchMenuConfiguration(_ operation: MenuConfigurationOperation) throws {
-        let configuration: MenuConfiguration
+        let configuration: MenuConfigurationSnapshot
         switch operation {
         case .readOnce:
             configuration = try makeClient().fetchMenuConfiguration()
         case .waitForHost:
             configuration = try waitForHostConfiguration()
         }
-        let schemaVersion = MenuConfiguration.currentSchemaVersion
+        let schemaVersion = MenuConfigurationSnapshot.currentSchemaVersion
         print(
             "menu-configuration schema=\(schemaVersion) enabled=\(configuration.isEnabled)"
         )
+        for template in configuration.fileTemplates {
+            print("template \(template.id.rawValue.uuidString) \(template.displayName)")
+        }
     }
 
     /// 只读启动探测共用一个传输预算；只在端点尚不存在或尚无监听者时重试。
-    private static func waitForHostConfiguration() throws -> MenuConfiguration {
+    private static func waitForHostConfiguration() throws -> MenuConfigurationSnapshot {
         let deadline = LocalSocketDeadline(timeout: LocalSocketDeadline.defaultTimeout)
         while true {
             let remaining = try remainingInterval(until: deadline)

@@ -8,7 +8,7 @@ final class MenuConfigurationReplica: NSObject {
         case fetching(refreshAgain: Bool)
     }
     /// 当前用于构建 Finder 菜单的配置快照。
-    private var configuration: MenuConfiguration
+    private var configuration: MenuConfigurationSnapshot
 
     /// 在主应用不可用时恢复最后有效快照的本地偏好存储。
     private let defaults: UserDefaults
@@ -47,6 +47,11 @@ final class MenuConfigurationReplica: NSObject {
     ) {
         self.defaults = defaults
         self.transport = transport
+        do {
+            try MenuConfigurationCacheMigration.run(in: defaults)
+        } catch {
+            Self.logger.error("Could not migrate the cached menu configuration: \(error.localizedDescription, privacy: .public)")
+        }
         configuration = Self.storedConfiguration(in: defaults)
             ?? .standard
         super.init()
@@ -69,6 +74,9 @@ final class MenuConfigurationReplica: NSObject {
     var isEnabled: Bool {
         configuration.isEnabled
     }
+
+    /// 构建本次子菜单所需的有序模板描述。
+    var fileTemplates: [FileTemplateMenuItem] { configuration.fileTemplates }
 
     /// 从单飞状态推导是否仍在等待响应，供边界验证读取。
     var isRefreshing: Bool {
@@ -124,7 +132,7 @@ final class MenuConfigurationReplica: NSObject {
 
     /// 验证、应用并缓存一次没有被后续信号淘汰的响应。
     private func applyRefreshResult(
-        _ result: Result<MenuConfiguration, Error>
+        _ result: Result<MenuConfigurationSnapshot, Error>
     ) {
         guard case let .success(updated) = result else {
             if case let .failure(error) = result {
@@ -149,16 +157,14 @@ final class MenuConfigurationReplica: NSObject {
     /// - Returns: 可解码配置；没有缓存或缓存无效时返回 `nil`。
     private static func storedConfiguration(
         in defaults: UserDefaults
-    ) -> MenuConfiguration? {
+    ) -> MenuConfigurationSnapshot? {
         guard let data = defaults.data(
-            forKey: MenuConfigurationChannel.persistedConfigurationKey
+            forKey: MenuConfigurationSnapshotCache.key
         ) else {
             return nil
         }
         do {
-            return try MenuConfigurationChannel.decodedConfiguration(
-                from: data
-            )
+            return try MenuConfigurationSnapshotCache.decode(data)
         } catch {
             logger.error(
                 "Could not decode the cached menu configuration: \(error.localizedDescription, privacy: .public)"
@@ -169,13 +175,26 @@ final class MenuConfigurationReplica: NSObject {
 
     /// 编码并缓存一份 Extension 可独立恢复的配置快照。
     /// - Parameter configuration: 主应用刚发布的有效配置。
-    private func storeConfiguration(_ configuration: MenuConfiguration) {
-        let data = MenuConfigurationChannel.encodedData(
-            for: configuration
-        )
+    private func storeConfiguration(_ configuration: MenuConfigurationSnapshot) {
+        let data = MenuConfigurationSnapshotCache.encode(configuration)
         defaults.set(
             data,
-            forKey: MenuConfigurationChannel.persistedConfigurationKey
+            forKey: MenuConfigurationSnapshotCache.key
         )
+    }
+}
+
+/// 将仅含开关的旧副本一次性迁移为菜单快照；模板描述由主应用后续发布。
+private enum MenuConfigurationCacheMigration {
+    static func run(in defaults: UserDefaults) throws {
+        guard defaults.object(forKey: MenuConfigurationSnapshotCache.key) == nil,
+              let data = defaults.data(forKey: MenuConfigurationChannel.persistedConfigurationKey)
+        else { return }
+        let configuration = try MenuConfigurationChannel.decodedConfiguration(from: data)
+        defaults.set(
+            MenuConfigurationSnapshotCache.encode(.init(configuration: configuration, fileTemplateState: .unavailable)),
+            forKey: MenuConfigurationSnapshotCache.key
+        )
+        defaults.removeObject(forKey: MenuConfigurationChannel.persistedConfigurationKey)
     }
 }

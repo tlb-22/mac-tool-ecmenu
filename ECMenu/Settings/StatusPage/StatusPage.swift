@@ -9,6 +9,9 @@ enum StatusPagePane: String, CaseIterable, Identifiable {
     /// 每一项 Finder 右键命令的显示配置。
     case contextMenu
 
+    /// 用户保存的普通文件模板。
+    case fileTemplates
+
     /// SwiftUI 列表使用的稳定身份。
     var id: Self { self }
 
@@ -27,6 +30,12 @@ enum StatusPagePane: String, CaseIterable, Identifiable {
                 defaultValue: "Context Menu",
                 comment: "Title of the Finder context-menu settings pane"
             )
+        case .fileTemplates:
+            LocalizedStringResource(
+                "statusPage.pane.fileTemplates",
+                defaultValue: "File Templates",
+                comment: "Title of the file-template settings pane"
+            )
         }
     }
 
@@ -37,6 +46,8 @@ enum StatusPagePane: String, CaseIterable, Identifiable {
             "gearshape"
         case .contextMenu:
             "contextualmenu.and.cursorarrow"
+        case .fileTemplates:
+            "doc.on.doc"
         }
     }
 }
@@ -49,13 +60,16 @@ struct StatusPage: View {
     /// 主应用注入的登录项系统状态真相源。
     @EnvironmentObject private var loginItemController: LoginItemController
 
+    /// 主应用注入的模板库呈现状态与操作入口。
+    @EnvironmentObject private var fileTemplates: FileTemplateController
+
     /// 上一次查看的设置分类；首次打开时进入“通用”。
     @AppStorage("status-page-selected-pane")
     private var selectedPaneRawValue = StatusPagePane.general.rawValue
 
     /// 当前系统事实快照，由状态页唯一持有。
     @State private var systemState = StatusPageSystemServices.live.read(
-        descriptors: ContextCommandComposition.handlers.descriptors
+        descriptors: ContextCommandComposition.descriptors
     )
 
     /// 把持久化字符串转换为页面使用的有限分类。
@@ -78,8 +92,10 @@ struct StatusPage: View {
             selectedPane: selectedPane,
             systemState: systemState,
             loginItemState: loginItemController.state,
-            descriptors: ContextCommandComposition.handlers.descriptors,
+            descriptors: ContextCommandComposition.descriptors,
             configuration: menuConfiguration.configuration,
+            fileTemplateState: fileTemplates.state,
+            isUpdatingFileTemplates: fileTemplates.isUpdating,
             setEnabled: { isEnabled in
                 menuConfiguration.setEnabled(isEnabled)
             },
@@ -98,8 +114,15 @@ struct StatusPage: View {
                 if !StatusPageSystemServices.live.openFullDiskAccessSettings() {
                     NSSound.beep()
                 }
-            }
+            },
+            importTemplate: importTemplate,
+            updateTemplate: fileTemplates.updateTemplate,
+            removeTemplate: fileTemplates.removeTemplate,
+            reloadTemplates: fileTemplates.reload
         )
+        .task {
+            await fileTemplates.loadIfNeeded()
+        }
         .onAppear {
             refreshSystemState()
         }
@@ -112,12 +135,38 @@ struct StatusPage: View {
         }
     }
 
+    /// 系统选择器只选择一个普通文件；模板库再验证并保存独立副本。
+    private func importTemplate() async throws {
+        let panel = NSOpenPanel()
+        panel.title = String(localized: FileTemplatesText.add)
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.treatsFilePackagesAsDirectories = true
+        let response = await withCheckedContinuation { continuation in
+            if let window = NSApp.keyWindow {
+                panel.beginSheetModal(for: window) { response in
+                    continuation.resume(returning: response)
+                }
+            } else {
+                panel.begin { response in
+                    continuation.resume(returning: response)
+                }
+            }
+        }
+        guard response == .OK else { return }
+        guard let url = panel.url else {
+            preconditionFailure("An accepted open panel must provide its selected file")
+        }
+        try await fileTemplates.importFile(at: url)
+    }
+
     // MARK: - ==================== 副作用：刷新系统状态 ====================
 
     /// 在页面出现或应用重新激活时刷新全部外部系统事实。
     private func refreshSystemState() {
         systemState = StatusPageSystemServices.live.read(
-            descriptors: ContextCommandComposition.handlers.descriptors
+            descriptors: ContextCommandComposition.descriptors
         )
         loginItemController.refresh()
     }
@@ -221,6 +270,10 @@ struct StatusPageContent: View {
     /// 当前产品总开关与菜单可见性快照。
     let configuration: MenuConfiguration
 
+    /// 模板库的读取结果与正在执行的持久化操作。
+    let fileTemplateState: FileTemplatePageState
+    let isUpdatingFileTemplates: Bool
+
     /// 用户更改产品总开关时的回调。
     let setEnabled: (Bool) -> Void
 
@@ -236,6 +289,12 @@ struct StatusPageContent: View {
     /// 用户请求打开完全磁盘访问设置时的回调。
     let openFullDiskAccessSettings: () -> Void
 
+    /// 文件模板操作由主应用或预览边界注入。
+    let importTemplate: () async throws -> Void
+    let updateTemplate: (FileTemplate) async throws -> Void
+    let removeTemplate: (FileTemplateID) async throws -> Void
+    let reloadTemplates: () async -> Void
+
     /// 构造不含外部读写的双栏设置界面。
     var body: some View {
         HStack(spacing: 0) {
@@ -249,7 +308,7 @@ struct StatusPageContent: View {
         .frame(height: StatusPageStyle.pageHeight)
     }
 
-    /// 显示产品身份与两个设置分类的窄侧栏。
+    /// 显示产品身份与设置分类的窄侧栏。
     private var sidebar: some View {
         VStack(spacing: 0) {
             VStack(spacing: StatusPageStyle.rowSpacing) {
@@ -304,6 +363,15 @@ struct StatusPageContent: View {
             generalSettings
         case .contextMenu:
             contextMenuSettings
+        case .fileTemplates:
+            FileTemplatesPage(
+                state: fileTemplateState,
+                isUpdating: isUpdatingFileTemplates,
+                importTemplate: importTemplate,
+                updateTemplate: updateTemplate,
+                removeTemplate: removeTemplate,
+                reload: reloadTemplates
+            )
         }
     }
 

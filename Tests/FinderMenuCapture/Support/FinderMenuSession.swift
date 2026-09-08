@@ -172,6 +172,138 @@ final class FinderMenuSession {
         guard actual == expected else { throw AutomationFailure.menuChanged }
     }
 
+    /// 已打开的模板子菜单，只用于同一次截图与随后显式点击。
+    struct TemplateSubmenu {
+        fileprivate let element: AXUIElement
+        let snapshot: MenuSnapshot
+    }
+
+    /// 悬停指定父菜单，并等待其直接子菜单完成布局。
+    func prepareTemplateSubmenu(parentTitle: String) throws -> TemplateSubmenu {
+        try verifyAfterCapture()
+        guard case let .menuReady(application, _, rootMenu, _, _) = state,
+              let finder else {
+            preconditionFailure("A verified capture requires a prepared menu")
+        }
+        let parent = try uniqueMenuItem(named: parentTitle, in: rootMenu)
+        let waiter = try AXElementNotificationWaiter(
+            processIdentifier: finder.processIdentifier,
+            application: application,
+            notification: kAXMenuOpenedNotification as CFString
+        )
+        try FinderPointer.move(to: FinderPointer.location(of: parent))
+        guard let submenu = try waiter.wait(
+            timeout: AutomationTiming.menu,
+            resolve: { openedMenus -> AXUIElement? in
+                for candidate in try AXClient.elements(
+                    kAXChildrenAttribute as CFString,
+                    of: parent
+                ) where try AXClient.string(
+                    kAXRoleAttribute as CFString,
+                    of: candidate
+                ) == kAXMenuRole as String {
+                    guard openedMenus.contains(where: {
+                        AXClient.same($0, candidate)
+                    }) else {
+                        continue
+                    }
+                    if case .ready = try self.observeMenu(candidate) {
+                        return candidate
+                    }
+                }
+                return nil
+            }
+        ) else {
+            throw AutomationFailure.templateMenuUnavailable(parentTitle)
+        }
+        return TemplateSubmenu(
+            element: submenu,
+            snapshot: try waitForStableMenu(submenu)
+        )
+    }
+
+    /// 验证父菜单、来源选择和子菜单在截图期间均未改变。
+    func verifyTemplateSubmenu(_ submenu: TemplateSubmenu) throws {
+        try verifyAfterCapture()
+        guard case .ready(let current) = try observeMenu(submenu.element),
+              current == submenu.snapshot else {
+            throw AutomationFailure.menuChanged
+        }
+    }
+
+    /// 只在显式模板验收入口调用；同名叶子必须先由验收者改成可唯一辨认的名称。
+    func performTemplate(
+        named title: String,
+        in submenu: TemplateSubmenu,
+        expectedFileURL: URL
+    ) throws {
+        try verifyTemplateSubmenu(submenu)
+        guard case let .menuReady(application, window, _, _, _) = state else {
+            preconditionFailure("A verified capture requires a prepared menu")
+        }
+        let item = try uniqueMenuItem(named: title, in: submenu.element)
+        guard try AXClient.supports(kAXPressAction as CFString, on: item) else {
+            throw AutomationFailure.templateMenuUnavailable(title)
+        }
+        try AXClient.perform(kAXPressAction as CFString, on: item)
+        state = .window(application, window)
+        try waitForCreatedFileSelection(at: expectedFileURL, in: window)
+    }
+
+    /// 等到 Finder 完成结果选择再关窗口，避免晚到的选择请求重新打开窗口。
+    private func waitForCreatedFileSelection(at url: URL, in window: AXUIElement) throws {
+        let deadline = Date().addingTimeInterval(AutomationTiming.target)
+        var fileWasCreated = false
+        repeat {
+            var isDirectory: ObjCBool = false
+            fileWasCreated = FileManager.default.fileExists(
+                atPath: url.path,
+                isDirectory: &isDirectory
+            ) && !isDirectory.boolValue
+            if fileWasCreated {
+                do {
+                    // 新文件加入目录后，Finder 可以替换原有的选择容器。
+                    if let resolved = try resolveContext(in: window) {
+                        let selected = try AXClient.elements(
+                            kAXSelectedChildrenAttribute as CFString,
+                            of: resolved.selectionOwner
+                        )
+                        if selected.count == 1 {
+                            let elements = [selected[0]] + (try AXTree.paths(below: selected[0]))
+                                .map(\.element)
+                            if try elements.contains(where: { try AXClient.url(of: $0) == url }) {
+                                return
+                            }
+                        }
+                    }
+                } catch AutomationFailure.accessibility(.readAttribute, .failure),
+                        AutomationFailure.accessibility(.readAttribute, .invalidUIElement),
+                        AutomationFailure.accessibility(.readAttribute, .cannotComplete) {
+                    // 仅在结果选择的有界等待内重读更新中的 AX 树。
+                }
+            }
+            runLoopSlice(AutomationTiming.poll)
+        } while Date() < deadline
+        if fileWasCreated { throw AutomationFailure.finderSelectionTimeout }
+        throw AutomationFailure.createdFileTimeout(url.path)
+    }
+
+    private func uniqueMenuItem(named title: String, in menu: AXUIElement) throws -> AXUIElement {
+        let matches = try AXClient.elements(
+            kAXChildrenAttribute as CFString,
+            of: menu
+        ).filter { item in
+            try AXClient.string(kAXRoleAttribute as CFString, of: item)
+                == kAXMenuItemRole as String
+                && AXClient.string(kAXTitleAttribute as CFString, of: item) == title
+                && AXClient.bool(kAXEnabledAttribute as CFString, of: item) == true
+        }
+        guard matches.count == 1 else {
+            throw AutomationFailure.templateMenuUnavailable(title)
+        }
+        return matches[0]
+    }
+
     /// 即使菜单关闭失败，也继续尝试关闭本次拥有的窗口；首个失败仍会返回给调用方。
     func closeOwnedUI() throws {
         let application: AXUIElement

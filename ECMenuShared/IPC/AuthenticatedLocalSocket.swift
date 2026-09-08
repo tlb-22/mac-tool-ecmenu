@@ -20,7 +20,7 @@ nonisolated protocol MenuConfigurationRequesting: AnyObject, Sendable {
     /// 从经过双向身份验证的连接取得主应用当前配置。
     func fetchMenuConfiguration(
         completion: @escaping @Sendable (
-            Result<MenuConfiguration, Error>
+            Result<MenuConfigurationSnapshot, Error>
         ) -> Void
     )
 }
@@ -189,7 +189,7 @@ nonisolated final class AuthenticatedLocalSocketClient:
 
     func fetchMenuConfiguration(
         completion: @escaping @Sendable (
-            Result<MenuConfiguration, Error>
+            Result<MenuConfigurationSnapshot, Error>
         ) -> Void
     ) {
         queue.async { [self] in
@@ -205,12 +205,12 @@ nonisolated final class AuthenticatedLocalSocketClient:
     }
 
     /// 集成测试和异步包装共享的同步菜单配置查询。
-    func fetchMenuConfiguration() throws -> MenuConfiguration {
+    func fetchMenuConfiguration() throws -> MenuConfigurationSnapshot {
         try withVerifiedConnection { descriptor, deadline in
             try write(.menuConfiguration, to: descriptor, deadline: deadline)
             let responseData = try LocalSocketIO.readFrame(from: descriptor, deadline: deadline)
             return try JSONDecoder().decode(
-                MenuConfiguration.self,
+                MenuConfigurationSnapshot.self,
                 from: responseData
             )
         }
@@ -252,7 +252,7 @@ nonisolated final class AuthenticatedLocalSocketClient:
 nonisolated final class AuthenticatedLocalSocketServer: @unchecked Sendable {
     typealias ContextCommandSink = @Sendable (ContextCommandRequest) -> Void
     typealias MenuConfigurationProvider = @Sendable (
-        @escaping @Sendable (MenuConfiguration) -> Void
+        @escaping @Sendable (Result<MenuConfigurationSnapshot, Error>) -> Void
     ) -> Void
     typealias AcceptConnection = @Sendable (Int32) -> Result<Int32, ApplicationIPCError>
 
@@ -457,14 +457,14 @@ nonisolated private final class MenuConfigurationResponseWaiter:
 {
     private enum State {
         case waiting
-        case fulfilled(MenuConfiguration)
+        case fulfilled(Result<MenuConfigurationSnapshot, Error>)
     }
 
     private let lock = NSLock()
     private let semaphore = DispatchSemaphore(value: 0)
     private var state = State.waiting
 
-    func fulfill(_ response: MenuConfiguration) {
+    func fulfill(_ response: Result<MenuConfigurationSnapshot, Error>) {
         lock.lock()
         guard case .waiting = state else {
             lock.unlock()
@@ -477,7 +477,7 @@ nonisolated private final class MenuConfigurationResponseWaiter:
         semaphore.signal()
     }
 
-    func wait(deadline: LocalSocketDeadline) throws -> MenuConfiguration {
+    func wait(deadline: LocalSocketDeadline) throws -> MenuConfigurationSnapshot {
         guard semaphore.wait(timeout: deadline.dispatchTime) == .success else {
             throw ApplicationIPCError.deadlineExceeded
         }
@@ -488,7 +488,7 @@ nonisolated private final class MenuConfigurationResponseWaiter:
                 "A menu-configuration wait resumed without a response"
             )
         }
-        return response
+        return try response.get()
     }
 }
 

@@ -1,6 +1,114 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Choose a regular file as the template.": {
+      "comment": "A file template must be an ordinary file",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose a regular file as the template."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请选择普通文件作为模板。"
+          }
+        }
+      }
+    },
+    "Enter a display name.": {
+      "comment": "Validation message for an empty file-template display name",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enter a display name."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请输入显示名。"
+          }
+        }
+      }
+    },
+    "Enter a single file name, without a folder path.": {
+      "comment": "Validation message for an invalid default file name",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enter a single file name, without a folder path."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请输入单个文件名，不包含文件夹路径。"
+          }
+        }
+      }
+    },
+    "The file template library could not be read.": {
+      "comment": "The file-template index contains invalid data",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The file template library could not be read."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法读取文件模板库。"
+          }
+        }
+      }
+    },
+    "The file template library uses an unsupported format.": {
+      "comment": "The stored file-template format version is unsupported",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The file template library uses an unsupported format."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "文件模板库使用了不受支持的格式。"
+          }
+        }
+      }
+    },
+    "This file template no longer exists.": {
+      "comment": "The selected file template has been removed",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This file template no longer exists."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此文件模板已不存在。"
+          }
+        }
+      }
+    },
     "alert.command.confirm": {
       "comment": "Dismisses a context-command error alert",
       "extractionState": "manual",
@@ -253,20 +361,20 @@
         }
       }
     },
-    "alert.newTextFile.writePermission.named": {
-      "comment": "A TXT file could not be created in the named directory",
+    "alert.newFile.writePermission.named": {
+      "comment": "A file could not be created in the named directory",
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Couldn’t create a TXT file because “%@” isn’t writable."
+            "value": "Couldn’t create a file because “%@” isn’t writable."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "无法新建 TXT：“%@”没有写入权限。"
+            "value": "无法新建文件：“%@”没有写入权限。"
           }
         }
       }
@@ -523,20 +631,20 @@
         }
       }
     },
-    "command.newTextFile": {
-      "comment": "Finder command that creates an empty TXT file",
+    "command.newFile": {
+      "comment": "Finder submenu that creates a file from a saved template",
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "New TXT File"
+            "value": "New File"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "新建 TXT"
+            "value": "新建文件"
           }
         }
       }
@@ -613,6 +721,60 @@
         }
       }
     },
+    "common.ok": {
+      "comment": "Button that dismisses an informational alert",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OK"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "好"
+          }
+        }
+      }
+    },
+    "common.retry": {
+      "comment": "Button that retries an operation",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Retry"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重试"
+          }
+        }
+      }
+    },
+    "common.save": {
+      "comment": "Button that saves the current edits",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保存"
+          }
+        }
+      }
+    },
     "common.settings": {
       "comment": "Button or menu item that opens settings",
       "extractionState": "manual",
@@ -627,6 +789,168 @@
           "stringUnit": {
             "state": "translated",
             "value": "设置…"
+          }
+        }
+      }
+    },
+    "fileTemplates.action.add": {
+      "comment": "Button that imports an ordinary file as a template",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add Template…"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "添加模板…"
+          }
+        }
+      }
+    },
+    "fileTemplates.action.delete": {
+      "comment": "Button that deletes an application's template copy",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete Template"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "删除模板"
+          }
+        }
+      }
+    },
+    "fileTemplates.action.edit": {
+      "comment": "Title of the file-template editing sheet",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Edit Template"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "编辑模板"
+          }
+        }
+      }
+    },
+    "fileTemplates.empty.description": {
+      "comment": "Guidance for adding the first file template",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add a file to use it as a template in Finder."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "添加文件，将其用作 Finder 中的新建文件模板。"
+          }
+        }
+      }
+    },
+    "fileTemplates.empty.title": {
+      "comment": "Title of the valid empty file-template list",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No File Templates"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "暂无文件模板"
+          }
+        }
+      }
+    },
+    "fileTemplates.error.load": {
+      "comment": "Title shown when the template library cannot be read",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unable to Load Templates"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法载入模板"
+          }
+        }
+      }
+    },
+    "fileTemplates.error.operation": {
+      "comment": "Title of a failed template import or deletion alert",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unable to Update Templates"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法更新模板"
+          }
+        }
+      }
+    },
+    "fileTemplates.field.defaultFileName": {
+      "comment": "Label for the initial filename used when copying a template",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Default File Name:"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "默认文件名："
+          }
+        }
+      }
+    },
+    "fileTemplates.field.displayName": {
+      "comment": "Label for a template's context-menu title",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Display Name:"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "显示名："
           }
         }
       }
@@ -1005,6 +1329,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "右键菜单"
+          }
+        }
+      }
+    },
+    "statusPage.pane.fileTemplates": {
+      "comment": "Title of the file-template settings pane",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "File Templates"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "文件模板"
           }
         }
       }

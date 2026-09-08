@@ -11,6 +11,7 @@ nonisolated indirect enum ContextMenuNode<Item> {
     /// 使用固定产品标题折叠一组子节点。
     case submenu(
         title: LocalizedStringResource,
+        icon: ContextCommandIcon? = nil,
         children: [ContextMenuNode<Item>]
     )
 
@@ -21,7 +22,7 @@ nonisolated indirect enum ContextMenuNode<Item> {
             return [item]
         case .separator:
             return []
-        case .submenu(_, let children):
+        case .submenu(_, _, let children):
             return children.flatMap { $0.items }
         }
     }
@@ -35,9 +36,10 @@ nonisolated indirect enum ContextMenuNode<Item> {
             return .item(transform(item))
         case .separator:
             return .separator
-        case .submenu(let title, let children):
+        case .submenu(let title, let icon, let children):
             return .submenu(
                 title: title,
+                icon: icon,
                 children: children.map { $0.mapItems(transform) }
             )
         }
@@ -66,14 +68,14 @@ enum ContextMenuNodeResolver {
             case .separator:
                 return .separator
 
-            case .submenu(let title, let children):
+            case .submenu(let title, let icon, let children):
                 let mappedChildren = compactMapItems(
                     in: children,
                     transform
                 )
                 return mappedChildren.isEmpty
                     ? nil
-                    : .submenu(title: title, children: mappedChildren)
+                    : .submenu(title: title, icon: icon, children: mappedChildren)
             }
         }
 

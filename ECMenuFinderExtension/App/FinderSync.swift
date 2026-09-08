@@ -24,7 +24,12 @@ final class FinderSync: FIFinderSync {
 
     /// 解释产品菜单声明，并通过菜单项绑定的上下文路由 action。
     private lazy var contextMenuController = FinderContextMenuController(
-        menu: ContextMenuComposition.menu(commandClient: commandClient),
+        makeMenu: { [commandClient, menuConfiguration] in
+            ContextMenuComposition.menu(
+                commandClient: commandClient,
+                fileTemplates: menuConfiguration.fileTemplates
+            )
+        },
         configuration: menuConfiguration
     )
 

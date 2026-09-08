@@ -13,7 +13,11 @@ final class ContextCommandFeatureTests: XCTestCase {
             selection: try XCTUnwrap(FinderItemSelection(paths: [path.path]))
         )
         let client = ContextCommandClient()
-        let newText = CreateNewTextFileFeature(commandClient: client)
+        let templateID = FileTemplateID()
+        let newFile = CreateNewFileFeature(
+            commandClient: client,
+            fileTemplates: [FileTemplateMenuItem(id: templateID, displayName: "TXT")]
+        )
         let vscode = OpenInVSCodeFeature(commandClient: client)
         let iterm = OpenInITerm2Feature(commandClient: client)
         var readCount = 0
@@ -27,7 +31,10 @@ final class ContextCommandFeatureTests: XCTestCase {
             snapshot: snapshot,
             readTargetKind: read
         )
-        XCTAssertEqual(newText.command(in: first)?.directoryPath, path)
+        XCTAssertEqual(
+            newFile.command(templateID: templateID, in: first)?.directoryPath,
+            path
+        )
         kind = nil
         XCTAssertEqual(vscode.command(in: first)?.targetPath, path)
         XCTAssertEqual(iterm.command(in: first)?.targetPath, path)
@@ -37,7 +44,7 @@ final class ContextCommandFeatureTests: XCTestCase {
             snapshot: snapshot,
             readTargetKind: read
         )
-        XCTAssertNil(newText.command(in: second))
+        XCTAssertNil(newFile.command(templateID: templateID, in: second))
         XCTAssertNil(vscode.command(in: second))
         XCTAssertNil(iterm.command(in: second))
         XCTAssertEqual(readCount, 2)
@@ -57,31 +64,41 @@ final class ContextCommandFeatureTests: XCTestCase {
         XCTAssertEqual(context.singleTarget, .unavailable)
     }
 
-    /// 新建 TXT 应在菜单期把容器或单个文件解析为最终目录。
-    func testNewTextFileResolvesTargetDirectory() throws {
-        let fixture = try makeUniqueDirectory(purpose: "new-text-feature")
+    /// 新建文件应在菜单期把容器或单个文件解析为最终目录。
+    func testNewFileResolvesTargetDirectory() throws {
+        let fixture = try makeUniqueDirectory(purpose: "new-file-feature")
         defer { try? FileManager.default.removeItem(at: fixture) }
         let fileURL = fixture.appendingPathComponent("selected.txt")
         FileManager.default.createFile(atPath: fileURL.path, contents: Data())
-        let feature = CreateNewTextFileFeature(
-            commandClient: ContextCommandClient()
+        let templateID = FileTemplateID()
+        let feature = CreateNewFileFeature(
+            commandClient: ContextCommandClient(),
+            fileTemplates: [FileTemplateMenuItem(id: templateID, displayName: "TXT")]
         )
 
         XCTAssertEqual(
             feature.command(
+                templateID: templateID,
                 in: context(.container(path: try absolutePath(fixture)))
             )?.directoryPath,
             try absolutePath(fixture)
         )
         XCTAssertEqual(
-            feature.command(in: context(try items([fileURL])))?.directoryPath,
+            feature.command(
+                templateID: templateID,
+                in: context(try items([fileURL]))
+            )?.directoryPath,
             try absolutePath(fixture)
         )
         XCTAssertNil(
-            feature.command(in: context(try items([fileURL, fixture])))
+            feature.command(
+                templateID: templateID,
+                in: context(try items([fileURL, fixture]))
+            )
         )
         XCTAssertNil(
             feature.command(
+                templateID: templateID,
                 in: context(
                     .sidebar(path: try absolutePath(fileURL))
                 )

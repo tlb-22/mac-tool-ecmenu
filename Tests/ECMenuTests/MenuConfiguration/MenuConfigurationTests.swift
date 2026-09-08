@@ -11,7 +11,7 @@ final class MenuConfigurationTests: XCTestCase {
 
     /// 产品总开关不应覆盖各功能的稀疏隐藏集合。
     func testMasterEnablementPreservesHiddenFeatureIDs() {
-        let featureID = CreateNewTextFileCommand.descriptor.id
+        let featureID = CreateNewFileCommand.descriptor.id
         var configuration = MenuConfiguration(
             hiddenFeatureIDs: [featureID.rawValue]
         )
@@ -29,7 +29,7 @@ final class MenuConfigurationTests: XCTestCase {
 
     /// 配置只记录隐藏功能，重新显示后恢复标准空集合。
     func testVisibilityUsesOnlyHiddenFeatureIDs() throws {
-        let featureID = CreateNewTextFileCommand.descriptor.id
+        let featureID = CreateNewFileCommand.descriptor.id
         var configuration = MenuConfiguration.standard
         XCTAssertTrue(configuration.isVisible(featureID))
 

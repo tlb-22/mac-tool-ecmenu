@@ -55,20 +55,20 @@
         }
       }
     },
-    "command.newTextFile" : {
-      "comment" : "Finder command that creates an empty TXT file",
+    "command.newFile" : {
+      "comment" : "Finder submenu that creates a file from a saved template",
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "New TXT File"
+            "value" : "New File"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "新建 TXT"
+            "value" : "新建文件"
           }
         }
       }

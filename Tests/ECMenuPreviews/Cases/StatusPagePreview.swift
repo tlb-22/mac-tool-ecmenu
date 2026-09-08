@@ -93,6 +93,11 @@ struct StatusPagePreviewState {
 
     /// 外部应用的可用状态与图标，以 bundle identifier 索引。
     let applicationIcons: [String: NSImage]
+
+    /// 当前场景的模板读取状态，完全来自内存样例。
+    var fileTemplateState: FileTemplatePageState = .ready(
+        FileTemplatePreviewFixtures.templates
+    )
 }
 
 /// 保活真实 SwiftUI 页面所在的标准 AppKit 窗口。
@@ -142,6 +147,9 @@ private struct StatusPagePreviewContent: View {
     /// 当前预览会话内的登录项状态，不访问 Service Management。
     @State private var loginItemState: LoginItemRegistrationState
 
+    /// 当前预览会话内的模板列表，不访问产品模板目录。
+    @State private var fileTemplateState: FileTemplatePageState
+
     /// 当前场景显示的 Finder Extension 状态。
     private let isExtensionEnabled: Bool
 
@@ -156,6 +164,7 @@ private struct StatusPagePreviewContent: View {
         _selectedPane = State(initialValue: selectedPane)
         _configuration = State(initialValue: state.configuration)
         _loginItemState = State(initialValue: state.loginItemState)
+        _fileTemplateState = State(initialValue: state.fileTemplateState)
         isExtensionEnabled = state.isExtensionEnabled
         applicationIcons = state.applicationIcons
     }
@@ -171,8 +180,10 @@ private struct StatusPagePreviewContent: View {
                 applicationIcons: applicationIcons
             ),
             loginItemState: loginItemState,
-            descriptors: ContextCommandComposition.handlers.descriptors,
+            descriptors: ContextCommandComposition.descriptors,
             configuration: configuration,
+            fileTemplateState: fileTemplateState,
+            isUpdatingFileTemplates: false,
             setEnabled: { isEnabled in
                 configuration.setEnabled(isEnabled)
             },
@@ -183,7 +194,34 @@ private struct StatusPagePreviewContent: View {
             setVisibility: { isVisible, featureID in
                 configuration.setVisible(isVisible, for: featureID)
             },
-            openFullDiskAccessSettings: {}
+            openFullDiskAccessSettings: {},
+            importTemplate: {
+                guard case .ready(var templates) = fileTemplateState else {
+                    preconditionFailure("Import requires an available template list")
+                }
+                templates.append(try FileTemplate(
+                    displayName: "JSON",
+                    defaultFileName: "untitled.json"
+                ))
+                fileTemplateState = .ready(templates)
+            },
+            updateTemplate: { edited in
+                guard case .ready(let templates) = fileTemplateState else {
+                    preconditionFailure("Editing requires an available template list")
+                }
+                fileTemplateState = .ready(templates.map {
+                    $0.id == edited.id ? edited : $0
+                })
+            },
+            removeTemplate: { id in
+                guard case .ready(let templates) = fileTemplateState else {
+                    preconditionFailure("Deletion requires an available template list")
+                }
+                fileTemplateState = .ready(templates.filter { $0.id != id })
+            },
+            reloadTemplates: {
+                fileTemplateState = .ready(FileTemplatePreviewFixtures.templates)
+            }
         )
     }
 }

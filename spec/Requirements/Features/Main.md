@@ -4,7 +4,7 @@
 
 | 业务能力 | 需求 |
 |---|---|
-| 按模板创建文件 | [新建文件](NewFile.md)（待实现） |
+| 按模板创建文件 | [新建文件](NewFile.md) |
 | 复制路径 | [拷贝路径](CopyPath.md) |
 | 修改可见性 | [隐藏项目 / 显示项目](Visibility.md) |
 | 处理图片 | [压缩图片](ImageCompression.md) |

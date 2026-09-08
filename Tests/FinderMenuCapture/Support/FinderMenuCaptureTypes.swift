@@ -55,6 +55,13 @@ enum CLICommand {
     struct CaptureRequest {
         let context: FinderMenuContext
         let outputURL: URL
+        let templateAction: TemplateAction?
+    }
+
+    struct TemplateAction {
+        let parentTitle: String
+        let templateTitle: String
+        let expectedFileURL: URL
     }
 
     static func parse(_ arguments: [String]) throws -> CLICommand {
@@ -88,7 +95,8 @@ enum CLICommand {
                     directory: directory,
                     openingItem: openingItem
                 ),
-                outputURL: outputURL
+                outputURL: outputURL,
+                templateAction: nil
             ))
         case "items":
             guard arguments.count >= 3 else { throw AutomationFailure.usage }
@@ -102,7 +110,36 @@ enum CLICommand {
                     first: urls[0],
                     remaining: Array(urls.dropFirst())
                 )),
-                outputURL: outputURL
+                outputURL: outputURL,
+                templateAction: nil
+            ))
+        case "create-file":
+            guard arguments.count == 6,
+                  !arguments[3].isEmpty,
+                  !arguments[4].isEmpty,
+                  !arguments[5].isEmpty,
+                  !arguments[5].contains("/"),
+                  arguments[5] != ".", arguments[5] != ".." else {
+                throw AutomationFailure.usage
+            }
+            guard case .capture(let containerRequest) = try parse([
+                "container", arguments[1], arguments[2],
+            ]) else {
+                preconditionFailure("Container parsing must return a capture request")
+            }
+            let expectedFileURL = containerRequest.context.directory
+                .appendingPathComponent(arguments[5])
+            guard !FileManager.default.fileExists(atPath: expectedFileURL.path) else {
+                throw AutomationFailure.createdFileAlreadyExists(expectedFileURL.path)
+            }
+            return .capture(CaptureRequest(
+                context: containerRequest.context,
+                outputURL: containerRequest.outputURL,
+                templateAction: TemplateAction(
+                    parentTitle: arguments[3],
+                    templateTitle: arguments[4],
+                    expectedFileURL: expectedFileURL
+                )
             ))
         default:
             throw AutomationFailure.usage
@@ -226,6 +263,9 @@ enum AutomationFailure: Error {
     case windowCloseTimeout
     case focusLost(String)
     case menuChanged
+    case templateMenuUnavailable(String)
+    case createdFileAlreadyExists(String)
+    case createdFileTimeout(String)
     case screenshotFailed(String)
     case accessibility(AXOperation, AXError)
     case invalidAccessibilityValue(String)
@@ -265,6 +305,9 @@ enum AutomationFailure: Error {
         case .windowCloseTimeout: "window-close-timeout"
         case .focusLost: "focus-lost"
         case .menuChanged: "menu-changed"
+        case .templateMenuUnavailable: "template-menu-unavailable"
+        case .createdFileAlreadyExists: "created-file-already-exists"
+        case .createdFileTimeout: "created-file-timeout"
         case .screenshotFailed: "screenshot-failed"
         case .accessibility: "accessibility-error"
         case .invalidAccessibilityValue: "invalid-accessibility-value"
@@ -275,7 +318,7 @@ enum AutomationFailure: Error {
     var message: String {
         switch self {
         case .usage:
-            "Usage: FinderMenuAutomation preflight | finder-windows | container <output.png> <directory> | items <output.png> <item> [item ...]"
+            "Usage: FinderMenuAutomation preflight | finder-windows | container <output.png> <directory> | items <output.png> <item> [item ...] | create-file <submenu.png> <directory> <parent-title> <template-title> <expected-file-name>"
         case let .pathMustBeAbsolute(path): "Path must be absolute: \(path)"
         case let .directoryDoesNotExist(path): "Directory does not exist: \(path)"
         case let .containerIsEmpty(path):
@@ -320,6 +363,12 @@ enum AutomationFailure: Error {
         case .windowCloseTimeout: "The owned Finder window did not close."
         case let .focusLost(reason): reason
         case .menuChanged: "The Finder menu rect or titles changed during capture."
+        case let .templateMenuUnavailable(title):
+            "Expected one enabled template menu item or submenu: \(title)"
+        case let .createdFileAlreadyExists(path):
+            "The expected created file already exists: \(path)"
+        case let .createdFileTimeout(path):
+            "The template command did not create the expected ordinary file: \(path)"
         case let .screenshotFailed(message): "Screenshot failed: \(message)"
         case let .accessibility(operation, error):
             "\(operation.rawValue) failed with AXError \(error.rawValue)."

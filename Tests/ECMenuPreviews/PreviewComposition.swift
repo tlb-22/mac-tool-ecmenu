@@ -5,6 +5,10 @@ enum PreviewComposition {
     static let previews = [
         ApplicationPreviewDefinition(StatusPageGeneralPreview.self),
         ApplicationPreviewDefinition(StatusPageContextMenuPreview.self),
+        ApplicationPreviewDefinition(StatusPageFileTemplatesPreview.self),
+        ApplicationPreviewDefinition(StatusPageFileTemplatesEmptyPreview.self),
+        ApplicationPreviewDefinition(StatusPageFileTemplatesFailurePreview.self),
+        ApplicationPreviewDefinition(FileTemplateEditorPreview.self),
         ApplicationPreviewDefinition(READMEStatusPageGeneralPreview.self),
         ApplicationPreviewDefinition(
             READMEStatusPageContextMenuPreview.self

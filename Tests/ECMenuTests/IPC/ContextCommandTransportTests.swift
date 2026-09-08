@@ -17,7 +17,7 @@ final class ContextCommandTransportTests: XCTestCase {
         )
 
         try assertEnvelopeWireRoundTrip(
-            CreateNewTextFileCommand(directoryPath: firstPath)
+            CreateNewFileCommand(directoryPath: firstPath, templateID: .init())
         )
         try assertEnvelopeWireRoundTrip(
             try XCTUnwrap(CopyPathCommand(paths: [firstPath, secondPath]))
@@ -100,13 +100,16 @@ final class ContextCommandTransportTests: XCTestCase {
             request
         )
 
-        let configuration = MenuConfiguration(
-            isEnabled: false,
-            hiddenFeatureIDs: ["new-text-file"]
+        let configuration = MenuConfigurationSnapshot(
+            configuration: MenuConfiguration(isEnabled: false, hiddenFeatureIDs: ["new-text-file"]),
+            fileTemplates: [
+                FileTemplateMenuItem(id: .init(), displayName: "TXT"),
+                FileTemplateMenuItem(id: .init(), displayName: "TXT")
+            ]
         )
         XCTAssertEqual(
             try JSONDecoder().decode(
-                MenuConfiguration.self,
+                MenuConfigurationSnapshot.self,
                 from: JSONEncoder().encode(configuration)
             ),
             configuration
@@ -122,7 +125,7 @@ final class ContextCommandTransportTests: XCTestCase {
             contextCommandSink: { _ in
                 XCTFail("A configuration query reached the command sink")
             },
-            menuConfigurationProvider: { reply in reply(.standard) }
+            menuConfigurationProvider: { reply in reply(.success(.standard)) }
         )
         defer { server.stop() }
 
@@ -136,6 +139,61 @@ final class ContextCommandTransportTests: XCTestCase {
         }.value
 
         XCTAssertEqual(configuration, .standard)
+    }
+
+    func testMenuSnapshotRejectsInvalidTemplateIdentitiesAndUnsupportedSchema() throws {
+        let item = FileTemplateMenuItem(id: .init(), displayName: "TXT")
+        let snapshot = MenuConfigurationSnapshot(configuration: .standard, fileTemplates: [item])
+        let data = try JSONEncoder().encode(snapshot)
+        var object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let items = try JSONSerialization.jsonObject(with: JSONEncoder().encode([item, item]))
+        object["fileTemplates"] = ["available": ["_0": items]]
+        XCTAssertThrowsError(try MenuConfigurationSnapshotCache.decode(JSONSerialization.data(withJSONObject: object)))
+        object["fileTemplates"] = ["unavailable": [:]]
+        object["schemaVersion"] = 999
+        XCTAssertThrowsError(try MenuConfigurationSnapshotCache.decode(JSONSerialization.data(withJSONObject: object)))
+    }
+
+    func testProviderFailureDoesNotPublishAnEmptyMenuSnapshot() async throws {
+        let socketURL = try ProjectTestDirectory.makeUniqueSocketURL()
+        let server = try AuthenticatedLocalSocketServer(
+            expectedClientSigningIdentifier: ApplicationIPC.applicationSigningIdentifier,
+            socketURL: socketURL,
+            contextCommandSink: { _ in XCTFail("A configuration query reached the command sink") },
+            menuConfigurationProvider: { $0(.failure(CocoaError(.fileReadCorruptFile))) }
+        )
+        defer { server.stop() }
+        let client = try AuthenticatedLocalSocketClient(
+            expectedServerSigningIdentifier: ApplicationIPC.applicationSigningIdentifier,
+            socketURL: socketURL
+        )
+        let result = await Task.detached { Result { try client.fetchMenuConfiguration() } }.value
+        if case .success = result { XCTFail("A failed template read was published as a valid snapshot") }
+    }
+
+    @MainActor
+    func testUnavailableTemplatesStillPublishCurrentMenuSwitchesAndCanRecover() async throws {
+        let directory = try ProjectTestDirectory.makeUniqueDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let libraryURL = directory.appendingPathComponent("Library")
+        let original = FileTemplateLibrary(rootURL: libraryURL)
+        let templates = try await original.load()
+        let indexURL = libraryURL.appendingPathComponent("index.json")
+        let validIndex = try Data(contentsOf: indexURL)
+        try Data("invalid".utf8).write(to: indexURL)
+        let library = FileTemplateLibrary(rootURL: libraryURL)
+        let switches = MenuConfiguration(isEnabled: false, hiddenFeatureIDs: ["new-text-file"])
+
+        let failed = await ApplicationIPCServer.menuSnapshot(configuration: { switches }, fileTemplates: library)
+        XCTAssertEqual(failed.configuration, switches)
+        XCTAssertEqual(failed.fileTemplateState, .unavailable)
+        XCTAssertEqual(try MenuConfigurationSnapshotCache.decode(MenuConfigurationSnapshotCache.encode(failed)), failed)
+        XCTAssertNotEqual(failed, MenuConfigurationSnapshot(configuration: switches, fileTemplates: []))
+
+        try validIndex.write(to: indexURL)
+        let recovered = await ApplicationIPCServer.menuSnapshot(configuration: { switches }, fileTemplates: library)
+        XCTAssertEqual(recovered.configuration, switches)
+        XCTAssertEqual(recovered.fileTemplates.map(\.id), templates.map(\.id))
     }
 
     func testPermissionFailureDoesNotRemoveAnActiveSocketAsStale() throws {
@@ -348,7 +406,7 @@ final class ContextCommandTransportTests: XCTestCase {
             expectedClientSigningIdentifier: ApplicationIPC.applicationSigningIdentifier,
             socketURL: socketURL,
             contextCommandSink: { _ in routed.fulfill() },
-            menuConfigurationProvider: { $0(.standard) },
+            menuConfigurationProvider: { $0(.success(.standard)) },
             acceptConnection: { acceptor.accept($0) },
             didFail: { error in XCTFail("Resource failure stopped the listener: \(error)") }
         )
@@ -371,7 +429,7 @@ final class ContextCommandTransportTests: XCTestCase {
                 expectedClientSigningIdentifier: ApplicationIPC.applicationSigningIdentifier,
                 socketURL: socketURL,
                 contextCommandSink: { _ in XCTFail("Resource-exhausted listener routed a command") },
-                menuConfigurationProvider: { $0(.standard) },
+                menuConfigurationProvider: { $0(.success(.standard)) },
                 acceptConnection: { acceptor.accept($0) },
                 didFail: { error in XCTFail("Stopping reported a fatal failure: \(error)") }
             )
@@ -413,7 +471,7 @@ final class ContextCommandTransportTests: XCTestCase {
             expectedClientSigningIdentifier: ApplicationIPC.applicationSigningIdentifier,
             socketURL: socketURL,
             contextCommandSink: { _ in XCTFail("Failed listener routed a command") },
-            menuConfigurationProvider: { $0(.standard) },
+            menuConfigurationProvider: { $0(.success(.standard)) },
             acceptConnection: { _ in .failure(.posix(operation: "accept", code: EBADF)) },
             didFail: { error in
                 XCTAssertEqual(error, .posix(operation: "accept", code: EBADF))
@@ -542,8 +600,9 @@ final class ContextCommandTransportTests: XCTestCase {
         path: String = "/test/parent"
     ) throws -> ContextCommandRequest {
         try ContextCommandRequest(
-            command: CreateNewTextFileCommand(
-                directoryPath: try XCTUnwrap(AbsoluteFilePath(path: path))
+            command: CreateNewFileCommand(
+                directoryPath: try XCTUnwrap(AbsoluteFilePath(path: path)),
+                templateID: .init()
             )
         )
     }

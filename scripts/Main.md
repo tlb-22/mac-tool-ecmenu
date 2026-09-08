@@ -117,6 +117,10 @@ Archive 和打包不改变本机的 Extension 启用状态。Debug 与 Release �
 ```bash
 ./scripts/preview-ui.sh status-page-general
 ./scripts/preview-ui.sh status-page-context-menu
+./scripts/preview-ui.sh status-page-file-templates
+./scripts/preview-ui.sh status-page-file-templates-empty
+./scripts/preview-ui.sh status-page-file-templates-failure
+./scripts/preview-ui.sh file-template-editor
 ./scripts/preview-ui.sh readme-status-page-general
 ./scripts/preview-ui.sh readme-status-page-context-menu
 ./scripts/preview-ui.sh image-compression-settings
@@ -128,7 +132,9 @@ Archive 和打包不改变本机的 Extension 启用状态。Debug 与 Release �
 ./scripts/preview-ui.sh --list
 ```
 
-该命令构建并启动独立的 `ECMenuPreviews` macOS 应用。各入口固定呈现设置页状态覆盖、README 正常设置、压缩设置正常与验证错误、单任务与多任务进度；它们复用生产界面，不写入图片或持久化设置，也不执行右键命令。普通状态覆盖场景只注入合成状态；README 场景保持所有开关开启，并额外从 Launch Services 只读 Visual Studio Code 与 iTerm2 的真实图标，任一应用未安装时不会使用占位图标。`--language en` 与 `--language zh-Hans` 通过当前预览进程的 `AppleLanguages` 参数检查对应语言；省略参数时跟随系统语言。`--list` 仍只列出可用 Preview ID。
+该命令构建并启动独立的 `ECMenuPreviews` macOS 应用。各入口固定呈现设置页状态覆盖、文件模板列表与编辑表单、README 正常设置、压缩设置正常与验证错误、单任务与多任务进度；它们复用生产界面，不写入图片或持久化设置，也不执行右键命令。普通状态覆盖场景只注入合成状态；README 场景保持所有开关开启，并额外从 Launch Services 只读 Visual Studio Code 与 iTerm2 的真实图标，任一应用未安装时不会使用占位图标。`--language en` 与 `--language zh-Hans` 通过当前预览进程的 `AppleLanguages` 参数检查对应语言；省略参数时跟随系统语言。`--list` 仍只列出可用 Preview ID。
+
+文件模板预览使用内存样例：`status-page-file-templates` 呈现模板列表，`status-page-file-templates-empty` 呈现有效空清单，`status-page-file-templates-failure` 呈现读取失败与重试入口，`file-template-editor` 呈现名称编辑表单。预览中的导入、编辑和删除只改变会话内状态。
 
 预览代码位于 `Tests/ECMenuPreviews/`，每个 Case 在文件开头集中保存任务数量等可调参数，并由声明式 Composition 统一注册。
 
@@ -163,6 +169,14 @@ Archive 和打包不改变本机的 Extension 启用状态。Debug 与 Release �
 场景定义位于 `Tests/FinderMenuCapture/`：基础上下文集中在 `Contexts/`，各命令的菜单期望位于对应的 `Features/`，图片 fixture 与多图场景由 `Features/ImageCompression/` 持有。Finder 打开、Accessibility 读取和菜单生命周期统一封装在 `Support/`，不向 Finder Extension 加入截图分支。`--check` 验证注册表、fixture、本地化键、辅助程序编译及其静态 TCC 身份配置，已包含在 `test.sh` 与 CI 中；真实 Finder 截图不在无人值守的 CI 中运行。
 
 真实截图运行时需要保持 macOS 桌面已解锁且不要操作 Finder。运行端需要“辅助功能”和“屏幕与系统音频录制”权限；这些权限只用于开发截图工具，ECMenu 产品本身仍不需要辅助功能权限。截图、fixture 和日志使用同一单次运行名称，分别位于 `.artifacts/scratch/{previews,tests,logs}/`。`--check` 只验证场景、语言定义、本地化键、Finder 资源映射、fixture、辅助程序编译及静态 TCC 身份，不修改偏好或重启进程。
+
+已签名的 `FinderMenuAutomation` 提供独立的模板执行验收入口：
+
+```text
+.derivedData/Build/Products/Debug/FinderMenuAutomation create-file <submenu.png> <fixture-directory> <parent-title> <template-title> <expected-file-name>
+```
+
+该入口截图模板子菜单并点击指定叶子，等待文件生成及 Finder 结果选择后清理本轮窗口。中文默认模板的后三个参数为 `"新建文件" TXT untitled.txt`；目录和截图使用仓库内的单次 scratch 路径。输入前提、子菜单等待和清理边界见[显式模板执行验收](../spec/Technical/FinderMenuCapture.md#显式模板执行验收)。
 
 平台契约、窗口所有权、透明截图方案和已排除的失败路径见 [Finder 菜单自动截图](../spec/Technical/FinderMenuCapture.md)。
 
