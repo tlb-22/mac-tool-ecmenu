@@ -2,13 +2,13 @@
 
 ## 结构与顺序
 
-当前命令直接进入 Finder 一级右键菜单，不增加统一的产品父菜单或功能子菜单。
+产品功能直接进入 Finder 一级右键菜单。“新建文件”展开一层模板子菜单，每个模板对应一个叶子；其余功能直接执行对应命令。
 
 菜单按以下顺序排列，命令之间不插入分隔线：
 
 | 顺序 | 英文 | 简体中文 |
 |---|---|---|
-| 1 | `New TXT File` | `新建 TXT` |
+| 1 | `New File` | `新建文件` |
 | 2 | `Copy Path` | `拷贝路径` |
 | 3 | `Hide Items` | `隐藏项目` |
 | 4 | `Show Items` | `显示项目` |
@@ -16,7 +16,7 @@
 | 6 | `Open in Visual Studio Code` | `进入 Visual Studio Code` |
 | 7 | `Open in iTerm2` | `进入 iTerm2` |
 
-每个命令使用固定且符合功能语义的图标；同一命令在 Finder 菜单、状态页和进度窗口中使用一致的名称与图标。
+固定功能入口使用符合功能语义的图标；同一功能在 Finder 菜单、状态页和进度窗口中使用一致的名称与图标。模板子菜单使用用户配置的显示名，其名称和顺序规则见[新建文件](Features/NewFile.md)。
 
 ## 显示规则
 
@@ -31,9 +31,11 @@
 
 关闭总开关后不显示任何 ECMenu 命令，但保留各命令原有的显示配置。总开关与各命令开关的界面行为见[状态页](StatusPage.md)。
 
+没有模板时不显示“新建文件”父菜单；关闭该功能的显示开关时隐藏整个模板子菜单。
+
 每个命令适用的 Finder 上下文由对应功能需求唯一规定：
 
-- [新建 TXT](Features/NewTextFile.md#菜单与目标目录)
+- [新建文件](Features/NewFile.md#菜单与目标目录)
 - [拷贝路径](Features/CopyPath.md#菜单与操作对象)
 - [隐藏项目 / 显示项目](Features/Visibility.md#操作对象)
 - [压缩图片](Features/ImageCompression.md#菜单与输入)
