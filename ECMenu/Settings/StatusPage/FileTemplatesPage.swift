@@ -4,11 +4,13 @@ import SwiftUI
 enum FileTemplatesStyle {
     /// 命令名与默认文件名之间的间距。
     static let rowNameSpacing: CGFloat = 4
-    /// 每个名称的最小高度，原地编辑前后保持一致。
+    /// 每个名称的高度，原地编辑前后保持一致。
     static let nameHeight: CGFloat = 18
     /// 模板行的水平与垂直内边距。
     static let rowHorizontalPadding: CGFloat = 8
     static let rowVerticalPadding: CGFloat = 8
+    /// 左侧名称区域在模板行内额外增加的缩进。
+    static let nameLeadingPadding: CGFloat = 4
     /// 打开、更换和删除操作之间的间距。
     static let actionSpacing: CGFloat = 8
 }
@@ -17,7 +19,7 @@ enum FileTemplatesStyle {
 struct FileTemplatesPage: View {
     let state: FileTemplatePageState
     let isUpdating: Bool
-    @Binding var editingName: FileTemplateNameDraft?
+    @ObservedObject var nameEditing: FileTemplateNameEditingSession
     let importTemplate: () async throws -> Void
     let updateName: (FileTemplateID, FileTemplateNameField, String) async throws -> Void
     let openTemplate: (FileTemplateID) async throws -> Void
@@ -25,11 +27,17 @@ struct FileTemplatesPage: View {
     let removeTemplate: (FileTemplateID) async throws -> Void
     let reload: () async -> Void
 
-    @FocusState private var focusedName: FileTemplateNameTarget?
     @State private var operationError: String?
-    @State private var actionTask: Task<Void, Never>?
+    private enum FileActionState {
+        case idle
+        case waitingForName
+        case performing
+    }
 
-    private var isBusy: Bool { isUpdating || actionTask != nil }
+    @State private var fileActionState = FileActionState.idle
+
+    // 只有文件操作使操作区进入忙碌状态；名称之间的焦点切换保持页面外观稳定。
+    private var isPerformingFileAction: Bool { fileActionState == .performing }
 
     var body: some View {
         VStack(spacing: StatusPageStyle.sectionSpacing) {
@@ -64,11 +72,11 @@ struct FileTemplatesPage: View {
                             Image(systemName: "plus")
                         }
                     }
-                    .disabled(isBusy)
+                    .disabled(isPerformingFileAction)
 
                     Spacer()
 
-                    if isUpdating {
+                    if isPerformingFileAction && isUpdating {
                         ProgressView()
                             .controlSize(.small)
                     }
@@ -76,16 +84,11 @@ struct FileTemplatesPage: View {
             }
         }
         .padding(StatusPageStyle.contentPadding)
-        .onChange(of: focusedName) { previous, current in
-            guard let draft = editingName,
-                  draft.target == previous, current != previous else { return }
-            Task { await finishEditing(draft) }
-        }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
-            if let draft = editingName { Task { await finishEditing(draft) } }
+            Task { await nameEditing.finishEditing() }
         }
         .onDisappear {
-            if let draft = editingName { Task { await finishEditing(draft) } }
+            Task { await nameEditing.finishEditing() }
         }
         .alert(
             Text(FileTemplatesText.operationFailed),
@@ -117,7 +120,7 @@ struct FileTemplatesPage: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ScrollView {
-                    LazyVStack(spacing: 0) {
+                    VStack(spacing: 0) {
                         ForEach(templates) { template in
                             templateRow(template)
                             Divider()
@@ -134,9 +137,8 @@ struct FileTemplatesPage: View {
             VStack(alignment: .leading, spacing: FileTemplatesStyle.rowNameSpacing) {
                 name(template, field: .displayName)
                 name(template, field: .defaultFileName)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
             }
+            .padding(.leading, FileTemplatesStyle.nameLeadingPadding)
             .frame(maxWidth: .infinity, alignment: .leading)
 
             HStack(spacing: FileTemplatesStyle.actionSpacing) {
@@ -163,68 +165,37 @@ struct FileTemplatesPage: View {
                 .help(Text(FileTemplatesText.delete))
                 .accessibilityLabel(Text(FileTemplatesText.delete))
             }
-            .disabled(isBusy)
+            .disabled(isPerformingFileAction)
         }
         .padding(.horizontal, FileTemplatesStyle.rowHorizontalPadding)
         .padding(.vertical, FileTemplatesStyle.rowVerticalPadding)
     }
 
-    @ViewBuilder
     private func name(_ template: FileTemplate, field: FileTemplateNameField) -> some View {
-        let target = FileTemplateNameTarget(templateID: template.id, field: field)
-        let title = field == .displayName ? FileTemplatesText.displayName : FileTemplatesText.defaultFileName
-        if let draft = editingName, draft.target == target {
-            FileTemplateInlineNameEditor(
-                draft: draft,
-                title: title,
-                focus: $focusedName,
-                submit: { Task { await finishEditing(draft) } },
-                cancel: {
-                    editingName = nil
-                    focusedName = nil
-                }
+        VStack(alignment: .leading, spacing: FileTemplatesStyle.rowNameSpacing) {
+            FileTemplateNameTextField(
+                template: template,
+                field: field,
+                session: nameEditing,
+                isEnabled: !isPerformingFileAction,
+                save: { value in try await updateName(template.id, field, value) }
             )
-        } else {
-            Button {
-                perform {
-                    let draft = FileTemplateNameDraft(template: template, field: field) { value in
-                        try await updateName(template.id, field, value)
-                    }
-                    editingName = draft
-                    focusedName = target
-                }
-            } label: {
-                Text(verbatim: field.value(in: template))
-                    .lineLimit(1)
-                    .frame(maxWidth: .infinity, minHeight: FileTemplatesStyle.nameHeight, alignment: .leading)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .disabled(isBusy)
-            .accessibilityLabel(Text(title))
-            .accessibilityValue(field.value(in: template))
-        }
-    }
+            .frame(height: FileTemplatesStyle.nameHeight)
 
-    /// 失焦与点击后续操作可以同时到达；同一草稿负责合并提交。
-    @discardableResult
-    private func finishEditing(_ draft: FileTemplateNameDraft) async -> Bool {
-        let saved = await draft.commit()
-        guard editingName === draft else { return saved }
-        if saved {
-            editingName = nil
-            focusedName = nil
-        } else {
-            focusedName = draft.target
+            if let draft = nameEditing.draft,
+               draft.target == FileTemplateNameTarget(templateID: template.id, field: field) {
+                FileTemplateNameError(draft: draft)
+            }
         }
-        return saved
     }
 
     private func perform(_ operation: @escaping () async throws -> Void) {
-        guard actionTask == nil else { return }
-        actionTask = Task {
-            defer { actionTask = nil }
-            if let draft = editingName, !(await finishEditing(draft)) { return }
+        guard fileActionState == .idle else { return }
+        fileActionState = .waitingForName
+        Task {
+            defer { fileActionState = .idle }
+            guard await nameEditing.finishEditing() else { return }
+            fileActionState = .performing
             do {
                 try await operation()
             } catch {
@@ -234,31 +205,16 @@ struct FileTemplatesPage: View {
     }
 }
 
-/// 草稿通知只重绘当前字段，保留失败输入并支持重试或 Escape 放弃。
-private struct FileTemplateInlineNameEditor: View {
+/// 错误随当前草稿更新；文字和焦点由始终存在的原生控件持有。
+private struct FileTemplateNameError: View {
     @ObservedObject var draft: FileTemplateNameDraft
-    let title: LocalizedStringResource
-    let focus: FocusState<FileTemplateNameTarget?>.Binding
-    let submit: () -> Void
-    let cancel: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: FileTemplatesStyle.rowNameSpacing) {
-            TextField(text: $draft.value) { Text(title) }
-                .textFieldStyle(.plain)
-                .frame(minHeight: FileTemplatesStyle.nameHeight)
-                .focused(focus, equals: draft.target)
-                .disabled(draft.isSaving)
-                .onSubmit(submit)
-                .onExitCommand(perform: cancel)
-                .onAppear { focus.wrappedValue = draft.target }
-
-            if let message = draft.errorMessage {
-                Text(verbatim: message)
-                    .font(.caption)
-                    .foregroundStyle(.red)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+        if let message = draft.errorMessage {
+            Text(verbatim: message)
+                .font(.caption)
+                .foregroundStyle(.red)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 }

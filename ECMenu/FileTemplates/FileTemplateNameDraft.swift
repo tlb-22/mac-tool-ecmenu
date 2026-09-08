@@ -41,7 +41,7 @@ final class FileTemplateNameDraft: ObservableObject {
     }
 
     @Published private var commitState = CommitState.idle
-    private let originalValue: String
+    let originalValue: String
     private let save: (String) async throws -> Void
 
     var isSaving: Bool {
@@ -50,14 +50,13 @@ final class FileTemplateNameDraft: ObservableObject {
     }
 
     init(
-        template: FileTemplate,
-        field: FileTemplateNameField,
+        target: FileTemplateNameTarget,
+        value: String,
         save: @escaping (String) async throws -> Void
     ) {
-        target = FileTemplateNameTarget(templateID: template.id, field: field)
-        let initialValue = field.value(in: template)
-        value = initialValue
-        originalValue = initialValue
+        self.target = target
+        self.value = value
+        originalValue = value
         self.save = save
     }
 

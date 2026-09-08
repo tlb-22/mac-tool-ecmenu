@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 import XCTest
 @testable import ECMenu
@@ -54,6 +55,43 @@ final class FileTemplateControllerTests: XCTestCase {
         await controller.reload()
         XCTAssertEqual(controller.templates, original)
         XCTAssertEqual(changes, [original])
+    }
+
+    /// 写盘失败后的快照恢复保持列表挂载，原地编辑控件不会经历 loading 重建。
+    func testNameWriteFailureKeepsReadySnapshotThroughoutRecovery() async throws {
+        let fixture = try FileTemplateLibraryFixture()
+        defer { fixture.remove() }
+        let library = FileTemplateLibrary(rootURL: fixture.libraryURL)
+        var changes: [[FileTemplate]] = []
+        let controller = FileTemplateController(library: library) { changes.append($0) }
+        await controller.loadIfNeeded()
+        let original = try XCTUnwrap(controller.templates)
+        let template = try XCTUnwrap(original.first)
+        var states: [FileTemplatePageState] = []
+        let subscription = controller.$state.sink { states.append($0) }
+        defer { subscription.cancel() }
+
+        // 非空目录阻止索引的原子替换，不依赖当前用户的 POSIX 写权限。
+        try FileManager.default.removeItem(at: fixture.indexURL)
+        try FileManager.default.createDirectory(at: fixture.indexURL, withIntermediateDirectories: false)
+        try Data("occupied".utf8).write(to: fixture.indexURL.appendingPathComponent("blocker"))
+
+        do {
+            try await controller.updateName(for: template.id, field: .displayName, value: "Notes")
+            XCTFail("An index write failure must be reported to the name editor")
+        } catch let error as FileTemplateLibraryError {
+            guard case .fileOperation(.saveIndex, let url, _) = error else {
+                return XCTFail("Unexpected error: \(error)")
+            }
+            XCTAssertEqual(url.path, fixture.indexURL.path)
+        }
+
+        XCTAssertFalse(states.isEmpty)
+        XCTAssertTrue(states.allSatisfy { $0 == .ready(original) })
+        XCTAssertEqual(controller.state, .ready(original))
+        XCTAssertEqual(controller.templates, original)
+        XCTAssertFalse(controller.isUpdating)
+        XCTAssertEqual(changes, [original, original])
     }
 
     /// 名称重复按 ID 更新正确行，失败导入重新发布有效快照且继续向界面报告错误。

@@ -285,7 +285,7 @@ struct StatusPageContent: View {
     let reloadTemplates: () async -> Void
 
     /// 草稿随状态页窗口保留；侧栏切换先完成当前名称提交。
-    @State private var editingTemplateName: FileTemplateNameDraft?
+    @StateObject private var templateNameEditing = FileTemplateNameEditingSession()
 
     private var paneSelection: Binding<StatusPagePane> {
         Binding(get: { selectedPane }, set: selectPane)
@@ -293,13 +293,12 @@ struct StatusPageContent: View {
 
     private func selectPane(_ pane: StatusPagePane) {
         guard pane != selectedPane else { return }
-        guard let draft = editingTemplateName else {
+        guard templateNameEditing.draft != nil else {
             selectedPane = pane
             return
         }
         Task {
-            guard await draft.commit() else { return }
-            if editingTemplateName === draft { editingTemplateName = nil }
+            guard await templateNameEditing.finishEditing() else { return }
             selectedPane = pane
         }
     }
@@ -376,7 +375,7 @@ struct StatusPageContent: View {
             FileTemplatesPage(
                 state: fileTemplateState,
                 isUpdating: isUpdatingFileTemplates,
-                editingName: $editingTemplateName,
+                nameEditing: templateNameEditing,
                 importTemplate: importTemplate,
                 updateName: updateTemplateName,
                 openTemplate: openTemplate,

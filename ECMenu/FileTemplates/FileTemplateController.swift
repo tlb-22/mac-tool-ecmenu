@@ -48,6 +48,10 @@ final class FileTemplateController: ObservableObject {
     /// 读取失败后允许用户明确重试；错误保留为页面状态。
     func reload() async {
         state = .loading
+        await refreshSnapshot()
+    }
+
+    private func refreshSnapshot() async {
         do {
             publish(try await library.load())
         } catch {
@@ -95,7 +99,8 @@ final class FileTemplateController: ObservableObject {
             publish(try await operation())
         } catch {
             let operationError = error
-            await reload()
+            // 已有清单保持原生控件身份，保存失败后的草稿仍可继续编辑。
+            await refreshSnapshot()
             throw operationError
         }
     }

@@ -8,7 +8,7 @@ final class FileTemplateNameDraftTests: XCTestCase {
     func testConcurrentCommitsShareOneSaveAndLaterCommitsDoNotSaveAgain() async throws {
         let template = try FileTemplate(displayName: "TXT", defaultFileName: "untitled.txt")
         let save = FileTemplateDraftSaveGate()
-        let draft = FileTemplateNameDraft(template: template, field: .displayName) {
+        let draft = FileTemplateNameDraft(target: .init(templateID: template.id, field: .displayName), value: template.displayName) {
             try await save.save($0)
         }
         draft.value = "Notes"
@@ -42,7 +42,7 @@ final class FileTemplateNameDraftTests: XCTestCase {
         let template = try FileTemplate(displayName: "TXT", defaultFileName: "untitled.txt")
         for field in [FileTemplateNameField.displayName, .defaultFileName] {
             var savedValues: [String] = []
-            let draft = FileTemplateNameDraft(template: template, field: field) {
+            let draft = FileTemplateNameDraft(target: .init(templateID: template.id, field: field), value: field.value(in: template)) {
                 savedValues.append($0)
             }
             XCTAssertEqual(draft.target, FileTemplateNameTarget(templateID: template.id, field: field))
@@ -67,7 +67,7 @@ final class FileTemplateNameDraftTests: XCTestCase {
         for (field, invalid, corrected) in scenarios {
             var attemptedValues: [String] = []
             var saved: [FileTemplate] = []
-            let draft = FileTemplateNameDraft(template: template, field: field) { value in
+            let draft = FileTemplateNameDraft(target: .init(templateID: template.id, field: field), value: field.value(in: template)) { value in
                 attemptedValues.append(value)
                 saved.append(try field.updating(template, to: value))
             }

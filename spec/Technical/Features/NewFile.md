@@ -8,6 +8,12 @@
 
 菜单项按模板 ID 绑定用户选择，主应用按同一身份解析模板。已删除或不可读取的模板形成运行时失败，不按名称寻找替代项。这使同名模板和菜单展示后的模板删除都具有明确语义。
 
+### 名称编辑的原生焦点边界
+
+名称输入使用同一个窗口的原生 field editor；异步提交期间必须保留文本控件身份，才能把输入、选区和后续点击关联到正确字段。完整模板列表保留控件，名称保存期间保持列表和文件操作区稳定；写盘失败后的快照同步也保留已有清单。焦点交接在提交成功后执行，失败时继续由原控件接收输入。
+
+项目观察（2026-09-08，macOS 26.6.2、Xcode 26.6）：对已经编辑的 `NSTextField` 调用 `selectText` 恢复选择时，可能同步产生结束编辑通知。因此，程序化恢复期间仍属于当前交接，不能把该通知再次解释为用户离开字段。该时序由[会话测试](../../../Tests/ECMenuTests/Settings/StatusPage/FileTemplateNameEditingSessionTests.swift)和[隐藏窗口中的原生页面测试](../../../Tests/ECMenuTests/Settings/StatusPage/FileTemplatesPageTests.swift)覆盖；它是项目验证的平台行为，不是所有 macOS 版本的通知顺序保证。测试边界见[界面预览目标](../PreviewTarget.md)。
+
 ## 模板库持久化
 
 模板库位于用户 Application Support 下，以当前主应用 signing identifier 隔离产品身份：
