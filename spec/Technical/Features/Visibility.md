@@ -1,25 +1,67 @@
-# 隐藏项目 / 显示项目技术决策
+# 隐藏项目与显示项目
 
-产品行为见[隐藏项目 / 显示项目需求](../../Requirements/Features/Visibility.md)，Finder 上下文的形成规则见 [Finder 菜单语义](../Platform/Finder/ContextMenus.md)。
+能力范围是修改所选对象自身的隐藏属性，两个命令共享规则、执行器与反馈。产品行为见[需求](../../Requirements/Features/Visibility.md)，Finder 场景与菜单组装见[菜单语义](../Platform/Finder/ContextMenus.md)。
 
-## 隐藏属性与点号名称
+## 执行流
 
-macOS 26.5 SDK 的 `NSURL.h:226` 声明 `NSURLIsHiddenKey` 是可读写的布尔资源键，表示通常不向用户显示的资源。官方注释同时明确：如果隐藏来自文件名以 `.` 开头，把该键设为 `false` 不会改变其隐藏状态。
+```mermaid
+sequenceDiagram
+    box Finder Extension 进程
+        participant E as VisibilityFeature / 菜单事实
+    end
+    box ECMenu 主应用进程
+        participant H as VisibilityHandler / Execution
+        participant R as VisibilityRules
+        participant P as VisibilityPlatform
+        participant F as VisibilityFeedback
+    end
+    participant S as 文件系统
+    E->>S: resourceValues：读取普通名称对象的 isHidden
+    S-->>E: 隐藏 / 可见 / 未知
+    E->>E: 决定隐藏、显示叶子；冻结非空选择
+    E->>H: 经 IPC：HideItemsCommand 或 ShowItemsCommand
+    H->>R: 选择 URLs + 固定操作
+    R-->>H: 跳过点号名称后的有序计划
+    loop 每个普通名称对象，Task 未取消
+        H->>P: setHidden(URL, Bool)
+        P->>S: URL.setResourceValues
+        S-->>P: 完成或 Error
+        P-->>H: 单项成功或稳定错误快照
+        Note over H: 收集失败；继续后续项目，保留成功
+    end
+    H-->>F: Report + 操作 + 本地 UUID
+    F->>F: 日志；权限问题汇总警告，否则提示音
+```
 
-普通名称对象通过 Swift 对应的 `URLResourceValues.isHidden` 修改 Finder 隐藏属性。[VisibilityTests](../../../Tests/ECMenuTests/ContextCommands/Features/Visibility/VisibilityTests.swift) 固化了普通文件、目录和符号链接的隐藏与显示、非递归执行、链接目标不变以及点号对象被跳过这些边界。
+单项属性写入返回后即完成该项。整批报告包含成功数量与逐项失败，不提供回滚；Task 生命周期取消在相邻对象间停止，Router 随后跳过反馈。Extension 菜单阶段不预检写权限。
 
-项目观察表明，点号开头名称的隐藏语义来自文件名本身，清除 `isHidden` 后仍被系统视为隐藏。此类对象不能在“不重命名”的产品边界内真正显示，因此计划阶段静默跳过，而不报告虚假的成功。
+## 模块、输入输出与状态
 
-## 菜单生成条件
+| 模块 / 源码入口 | 输入 → 输出 | 外部边界与状态 |
+|---|---|---|
+| [VisibilityMenuFactsReader](../../../ECMenuFinderExtension/Commands/Visibility/VisibilityMenuFactsReader.swift)、[VisibilityFeatures](../../../ECMenuFinderExtension/Commands/Visibility/VisibilityFeatures.swift) | items 选择 → 隐藏事实 → 菜单命令 | `URL.resourceValues`；未知/点号不促成叶子出现，混合状态可同时出现两个命令 |
+| [VisibilityRules](../../../ECMenu/Commands/Visibility/Domain/VisibilityRules.swift) | 选择与操作 → 不含点号名称的计划 | 纯规则；计划和结果是本次执行的不可变值 |
+| [VisibilityHandlers](../../../ECMenu/Commands/Visibility/Application/VisibilityHandlers.swift)、[VisibilityExecution](../../../ECMenu/Commands/Visibility/Application/VisibilityExecution.swift) | 命令、注入平台能力 → Report | 命令类型固定 hide/show；执行器拥有本批成功计数与失败集合，逐项检查 Task 取消 |
+| [VisibilitySystem](../../../ECMenu/Commands/Visibility/Platform/VisibilitySystem.swift) | URL + 目标 Bool → 完成 / throws | Foundation 资源属性写入；无独立缓存 |
+| [VisibilityAlertContent](../../../ECMenu/Commands/Visibility/Presentation/VisibilityAlertContent.swift)、[VisibilityFeedback](../../../ECMenu/Commands/Visibility/Presentation/VisibilityFeedback.swift) | Report + 操作 → 文案与反馈 | 纯文案分类；`Logger`、`NSAlert`、`NSSound` 通过[统一反馈](../Runtime/CommandExecution.md)呈现 |
 
-Finder 只从 `.items` 快照构造可见性命令；命令负载直接保存非空的 `FinderItemSelection`，而不是可以继续表达 container 或 sidebar 的通用上下文。因此主应用执行端不需要再次判断和拒绝这些不可能状态。
+没有持久化配置副本；文件系统拥有最终隐藏属性，任务只保存本次执行事实。`VisibilityIssue` 从底层错误快照推导错误类别，避免重复状态。
 
-items 菜单根据普通名称对象的已知 `isHidden` 值决定叶子是否进入布局：至少一个可见对象促成“隐藏项目”，至少一个隐藏对象促成“显示项目”。点号名称和读取失败的对象不促成任何一项出现；混合选择可以同时生成两项。
+## API 契约与设计依据
 
-菜单构建阶段只读取隐藏状态，不预检对象或父目录的写入权限及卷状态。这些条件可能在菜单展示后改变，也可能在 Extension 与主应用中得到不同结果；真正的写入和错误分类属于主应用执行边界。
+| API | 实际输入 → 输出 | 约束与失败 |
+|---|---|---|
+| `URL.resourceValues(forKeys: [.isHiddenKey])` | 普通名称对象 URL → Bool? / throws | Extension 把读取失败作为未知，只影响菜单可用性 |
+| [`URLResourceValues.isHidden`](https://developer.apple.com/documentation/foundation/urlresourcevalues/ishidden)、`URL.setResourceValues` | 原始 URL + hide=true / show=false → Void / throws | 修改选中对象；成功才增加计数。权限与只读错误进入汇总警告，其余问题日志加提示音 |
+| `Task.isCancelled` | 当前任务 → Bool | 每项开始前查询；不强制中断正在执行的同步属性写入 |
+| `NSAlert` / `NSSound` / `Logger` | 类型化报告与 UUID → 一次反馈 | 有权限警告时不再额外播放提示音；成功静默 |
 
-[ContextMenuCompositionTests](../../../Tests/ECMenuFinderExtensionTests/ContextMenu/ContextMenuCompositionTests.swift) 固化了点号名称和未知状态被排除、混合状态同时生成两项，以及背景和侧边栏不生成可见性命令。
+macOS 26.5 SDK `NSURL.h:226` 声明隐藏资源键可读写，同时明确点号名称引起的隐藏不能通过设为 false 消除。因此点号对象在“不重命名”的能力边界内跳过，不计为成功。
 
-## 符号链接
+项目真实文件测试表明，写符号链接 URL 的隐藏属性修改链接自身，不修改链接目标；目录属性写入不递归。这是已测系统和样本中的项目观察，不扩大为所有文件系统实现的承诺。
 
-项目测试确认，设置符号链接 URL 的 `isHidden` 修改链接目录项自身，不修改链接目标。隐藏与显示因而保留 Finder 选择的对象身份，不解析符号链接。
+## 验证与实机证据
+
+[VisibilityTests](../../../Tests/ECMenuTests/Commands/Visibility/VisibilityTests.swift)覆盖普通文件、目录、符号链接、点号过滤、非递归写入、权限错误分类及单项失败后继续。[Finder 菜单组合测试](../../../Tests/ECMenuFinderExtensionTests/Menu/ContextMenuCompositionTests.swift)覆盖背景/侧边栏排除、未知状态与混合选择。
+
+已有项目观察为上述文件样本；原有记录未单独提供文件系统与 OS 版本矩阵，因此不据此保证其他卷行为。实机复验应记录 macOS 与目标卷类型，在 Finder 检查隐藏/显示前后对象、链接目标和目录子项。完整自动化入口见[命令执行](../Runtime/CommandExecution.md#验证入口)。

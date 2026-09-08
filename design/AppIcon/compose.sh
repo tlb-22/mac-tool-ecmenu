@@ -1,5 +1,8 @@
 #!/bin/zsh
 
+# 从统一 SVG 设计和 Icon Composer 模板构建应用图标包及预览资源。
+# 检查设计分组与颜色约束，先生成完整暂存输出再替换设计产物目录。
+
 set -euo pipefail
 umask 022
 

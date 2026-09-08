@@ -1,3 +1,8 @@
+/**
+ 封装 Finder 菜单自动化使用的 Accessibility 属性、动作、树遍历和通知等待。
+ 将系统返回值转换为明确事实或自动化失败，并提供主循环驱动的等待边界。
+ */
+
 import ApplicationServices
 import CoreGraphics
 import Foundation

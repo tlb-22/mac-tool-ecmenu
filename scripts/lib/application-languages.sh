@@ -1,7 +1,7 @@
 #!/bin/zsh
 
-# 对单个 application preference domain 的 AppleLanguages 键做精确事务操作。
-# 快照只包含该键，不导入或覆盖应用的其他偏好。
+# 封装单个应用偏好域中 AppleLanguages 的精确快照、设置与恢复。
+# 快照只记录该键的存在性和内容，供截图语言会话恢复原有偏好。
 
 ecmenu_snapshot_application_languages() {
     emulate -L zsh

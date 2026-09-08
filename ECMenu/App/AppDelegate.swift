@@ -1,49 +1,23 @@
+/**
+ 把 AppKit 启动、重新打开与窗口关闭事件转换为应用生命周期操作。
+ 协调配置窗口的前台显示、应用激活策略和常驻命令宿主。
+ */
+
 import AppKit
 import CoreServices
 import OSLog
-
-/// 首次 Open Application Apple Event 表达的进程启动来源。
-enum ApplicationInitialOpenSource: Equatable {
-    /// 用户或开发工具普通打开了主应用。
-    case user
-
-    /// Service Management 在用户登录后启动了主应用。
-    case loginItem
-
-    /// 只根据 Open Application 事件携带的登录项枚举恢复启动来源。
-    /// - Parameter event: 首次 `kAEOpenApplication` 事件。
-    init(openApplicationEvent event: NSAppleEventDescriptor) {
-        let launchKind = event.paramDescriptor(
-            forKeyword: keyAEPropData
-        )?.enumCodeValue
-        self = launchKind == keyAELaunchedAsLogInItem
-            ? .loginItem
-            : .user
-    }
-}
-
-/// 生命周期的系统副作用；窗口的可见、最小化和业务窗口状态仍由 AppKit 持有。
-@MainActor
-struct ApplicationLifecycleEffects {
-    let startIPC: () -> Void
-    let changeActivationPolicy: (NSApplication.ActivationPolicy) -> Bool
-    let showConfigurationWindow: () -> Void
-    let closeConfigurationWindow: () -> Bool
-    let closeActiveWindow: () -> Void
-    let activate: () -> Void
-}
 
 /// 协调常驻命令宿主与可退出的配置界面生命周期。
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let injectedEffects: ApplicationLifecycleEffects?
     private lazy var effects = injectedEffects ?? ApplicationLifecycleEffects(
-        startIPC: { [weak self] in self?.applicationIPCServer.startIfNeeded() },
+        startIPC: { [weak self] in self?.composition.applicationIPCServer.startIfNeeded() },
         changeActivationPolicy: { policy in
             NSApp.activationPolicy() == policy || NSApp.setActivationPolicy(policy)
         },
-        showConfigurationWindow: { [weak self] in self?.statusPageWindowController.showWindow() },
-        closeConfigurationWindow: { [weak self] in self?.statusPageWindowController.closeWindow() ?? false },
+        showConfigurationWindow: { [weak self] in self?.composition.statusPageWindowController.showWindow() },
+        closeConfigurationWindow: { [weak self] in self?.composition.statusPageWindowController.closeWindow() ?? false },
         closeActiveWindow: { NSApp.keyWindow?.performClose(nil) },
         activate: { NSApp.activate(ignoringOtherApps: true) }
     )
@@ -65,36 +39,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         category: "ApplicationLifecycle"
     )
 
-    /// 主应用唯一的 Extension IPC 接收器。
-    private lazy var applicationIPCServer = ApplicationIPCServer(
-        router: ContextCommandRouter(
-            handlers: ContextCommandComposition.handlers
-        ),
-        menuConfiguration: menuConfiguration,
-        fileTemplates: ContextCommandComposition.fileTemplateLibrary
-    )
-
-    /// 配置界面和 Finder Extension 共享的菜单配置真相源。
-    private lazy var menuConfiguration = MenuConfigurationController()
-
-    /// 主应用登录项登记与系统批准状态的唯一所有者。
-    private lazy var loginItemController = LoginItemController()
-
-    /// 配置页只观察模板库已提交快照，变更通知触发 Extension 定向拉取。
-    private lazy var fileTemplates = FileTemplateController(
-        library: ContextCommandComposition.fileTemplateLibrary,
-        didChange: { _ in MenuConfigurationChannel.signalConfigurationChange() }
-    )
-
-    /// 唯一 Status Page 窗口的明确所有者。
-    private lazy var statusPageWindowController = StatusPageWindowController(
-        menuConfiguration: menuConfiguration,
-        loginItemController: loginItemController,
-        fileTemplates: fileTemplates,
-        didClose: { [weak self] in
-            self?.handleConfigurationWindowDidClose()
-        }
-    )
+    /// AppKit 安装 delegate 后按首次生命周期事件装配一次，测试直接注入 effects。
+    private lazy var composition = ApplicationComposition(didCloseConfiguration: { [weak self] in
+        self?.handleConfigurationWindowDidClose()
+    })
 
     /// 首次 Open Application 事件是否已经决定了启动呈现形态。
     private var hasHandledInitialOpenApplicationEvent = false

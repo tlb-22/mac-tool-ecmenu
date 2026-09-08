@@ -1,4 +1,7 @@
-"""Exercise the production switch script with isolated external commands."""
+"""通过隔离的外部命令替身验证开发环境切换脚本的事务顺序。
+
+覆盖准备失败、启用失败、信号中断、回滚和只构建签名检查，避免改动真实扩展环境。
+"""
 
 import datetime
 import json

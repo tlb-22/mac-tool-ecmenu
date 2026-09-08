@@ -80,6 +80,7 @@
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				App/AppDelegate.swift,
+				App/ApplicationComposition.swift,
 				App/ECMenuApp.swift,
 				Info.plist,
 			);
@@ -88,7 +89,7 @@
 		R10000000000000000000001 /* Exceptions for "ECMenuShared" folder in "ContextCommandSender" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
-				Rendering/AppKitIconCanvasRenderer.swift,
+				Platform/Rendering/AppKitIconCanvasRenderer.swift,
 			);
 			target = I10000000000000000000006 /* ContextCommandSender */;
 		};

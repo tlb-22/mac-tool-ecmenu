@@ -1,3 +1,8 @@
+/**
+ 解析预览启动参数、查找唯一场景并管理当前界面会话。
+ 通过主循环检查窗口焦点和布局稳定性，为截图脚本提供就绪及截图完成协议。
+ */
+
 import AppKit
 import Darwin
 import Foundation

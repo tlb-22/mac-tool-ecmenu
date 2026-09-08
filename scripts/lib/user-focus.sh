@@ -1,6 +1,8 @@
 #!/bin/zsh
 
-# Re-executes the outermost GUI automation script through the focus guard.
+# 为 GUI 自动化入口接入最外层用户焦点恢复会话。
+# 通过重执行包装原命令，让嵌套脚本共用一次前台应用快照与最终恢复。
+
 ecmenu_reexec_preserving_user_focus() {
     local script_path="$1"
     shift

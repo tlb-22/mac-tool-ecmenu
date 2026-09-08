@@ -1,3 +1,8 @@
+/**
+ 提供单任务和多任务进度窗口的可重复预览场景。
+ 使用生产进度中心与呈现器驱动固定内存进度，保活各预览会话。
+ */
+
 import Foundation
 
 /// 集中保存进度窗口预览中需要反复手动调整的场景参数。
@@ -57,8 +62,10 @@ private final class ContextCommandProgressPreviewSession {
             )
         )
 
+        let presenter = ContextCommandProgressPresenter()
         let center = ContextCommandProgressCenter(
-            displayDelay: parameters.displayDelay
+            displayDelay: parameters.displayDelay,
+            render: presenter.render
         )
         self.center = center
         reporters = (0..<taskCount).map { _ in

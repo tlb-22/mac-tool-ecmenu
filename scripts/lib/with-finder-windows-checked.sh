@@ -1,5 +1,8 @@
 #!/bin/zsh
 
+# 包装测试命令，在执行前捕获 Finder 窗口，并在子进程及焦点清理完成后核对。
+# 处理信号、原始退出状态和窗口变化诊断，将本轮探针与日志保存到项目内。
+
 set -euo pipefail
 unsetopt BG_NICE
 

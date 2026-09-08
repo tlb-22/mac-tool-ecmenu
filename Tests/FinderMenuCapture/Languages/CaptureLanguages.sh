@@ -1,7 +1,7 @@
 #!/bin/zsh
 
-# 真实 Finder 菜单截图支持的语言。Finder 资源名和产品语言 ID 显式对应，
-# 避免把 `zh-Hans` 与 Finder 的 `zh_CN.lproj` 当作同名资源。
+# 定义真实 Finder 菜单截图支持的语言及其 Finder 资源目录映射。
+# 提供产品语言身份和 Finder 原生菜单标志项，供切换语言后的校验使用。
 
 typeset -gra _finder_menu_capture_language_ids=(
     en

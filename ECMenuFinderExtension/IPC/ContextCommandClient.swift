@@ -1,3 +1,8 @@
+/**
+ 将准备好的类型化命令封装为一次跨进程请求，并连接发送结果与 Extension 的错误提示。
+ 每次点击只投递一次；transport 不可用或发送失败时记录错误并在主线程提示。
+ */
+
 import AppKit
 import Foundation
 import OSLog

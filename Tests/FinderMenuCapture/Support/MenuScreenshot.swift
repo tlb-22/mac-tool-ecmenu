@@ -1,3 +1,8 @@
+/**
+ 将已验证的菜单快照匹配到 ScreenCaptureKit 中的唯一菜单窗口并保存 PNG。
+ 校验窗口归属和几何范围，限制捕获对象为本次目标菜单。
+ */
+
 import CoreGraphics
 import Foundation
 import ImageIO

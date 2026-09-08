@@ -25,7 +25,7 @@
 
 右键菜单页不提供固定功能的排序、命名、质量参数或外部应用路径配置。
 
-配置状态的跨进程同步见[菜单配置](../Technical/Runtime/MenuConfiguration.md)。
+配置状态的跨进程同步见[菜单配置](../Technical/Runtime/CommandMenuConfig.md)。
 
 ## 文件模板
 

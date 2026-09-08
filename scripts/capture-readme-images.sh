@@ -1,5 +1,8 @@
 #!/bin/zsh
 
+# 协调生产界面预览和真实 Finder 菜单截图，生成并同步中英文 README 总览图。
+# 复用截图入口与固定图片布局，校验来源尺寸并保留本轮日志和中间产物。
+
 set -euo pipefail
 
 readonly script_path="${0:A}"

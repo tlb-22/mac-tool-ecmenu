@@ -1,10 +1,15 @@
+/**
+ 提供独立签名进程，用真实生产 IPC 发送命令并查询菜单配置快照。
+ 解析集成验收参数，覆盖常驻主应用和按需唤醒场景中的认证传输边界。
+ */
+
 import Darwin
 import Foundation
 
 /// 使用与 Finder Extension 相同的真实代码签名身份验证生产 IPC。
 @main
 enum ContextCommandSender {
-    private enum MenuConfigurationOperation: String {
+    private enum CommandMenuConfigOperation: String {
         case readOnce = "--menu-configuration"
         case waitForHost = "--wait-for-menu-configuration"
     }
@@ -15,8 +20,8 @@ enum ContextCommandSender {
 
         if arguments.count == 1,
            let argument = arguments.first,
-           let operation = MenuConfigurationOperation(rawValue: argument) {
-            try fetchMenuConfiguration(operation)
+           let operation = CommandMenuConfigOperation(rawValue: argument) {
+            try fetchCommandMenuConfig(operation)
             return
         }
 
@@ -73,30 +78,30 @@ enum ContextCommandSender {
     }
 
     /// 通过已验证 IPC 端点拉取菜单配置快照。
-    private static func fetchMenuConfiguration(_ operation: MenuConfigurationOperation) throws {
-        let configuration: MenuConfigurationSnapshot
+    private static func fetchCommandMenuConfig(_ operation: CommandMenuConfigOperation) throws {
+        let configuration: CommandMenuConfigSnapshot
         switch operation {
         case .readOnce:
-            configuration = try makeClient().fetchMenuConfiguration()
+            configuration = try makeClient().fetchCommandMenuConfig()
         case .waitForHost:
             configuration = try waitForHostConfiguration()
         }
-        let schemaVersion = MenuConfigurationSnapshot.currentSchemaVersion
+        let schemaVersion = CommandMenuConfigSnapshot.currentSchemaVersion
         print(
             "menu-configuration schema=\(schemaVersion) enabled=\(configuration.isEnabled)"
         )
-        for template in configuration.fileTemplates {
+        for template in configuration.newFileTemplates {
             print("template \(template.id.rawValue.uuidString) \(template.displayName)")
         }
     }
 
     /// 只读启动探测共用一个传输预算；只在端点尚不存在或尚无监听者时重试。
-    private static func waitForHostConfiguration() throws -> MenuConfigurationSnapshot {
+    private static func waitForHostConfiguration() throws -> CommandMenuConfigSnapshot {
         let deadline = LocalSocketDeadline(timeout: LocalSocketDeadline.defaultTimeout)
         while true {
             let remaining = try remainingInterval(until: deadline)
             do {
-                return try makeClient(connectionTimeout: remaining).fetchMenuConfiguration()
+                return try makeClient(connectionTimeout: remaining).fetchCommandMenuConfig()
             } catch let error as ApplicationIPCError {
                 guard case let .posix(operation, code) = error,
                       operation == "connect",

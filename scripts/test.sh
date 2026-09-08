@@ -1,5 +1,8 @@
 #!/bin/zsh
 
+# 顺序执行项目 XCTest、预览注册和开发工具检查，汇总测试结果及诊断路径。
+# 共享仓库内 Derived Data，并在最外层管理 Finder 窗口保护和用户焦点恢复。
+
 set -euo pipefail
 
 readonly script_path="${0:A}"

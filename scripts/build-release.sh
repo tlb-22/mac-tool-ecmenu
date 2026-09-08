@@ -1,5 +1,8 @@
 #!/bin/zsh
 
+# 归档 Release 主应用和扩展，生成带版本的 ZIP 与 SHA-256 交付物。
+# 验证签名、身份、权限、符号文件及解压后的产物一致性，并清理归档中间路径登记。
+
 set -euo pipefail
 
 readonly script_directory="${0:A:h}"

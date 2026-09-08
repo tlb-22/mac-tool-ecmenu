@@ -1,3 +1,8 @@
+/**
+ 为开发脚本提供前台应用快照、子进程启动和用户焦点恢复入口。
+ 核对应用实例身份后调用 AppKit 激活目标，并等待前台状态确认或报告失败。
+ */
+
 import AppKit
 import Darwin
 import Foundation

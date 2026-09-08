@@ -1,3 +1,8 @@
+/**
+ 验证一次 Finder 动作只发送一次命令，以及发送失败只触发一次反馈。
+ 注入传输和反馈边界，检查不可用与失败路径的调用次数。
+ */
+
 import Foundation
 import XCTest
 @testable import ECMenuFinderExtension

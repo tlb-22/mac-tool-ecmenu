@@ -1,3 +1,8 @@
+/**
+ 为开发脚本捕获和核对 Finder 窗口集合的真实系统快照。
+ 读取 CoreGraphics 窗口元数据并等待稳定采样，报告窗口增减及 GUI 会话变化。
+ */
+
 import AppKit
 import CoreGraphics
 import Darwin

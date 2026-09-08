@@ -1,4 +1,7 @@
-"""Exercise Finder-window guard process ordering without compiling or reading GUI."""
+"""通过隔离进程替身验证 Finder 窗口保护脚本的捕获、执行和最终核对顺序。
+
+覆盖嵌套保护、失败退出、信号清理及焦点恢复的先后关系，不读取真实 GUI。
+"""
 
 import datetime
 import json

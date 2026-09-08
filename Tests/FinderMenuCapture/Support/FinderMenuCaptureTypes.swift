@@ -1,3 +1,8 @@
+/**
+ 定义 Finder 菜单截图的命令行请求、选择上下文、菜单快照和有限失败类型。
+ 统一自动化各模块的输入输出、权限事实及等待时限，保留请求参数的有效约束。
+ */
+
 @preconcurrency import ApplicationServices
 import CoreGraphics
 import Foundation

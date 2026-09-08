@@ -1,5 +1,8 @@
 #!/bin/zsh
 
+# 封装产品登记、扩展启用状态查询及状态恢复的系统命令。
+# 按明确目标执行 Launch Services 和 pluginkit 操作，并把查询或设置失败交给调用方。
+
 ecmenu_extension_registration() {
     pluginkit -m -A -D -vv -i "$1"
 }

@@ -1,3 +1,8 @@
+/**
+ 管理主应用已认证本地 IPC 服务的启动与请求处理入口。
+ 将菜单快照请求交给快照提供者，将命令请求交给运行时路由器。
+ */
+
 import Foundation
 import OSLog
 
@@ -33,61 +38,27 @@ final class ApplicationIPCServer {
 
     // MARK: - ==================== 生命周期 ====================
 
-    /// 注入生产依赖；应用生命周期明确调用 startIfNeeded 开始监听。
-    /// - Parameters:
-    ///   - router: 接收已验证命令的产品组合路由器。
-    ///   - menuConfiguration: 主应用菜单配置的真相源。
+    /// 只连接运行时与快照读取边界，模板可用性由菜单能力解释。
     convenience init(
         router: ContextCommandRouter,
-        menuConfiguration: MenuConfigurationController,
-        fileTemplates: FileTemplateLibrary
+        menuSnapshot: @escaping @MainActor @Sendable () async -> CommandMenuConfigSnapshot,
+        didStart: @escaping () -> Void
     ) {
         self.init(makeTransport: { didFail in
             try AuthenticatedLocalSocketServer(
-                expectedClientSigningIdentifier:
-                    ApplicationIPC.finderExtensionSigningIdentifier,
+                expectedClientSigningIdentifier: ApplicationIPC.finderExtensionSigningIdentifier,
                 contextCommandSink: { request in
                     Task { @MainActor in
-                        guard
-                            let invocation = router.prepare(request.command)
-                        else {
-                            return
-                        }
+                        guard let invocation = router.prepare(request.command) else { return }
                         router.run(invocation)
                     }
                 },
-                menuConfigurationProvider: { reply in
-                    Task { @MainActor in
-                        reply(.success(await Self.menuSnapshot(
-                            configuration: { menuConfiguration.configuration },
-                            fileTemplates: fileTemplates
-                        )))
-                    }
+                commandMenuConfigProvider: { reply in
+                    Task { @MainActor in reply(.success(await menuSnapshot())) }
                 },
                 didFail: didFail
             )
-        }, didStart: MenuConfigurationChannel.signalConfigurationChange)
-    }
-
-    /// 模板库不可用时仍同步当前开关，只暂停依赖该库的新建文件菜单。
-    static func menuSnapshot(
-        configuration: () -> MenuConfiguration,
-        fileTemplates: FileTemplateLibrary
-    ) async -> MenuConfigurationSnapshot {
-        let templateState: FileTemplateMenuState
-        do {
-            templateState = .available(try await fileTemplates.load().map {
-                FileTemplateMenuItem(id: $0.id, displayName: $0.displayName)
-            })
-        } catch {
-            templateState = .unavailable
-            Logger(subsystem: ApplicationLogging.subsystem, category: "ApplicationIPC")
-                .error("Could not read file templates for the menu: \(error.localizedDescription, privacy: .private)")
-        }
-        return MenuConfigurationSnapshot(
-            configuration: configuration(),
-            fileTemplateState: templateState
-        )
+        }, didStart: didStart)
     }
 
     init(makeTransport: @escaping MakeTransport, didStart: @escaping () -> Void) {

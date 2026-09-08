@@ -1,3 +1,8 @@
+/**
+ 作为真实 Finder 菜单验收工具的单进程入口，执行权限检查、窗口枚举和截图请求。
+ 管理菜单会话、截图后校验与清理，并向调用脚本输出机器可读结果。
+ */
+
 import Darwin
 import AppKit
 import Foundation

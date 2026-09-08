@@ -1,5 +1,8 @@
 #!/bin/zsh
 
+# 调用图标设计构建入口并同步主应用图标包与设置页 SVG 资源。
+# 核对设计输出完整性，使产品资源与同一份设计来源保持一致。
+
 set -euo pipefail
 
 readonly script_directory="${0:A:h}"

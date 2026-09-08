@@ -1,5 +1,8 @@
 #!/bin/zsh
 
+# 切换 Debug 或已安装 Release 的 Finder Extension 工作环境。
+# 先准备并验证目标产物，再调整登记与启用状态；失败或中断时恢复此前状态并保留日志。
+
 set -euo pipefail
 
 readonly script_path="${0:A}"

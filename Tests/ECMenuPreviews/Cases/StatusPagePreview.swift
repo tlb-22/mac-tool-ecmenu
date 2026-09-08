@@ -1,3 +1,8 @@
+/**
+ 集中定义设置页状态覆盖样例，以及承载生产 SwiftUI 内容的预览会话。
+ 菜单开关、登录项和模板编辑仅修改预览内存状态，供手动检查页面交互。
+ */
+
 import AppKit
 import SwiftUI
 
@@ -40,7 +45,7 @@ private enum StatusPagePreviewParameters {
         StatusPagePreviewState(
             isExtensionEnabled: isExtensionEnabled,
             loginItemState: loginItemState,
-            configuration: MenuConfiguration(
+            configuration: CommandMenuConfig(
                 isEnabled: isEnabled,
                 hiddenFeatureIDs: initiallyHiddenFeatureIDs
             ),
@@ -89,7 +94,7 @@ struct StatusPagePreviewState {
     let loginItemState: LoginItemRegistrationState
 
     /// 产品总开关与各菜单命令的可见性。
-    let configuration: MenuConfiguration
+    let configuration: CommandMenuConfig
 
     /// 外部应用的可用状态与图标，以 bundle identifier 索引。
     let applicationIcons: [String: NSImage]
@@ -142,7 +147,7 @@ private struct StatusPagePreviewContent: View {
     @State private var selectedPane: StatusPagePane
 
     /// 当前预览会话内的菜单可见性，不读取也不写入产品偏好。
-    @State private var configuration: MenuConfiguration
+    @State private var configuration: CommandMenuConfig
 
     /// 当前预览会话内的登录项状态，不访问 Service Management。
     @State private var loginItemState: LoginItemRegistrationState
@@ -183,7 +188,7 @@ private struct StatusPagePreviewContent: View {
             descriptors: ContextCommandComposition.descriptors,
             configuration: configuration,
             fileTemplateState: fileTemplateState,
-            isUpdatingFileTemplates: false,
+            isUpdatingNewFileTemplates: false,
             setEnabled: { isEnabled in
                 configuration.setEnabled(isEnabled)
             },

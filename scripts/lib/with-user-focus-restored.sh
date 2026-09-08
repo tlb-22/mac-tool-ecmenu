@@ -1,5 +1,8 @@
 #!/bin/zsh
 
+# 包装 GUI 自动化命令，记录原前台应用并在正常结束或中断后恢复焦点。
+# 构建独立恢复工具，管理子进程会话和信号清理，保留恢复诊断。
+
 set -euo pipefail
 unsetopt BG_NICE
 

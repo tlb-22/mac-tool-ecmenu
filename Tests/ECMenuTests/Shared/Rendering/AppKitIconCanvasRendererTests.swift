@@ -1,3 +1,8 @@
+/**
+ 验证两端共用的 AppKit 图标画布缩放、平移与图像属性。
+ 以构造的图像检查自然尺寸溢出、等比例适配及 template 状态保留。
+ */
+
 import AppKit
 import XCTest
 @testable import ECMenu

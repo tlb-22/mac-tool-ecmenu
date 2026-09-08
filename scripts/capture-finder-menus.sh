@@ -1,5 +1,8 @@
 #!/bin/zsh
 
+# 协调真实 Finder 菜单的场景选择、语言切换、隔离 fixture 和定向截图。
+# 构建自动化工具并核对菜单与截图，结束时恢复语言偏好、重启 Finder 环境并恢复用户焦点。
+
 set -euo pipefail
 
 readonly script_path="${0:A}"

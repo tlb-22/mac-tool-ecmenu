@@ -1,3 +1,8 @@
+/**
+ 验证 Finder 窗口快照比较、稳定采样和编码往返的纯规则。
+ 通过内存样例覆盖窗口增减、顺序无关、进程重启及 GUI 会话出现或消失。
+ */
+
 import Darwin
 import Foundation
 

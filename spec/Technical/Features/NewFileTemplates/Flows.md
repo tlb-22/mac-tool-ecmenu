@@ -1,0 +1,201 @@
+# 模板执行流与模块边界
+
+以下流程描述当前源码的模块协作。`Controller`、`Operations`、呈现会话运行在 MainActor；`Library` actor 串行调用同步 `Storage`。AppKit、Foundation 对象仍在主应用进程内；图外的文件系统和默认编辑器分别表示存储边界与另一进程。
+
+## 加载、初始化与显式重试
+
+```mermaid
+sequenceDiagram
+    autonumber
+    box ECMenu 主应用进程
+        participant C as 页面 Controller
+        participant O as 应用操作 Operations
+        participant L as 模板库 Library
+        participant S as 文件存储 Storage
+        participant P as 菜单变更发布
+    end
+    participant D as 文件系统
+    C->>O: loadForManagement：页面加载或 Retry
+    O->>L: load()
+    alt 已有已提交缓存
+        L-->>O: templates + cached
+    else 首次读取
+        L->>S: 读取 index.json
+        S->>D: P01 Data(contentsOf:)
+        alt 整个库尚未创建
+            L->>S: P02/P03 保存空白 TXT；P04 提交索引
+            S->>D: 创建副本并原子写索引
+            L->>L: 保存已提交 records
+            L->>S: P06 尽力清理未引用副本
+            L-->>O: templates + initialized
+        else 有效当前索引或可迁移索引
+            L->>L: 校验；需要时准备迁移
+            opt 迁移版本 1
+                L->>S: P05/P03 复制全部内容；P04 提交新索引
+                S->>D: 新副本和 schema 2 索引
+            end
+            L->>L: 保存已提交 records
+            L->>S: P06 尽力清理未引用副本
+            L-->>O: templates + restored 或 migrated
+        else 索引读取、校验或迁移失败
+            L-->>O: 明确失败
+        end
+    end
+    alt 读取成功
+        O->>P: didChange：重新确认模板可用性
+        P-->>P: 发送不含清单的失效提示
+        O-->>C: 完整清单
+        C->>C: ready，包括有效空清单
+    else 读取失败
+        O-->>C: 原失败
+        C->>C: failed；显示 Retry
+    end
+```
+
+`loadIfNeeded()` 让启动和页面入口共享一个初始 Task；初始失败也保留该 Task，用户点击 Retry 才通过 `reload()` 再次读取。重试先进入 loading；库有缓存时只返回缓存，无缓存时重新尝试读取与迁移。初始化的成功路径同样执行维护式孤儿清理；[存储契约](Persistence.md#初始化与恢复)列出初始化失败边界。
+
+`loadForManagement()` 成功时发送一次提示，即使本次返回缓存，或同时完成初始化/迁移；这使之前收到 `.unavailable` 的 Extension 有重新查询机会。生产的普通 `load()`、`content(for:)`、`fileURL(for:)` 只在本次首次读取实际提交了初始化/迁移时提示。后两者先完成读取发布，再读取内容或验证打开 URL；即使请求的 ID 随后无法解析，已经发生的初始化提交仍然发布。
+
+| 读取来源 | 库返回的事实 | 普通应用读取是否提示 | 管理页成功加载/重试是否提示 |
+|---|---|---|---|
+| `cached` | 已提交的进程内 records | 否 | 是 |
+| `restored` | 有效当前索引刚恢复 | 否 | 是 |
+| `initialized` | 本次首次初始化已提交 | 是 | 是，只发一次 |
+| `migrated` | 本次独立迁移已提交 | 是 | 是，只发一次 |
+
+这张表只描述发布触发条件。失效提示可能丢失，且不携带配置正文；它不等于 Extension 已应用清单。通知 API、快照中 `.unavailable` 与 `.available([])` 的区分和传输完成点由[菜单配置](../../Runtime/CommandMenuConfig.md)维护。
+
+## 导入、更换与删除
+
+```mermaid
+sequenceDiagram
+    autonumber
+    box ECMenu 主应用进程
+        participant V as 页面与操作会话
+        participant C as 页面 Controller
+        participant O as 应用操作 Operations
+        participant L as 模板库 Library
+        participant S as 文件存储 Storage
+        participant P as 菜单变更发布
+    end
+    V->>V: 先完成名称编辑，再取得文件操作占用
+    opt 导入或更换
+        V->>V: V01 文件选择器返回 URL；取消则结束
+    end
+    V->>C: URL / 模板 ID
+    C->>C: isUpdating；保持 ready 清单
+    C->>O: 类型化管理操作
+    O->>L: 确认读取后执行变更
+    opt 导入或更换
+        L->>S: P05 读取普通文件；P02/P03 保存全新副本
+    end
+    L->>S: P04 提交完整索引
+    alt 索引已提交
+        L->>L: 替换 records
+        opt 更换或删除
+            L->>S: P06 尝试清理旧副本目录
+            S-->>L: 清理完成或 CleanupIssue
+        end
+        L-->>O: Commit：已提交清单，含可能清理问题
+        O->>P: didChange：一次提交提示
+        opt 更换且清理失败
+            O->>O: V03 记录清理问题
+        end
+        O-->>C: FileTemplateCommit
+        C->>C: 先应用 ready 清单并释放更新占用
+        alt 删除且清理失败
+            C-->>V: 已提交后报告清理错误
+            V->>V: V02 显示错误
+        else 操作完成
+            C-->>V: 正常完成
+        end
+    else 提交前失败
+        L->>S: 准备过新副本时，P06 尽力清理它
+        L-->>O: 原始失败；原索引保持有效
+        O-->>C: 原始失败，不发布提交
+        C-->>V: 保留 ready 清单，释放更新占用并报错
+    end
+```
+
+源文件读取或副本准备失败也直接走提交前失败路径，不写索引；准备过程中自身的部分写入由 Storage 尽力清理。已确认的名称提交和后续文件选择是两个完成点，取消选择不撤回名称修改。文件操作开始后没有用户取消入口，视图消失取消的只是进度指示器延迟显示任务。
+
+| 模块与源码入口 | 输入 → 输出；拥有的状态 | 外部 API |
+|---|---|---|
+| [页面与文件操作会话](../../../../ECMenu/NewFileTemplates/Presentation/FileTemplatePageActions.swift) | 用户意图、编辑会话 → 名称提交后执行文件操作；会话拥有 phase 和错误消息，跨页面重建保留 | V02；操作调度使用 Task，无文件 I/O |
+| [文件选择器](../../../../ECMenu/NewFileTemplates/Presentation/FileTemplateFileChooser.swift) | 面板标题 → 一个 URL 或取消 nil | V01 |
+| [页面 Controller](../../../../ECMenu/NewFileTemplates/Presentation/FileTemplateController.swift) | 读取/修改意图 → ready/failed 页面状态；持有初始加载 Task 和更新占用 | Combine `@Published`，无存储/通知 API |
+| [应用操作 Operations](../../../../ECMenu/NewFileTemplates/Application/FileTemplateOperations.swift) | 管理意图/读取请求 → 清单、内容、URL 或 Commit；协调发布，不持有索引副本 | 调用注入边界；仅更换清理日志使用 V03 |
+| [模板库 Library](../../../../ECMenu/NewFileTemplates/Persistence/FileTemplateLibrary.swift) | 管理意图 → 权威提交结果；唯一拥有 records，串行组合名称规则、副本准备、提交与清理 | 调用 Storage，无直接系统调用 |
+| [领域名称与导入规则](../../../../ECMenu/NewFileTemplates/Domain/FileTemplateImportNaming.swift) | 源文件名、现有清单或单字段值 → 有效模板/验证失败 | 纯规则，无外部 I/O |
+| [文件存储 Storage](../../../../ECMenu/NewFileTemplates/Persistence/FileTemplateStorage.swift) | 路径、Data、索引记录 → 已读取字节、已完成写入或类型化失败；拥有每次打开的 handle 生命周期 | [P01–P06](Persistence.md#文件-api-与完成点) |
+| [菜单变更发布](../../../../ECMenu/CommandMenuConfig/Application/MenuChangePublisher.swift) | 已提交清单或可用性重新确认 → 分布式失效提示；不保存清单 | [菜单配置](../../Runtime/CommandMenuConfig.md)的 `DistributedNotificationCenter` 边界 |
+
+## 打开内部副本与外部编辑
+
+```mermaid
+sequenceDiagram
+    autonumber
+    box ECMenu 主应用进程
+        participant C as 页面与 Controller
+        participant O as 应用操作 Operations
+        participant L as 模板库与 Storage
+        participant W as 默认应用打开适配
+        participant N as 新建文件用例
+    end
+    participant D as 内部副本文件
+    box 外部编辑器进程
+        participant E as 默认应用
+    end
+    C->>C: 完成名称编辑并取得文件操作占用
+    C->>O: openTemplate(ID)
+    O->>O: load：必要的初始化或迁移先发布
+    O->>L: fileURL(ID)
+    L->>D: P05 打开并验证普通文件，不读全部内容
+    alt 验证通过
+        L-->>O: 当前已提交副本 URL
+        O->>W: openFile(URL)
+        W->>W: V04 NSWorkspace.open(URL)
+        alt 系统接受打开请求
+            W-->>O: Void，正常返回
+            W->>E: 系统请求默认应用打开
+            E->>D: 用户在编辑器中保存
+        else 系统拒绝打开
+            W-->>O: throws FileTemplateOpenError
+        end
+        N->>O: 后续创建通过 content(ID) 取值
+        O->>L: 读取当前元数据与全部字节
+        L->>D: P05 重新读取文件内容
+        L-->>O: FileTemplateContent 或读取失败
+    else ID 或文件失效
+        L-->>O: 明确失败，不调用默认应用
+    end
+```
+
+“后续创建”由[新建文件用例](../NewFile.md)调用，不依赖管理页继续存在。打开本身不提交索引、不设置 Controller 的 `isUpdating`，仍受文件操作会话占用约束。`FileTemplateOpener` 只请求系统打开文件；外部应用如何显示、编辑与保存不属于它的完成回执。返回 URL 到默认应用重新打开之间也不是文件锁定事务。[外部内容边界](Persistence.md#文件打开与更换)说明并发保存和旧 URL 的影响。
+
+| API / 调用者 | 实际输入与输出 | 完成点、失败与约束 |
+|---|---|---|
+| **V01** FileChooser：`NSOpenPanel.beginSheetModal(for:)` / `begin` | 标题、当前 key window；只选一个文件，禁止选目录，包按目录浏览 → `ModalResponse`，`.OK` 读取 `panel.url` | MainActor；其他响应返回 nil，`.OK` 缺 URL 属于实现不变量错误。面板只收集选择，普通文件验证交给 Storage |
+| **V02** 页面：SwiftUI `.alert` | 操作会话中的本地化错误消息 → 用户可关闭的提示 | 主应用呈现状态，不改变已经提交的索引；名称错误由草稿旁文字呈现 |
+| **V03** Operations：`Logger.error` | 更换已提交后的 `FileTemplateCleanupIssue.localizedDescription` → 日志 | 无业务成功回执，不撤回提交；原清理问题仍包含在返回 Commit 中 |
+| **V04** [FileTemplateOpener](../../../../ECMenu/NewFileTemplates/Platform/FileTemplateOpener.swift)：`NSWorkspace.shared.open(URL)` | 当前内部副本 URL → Bool | MainActor；false 转 `couldNotOpen`，true 表示系统打开请求成功，不表示编辑器已经显示或保存。使用同步 Bool 变体，见 [Apple API](https://developer.apple.com/documentation/appkit/nsworkspace/open(_:)) |
+
+图中的读取、提交、验证和清理 API 统一在[存储表 P01–P06](Persistence.md#文件-api-与完成点)展开；默认编辑器没有由 ECMenu 调用的保存 API。
+
+## 状态所有权
+
+| 状态 | 唯一所有者与生命周期 | 更新/消费边界 |
+|---|---|---|
+| 已提交模板记录 | Library actor，主应用进程级 | 首次恢复与索引提交成功后更新；内容字节每次读取 |
+| 页面 ready/failed 与初始加载 Task | Controller，配置窗口使用的呈现模型 | 读取结果或 Commit 更新；存储失败保持原 ready |
+| 文件操作 phase 与错误 | PageActions，状态页窗口会话 | 先结束名称、再选择/执行，defer 释放；页面切换不释放占用 |
+| 字段草稿、提交 Task 与最后目标 | NameDraft / NameEditingSession，状态页窗口会话 | [名称编辑流程](Editing.md)控制焦点与结果 |
+| `FileTemplateContent` | 单次调用返回的不可变值 | 新建文件用例消费，不暴露库路径 |
+| 读取来源与 Commit | 一次调用的不可变事实 | Operations 决定是否发布；不另存可变“需要发布”标记 |
+| 菜单副本 | Finder Extension 的 Replica | 经 IPC 整体应用，仅含 ID 与显示名；不承担模板持久化 |
+
+## 验证证据与限制
+
+[应用操作测试](../../../../Tests/ECMenuTests/NewFileTemplates/Application/FileTemplateOperationsTests.swift)覆盖初始化提示一次、普通缓存查询不提示、管理加载/重试提示、内容请求失败前仍发布已发生的初始化，以及打开入口先迁移和发布再调用注入的打开适配。[Controller 测试](../../../../Tests/ECMenuTests/NewFileTemplates/Presentation/FileTemplateControllerTests.swift)覆盖共享初次加载、失败后显式重试、提交失败保持 ready、删除清理失败先显示已删除清单、更换清理失败保持成功。
+
+2026-09-08 当前结构完整 231 项测试通过，本页描述的提交结果与发布入口均包含在执行范围内，详见[验证记录](../../Architecture/Verification.md)。已有真实系统观察见[存储证据](Persistence.md#验证与实机证据)和[原生焦点证据](Editing.md#原生焦点证据与验收)。通知实际到达、默认编辑器真实显示/保存、输入法与窗口切换仍需要对应实机验收。

@@ -1,3 +1,8 @@
+/**
+ 验证 Finder Sync 监听目录的标准化、挂载卷去重和启动磁盘回退规则。
+ 以目录 URL 样例检查纯注册计划，不改变系统卷或扩展登记。
+ */
+
 import Foundation
 import XCTest
 @testable import ECMenuFinderExtension
@@ -7,7 +12,7 @@ final class FinderDirectoryRegistrationTests: XCTestCase {
     /// 系统卷枚举为空时，监听范围仍必须覆盖启动磁盘。
     func testRootFallback() {
         XCTAssertEqual(
-            FinderSync.registeredDirectoryURLs(mountedVolumeURLs: []),
+            FinderDirectoryRegistration.registeredDirectoryURLs(mountedVolumeURLs: []),
             [fileURL("/")]
         )
     }
@@ -18,7 +23,7 @@ final class FinderDirectoryRegistrationTests: XCTestCase {
         let secondVolume = fileURL("/Volumes/Second")
 
         XCTAssertEqual(
-            FinderSync.registeredDirectoryURLs(
+            FinderDirectoryRegistration.registeredDirectoryURLs(
                 mountedVolumeURLs: [
                     fileURL("/"),
                     externalVolume,

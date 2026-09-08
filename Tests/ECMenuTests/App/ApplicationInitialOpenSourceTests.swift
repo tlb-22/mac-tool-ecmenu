@@ -1,3 +1,8 @@
+/**
+ 验证启动来源解析、首次打开事件与应用生命周期协调。
+ 注入 IPC、激活策略和窗口边界，检查启动幂等、登录后台启动及配置窗口开闭。
+ */
+
 import AppKit
 import CoreServices
 import XCTest

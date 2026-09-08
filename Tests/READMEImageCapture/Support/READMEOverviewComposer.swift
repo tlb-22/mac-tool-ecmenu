@@ -1,3 +1,8 @@
+/**
+ 把两种语言的设置页和 Finder 菜单截图组合为 README 总览 PNG。
+ 按统一列权重和像素尺寸布局，检查来源透明通道与图片读写结果。
+ */
+
 import CoreGraphics
 import Darwin
 import Foundation

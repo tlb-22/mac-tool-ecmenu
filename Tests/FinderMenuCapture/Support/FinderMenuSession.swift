@@ -1,3 +1,8 @@
+/**
+ 管理一次 Finder 菜单验收拥有的窗口、选择、菜单和模板子菜单生命周期。
+ 通过 Accessibility 观察驱动状态推进，校验截图期间的来源稳定性并关闭会话拥有的界面。
+ */
+
 import AppKit
 import ApplicationServices
 import Foundation

@@ -1,3 +1,6 @@
+# 在 macOS CI 环境中准备 Apple Development 签名身份并执行项目验证。
+# 检查图标资源、运行统一测试入口，并在失败时上传诊断产物。
+
 name: CI
 
 on:

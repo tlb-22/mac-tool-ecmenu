@@ -1,3 +1,8 @@
+/**
+ 提供 README 截图使用的通用设置和右键菜单设置场景。
+ 组合固定正常状态与当前已安装外部应用的真实图标，呈现生产设置页。
+ */
+
 import AppKit
 
 /// README 使用的设置页正常运行状态。
@@ -27,7 +32,7 @@ private enum READMEStatusPagePreviewState {
         return StatusPagePreviewState(
             isExtensionEnabled: true,
             loginItemState: .enabled,
-            configuration: MenuConfiguration(
+            configuration: CommandMenuConfig(
                 isEnabled: true,
                 hiddenFeatureIDs: []
             ),

@@ -1,6 +1,7 @@
 #!/bin/zsh
 
-# Finder 菜单截图场景的唯一注册表。fixture 与命令期望分别留在所属上下文和 Feature 中。
+# 注册全部 Finder 菜单截图场景，并把 fixture、上下文和命令期望分派给唯一提供者。
+# 保持批量截图顺序与稳定场景身份一致，拒绝重复或未知注册。
 
 typeset -gr _finder_menu_capture_definition_directory="${${(%):-%x}:A:h}"
 

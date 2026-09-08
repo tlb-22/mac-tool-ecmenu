@@ -1,5 +1,8 @@
 #!/bin/zsh
 
+# 构建和运行当前 Debug 主应用及 Finder Extension，并核对实际登记与运行路径。
+# 提供只构建、复用产物、扩展刷新和图标刷新入口，统一管理签名检查及进程生命周期。
+
 set -euo pipefail
 
 readonly script_path="${0:A}"

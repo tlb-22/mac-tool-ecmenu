@@ -1,3 +1,8 @@
+/**
+ 为主应用中需要真实文件系统的测试创建项目内隔离工作目录。
+ 由源码位置定位仓库，将每次测试数据归入可重建的 scratch 测试产物。
+ */
+
 import Darwin
 import Foundation
 

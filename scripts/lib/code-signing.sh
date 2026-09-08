@@ -1,5 +1,8 @@
 #!/bin/zsh
 
+# 读取并验证主应用与 Finder Extension 的实际代码签名。
+# 对照已解析产物身份检查签名有效性和 Team 一致性，供登记或启用前调用。
+
 ecmenu_code_signing_value() {
     local bundle_path="$1"
     local key="$2"

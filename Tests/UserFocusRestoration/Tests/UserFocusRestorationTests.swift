@@ -1,3 +1,8 @@
+/**
+ 验证焦点恢复目标解析的身份匹配与 Finder 重启规则。
+ 使用纯应用身份样例检查 PID 复用、缺失启动时间、普通应用替换和歧义目标。
+ */
+
 import Darwin
 import Foundation
 

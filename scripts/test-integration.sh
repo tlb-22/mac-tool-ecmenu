@@ -1,5 +1,8 @@
 #!/bin/zsh
 
+# 通过独立签名发送进程验收真实认证 IPC 的常驻主应用和按需唤醒路径。
+# 以隔离文件检查命令实际效果，并在 Finder 窗口与用户焦点保护下管理 Debug 进程。
+
 set -euo pipefail
 
 readonly script_path="${0:A}"

@@ -1,4 +1,5 @@
-# Shared product discovery for scripts that consume an existing Xcode build.
+# 从 Xcode 构建设置和实际 bundle 元数据定位唯一匹配的主应用与 Finder Extension。
+# 核对两端身份、应用组和可执行文件，再向调用脚本提供统一产物路径。
 
 ecmenu_plist_value() {
     local plist_path="$1"

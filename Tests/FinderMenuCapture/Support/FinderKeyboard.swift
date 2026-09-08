@@ -1,3 +1,8 @@
+/**
+ 提供 Finder 自动化需要的回车和 Escape 键事件。
+ 把有限键语义转换为成对的 CoreGraphics 按下与松开事件。
+ */
+
 import Carbon.HIToolbox
 import CoreGraphics
 

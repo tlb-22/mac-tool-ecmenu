@@ -1,3 +1,8 @@
+/**
+ 通过 Accessibility 读取当前 Finder 普通窗口数量。
+ 为菜单截图入口提供已有窗口检查，要求可明确定位唯一 Finder 进程。
+ */
+
 import AppKit
 import ApplicationServices
 

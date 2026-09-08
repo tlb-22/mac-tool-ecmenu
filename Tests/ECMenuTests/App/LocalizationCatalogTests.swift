@@ -1,3 +1,8 @@
+/**
+ 验证主应用与扩展的本地化目录、共享命令文案和编译资源。
+ 同时检查两种支持语言的字符串完整性与辅助功能资源解析。
+ */
+
 import Foundation
 import XCTest
 @testable import ECMenu
@@ -35,7 +40,7 @@ final class LocalizationCatalogTests: XCTestCase {
     func testCommandTranslationsMatchAcrossProductBundles() throws {
         let applicationCatalog = try loadCatalog(at: catalogURLs[0])
         let extensionCatalog = try loadCatalog(at: catalogURLs[1])
-        let commandKeys = ContextCommandComposition.handlers.descriptors.map(\.title.key)
+        let commandKeys = ContextCommandComposition.descriptors.map(\.title.key)
 
         for key in commandKeys {
             XCTAssertEqual(

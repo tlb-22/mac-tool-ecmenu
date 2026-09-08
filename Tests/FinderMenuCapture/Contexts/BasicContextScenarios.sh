@@ -1,6 +1,7 @@
 #!/bin/zsh
 
-# 三个只表达 Finder 基础上下文的场景，共享一份紧凑定义。
+# 定义空白处、普通文件和目录三种 Finder 基础菜单截图场景。
+# 提供场景身份、隔离 fixture、上下文类型及选择项目，供统一截图注册表调用。
 
 finder_menu_capture_basic_context_scenario_ids() {
     print -r -- container

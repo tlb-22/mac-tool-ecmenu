@@ -1,6 +1,7 @@
 #!/bin/zsh
 
-# 图片压缩 Feature 独有的多图选择场景与有效 PNG fixture。
+# 定义图片压缩使用的多图选择截图场景和有效 PNG fixture。
+# 提供上下文、选择项目与压缩命令期望，交由统一截图入口执行。
 
 finder_menu_capture_image_compression_scenario_ids() {
     print -r -- multiple-images

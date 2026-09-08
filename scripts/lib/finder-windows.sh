@@ -1,6 +1,8 @@
 #!/bin/zsh
 
-# 在最外层测试入口记录 Finder 窗口；子脚本和焦点恢复完成后再核对。
+# 为测试入口接入最外层 Finder 窗口保护会话。
+# 通过重执行包装原命令，确保嵌套脚本共享同一次前后窗口核对。
+
 ecmenu_reexec_checking_finder_windows() {
     local script_path="$1"
     shift

@@ -1,3 +1,8 @@
+/**
+ 提供 Finder 自动化的元素定位、单击、右键和指针悬停操作。
+ 根据 Accessibility 几何信息生成 CoreGraphics 指针事件，并报告不可用的事件边界。
+ */
+
 import ApplicationServices
 import CoreGraphics
 
