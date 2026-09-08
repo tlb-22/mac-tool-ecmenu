@@ -120,7 +120,6 @@ Archive 和打包不改变本机的 Extension 启用状态。Debug 与 Release �
 ./scripts/preview-ui.sh status-page-file-templates
 ./scripts/preview-ui.sh status-page-file-templates-empty
 ./scripts/preview-ui.sh status-page-file-templates-failure
-./scripts/preview-ui.sh file-template-editor
 ./scripts/preview-ui.sh readme-status-page-general
 ./scripts/preview-ui.sh readme-status-page-context-menu
 ./scripts/preview-ui.sh image-compression-settings
@@ -132,9 +131,9 @@ Archive 和打包不改变本机的 Extension 启用状态。Debug 与 Release �
 ./scripts/preview-ui.sh --list
 ```
 
-该命令构建并启动独立的 `ECMenuPreviews` macOS 应用。各入口固定呈现设置页状态覆盖、文件模板列表与编辑表单、README 正常设置、压缩设置正常与验证错误、单任务与多任务进度；它们复用生产界面，不写入图片或持久化设置，也不执行右键命令。普通状态覆盖场景只注入合成状态；README 场景保持所有开关开启，并额外从 Launch Services 只读 Visual Studio Code 与 iTerm2 的真实图标，任一应用未安装时不会使用占位图标。`--language en` 与 `--language zh-Hans` 通过当前预览进程的 `AppleLanguages` 参数检查对应语言；省略参数时跟随系统语言。`--list` 仍只列出可用 Preview ID。
+该命令构建并启动独立的 `ECMenuPreviews` macOS 应用。各入口固定呈现设置页状态覆盖、文件模板列表、README 正常设置、压缩设置正常与验证错误、单任务与多任务进度；它们复用生产界面，不写入图片或持久化设置，也不执行右键命令。普通状态覆盖场景只注入合成状态；README 场景保持所有开关开启，并额外从 Launch Services 只读 Visual Studio Code 与 iTerm2 的真实图标，任一应用未安装时不会使用占位图标。`--language en` 与 `--language zh-Hans` 通过当前预览进程的 `AppleLanguages` 参数检查对应语言；省略参数时跟随系统语言。`--list` 仍只列出可用 Preview ID。
 
-文件模板预览使用内存样例：`status-page-file-templates` 呈现模板列表，`status-page-file-templates-empty` 呈现有效空清单，`status-page-file-templates-failure` 呈现读取失败与重试入口，`file-template-editor` 呈现名称编辑表单。预览中的导入、编辑和删除只改变会话内状态。
+文件模板预览使用内存样例：`status-page-file-templates` 呈现模板列表，`status-page-file-templates-empty` 呈现有效空清单，`status-page-file-templates-failure` 呈现读取失败与重试入口。预览中的导入、原地编辑名称和删除只改变会话内状态，打开和更换不访问外部应用或文件。
 
 预览代码位于 `Tests/ECMenuPreviews/`，每个 Case 在文件开头集中保存任务数量等可调参数，并由声明式 Composition 统一注册。
 

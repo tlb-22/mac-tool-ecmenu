@@ -138,9 +138,8 @@ final class NewFileTests: XCTestCase {
         let fixture = try NewFileFixture()
         defer { fixture.remove() }
         let template = try await fixture.importTemplate(named: "source.txt", data: Data("nonempty".utf8))
-        try FileManager.default.removeItem(at: fixture.libraryURL
-            .appendingPathComponent("Files")
-            .appendingPathComponent(template.id.rawValue.uuidString))
+        let contentURL = try await fixture.library.fileURL(for: template.id)
+        try FileManager.default.removeItem(at: contentURL)
         let handler = CreateNewFileHandler(library: fixture.library)
         guard case .failure(.template(let failedID, _)) = try await handler.execute(fixture.command(for: template.id)) else {
             return XCTFail("A missing template copy must not create an empty output")

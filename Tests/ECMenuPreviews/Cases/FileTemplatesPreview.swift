@@ -66,31 +66,3 @@ enum StatusPageFileTemplatesFailurePreview: ApplicationPreview {
         )
     }
 }
-
-/// 直接呈现生产编辑表单，检查双语标签、输入框和保存按钮布局。
-@MainActor
-enum FileTemplateEditorPreview: ApplicationPreview {
-    static let id = "file-template-editor"
-
-    static func present() -> AnyObject {
-        let hostingController = NSHostingController(
-            rootView: FileTemplateEditor(
-                template: FileTemplatePreviewFixtures.templates[0],
-                save: { _ in }
-            )
-        )
-        let window = NSWindow(contentViewController: hostingController)
-        window.title = String(localized: FileTemplatesText.edit)
-        window.styleMask = [.titled, .closable]
-        window.isReleasedWhenClosed = false
-        window.isRestorable = false
-        hostingController.view.layoutSubtreeIfNeeded()
-        window.setContentSize(hostingController.view.fittingSize)
-        let controller = NSWindowController(window: window)
-        controller.showWindow(nil)
-        window.center()
-        NSApp.activate(ignoringOtherApps: true)
-        window.makeKeyAndOrderFront(nil)
-        return controller
-    }
-}

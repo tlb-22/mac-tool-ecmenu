@@ -135,7 +135,7 @@ final class StatusPagePreviewSession {
     }
 }
 
-/// 让 Toggle 只修改 Preview target 的内存快照，其余动作保持为空。
+/// 让配置与模板名称只修改 Preview target 的内存快照，系统动作保持为空。
 @MainActor
 private struct StatusPagePreviewContent: View {
     /// 当前预览会话内的页面选择，不写入产品偏好。
@@ -205,14 +205,17 @@ private struct StatusPagePreviewContent: View {
                 ))
                 fileTemplateState = .ready(templates)
             },
-            updateTemplate: { edited in
-                guard case .ready(let templates) = fileTemplateState else {
+            updateTemplateName: { id, field, value in
+                guard case .ready(var templates) = fileTemplateState,
+                      let index = templates.firstIndex(where: { $0.id == id })
+                else {
                     preconditionFailure("Editing requires an available template list")
                 }
-                fileTemplateState = .ready(templates.map {
-                    $0.id == edited.id ? edited : $0
-                })
+                templates[index] = try field.updating(templates[index], to: value)
+                fileTemplateState = .ready(templates)
             },
+            openTemplate: { _ in },
+            replaceTemplate: { _ in },
             removeTemplate: { id in
                 guard case .ready(let templates) = fileTemplateState else {
                     preconditionFailure("Deletion requires an available template list")

@@ -116,7 +116,9 @@ struct StatusPage: View {
                 }
             },
             importTemplate: importTemplate,
-            updateTemplate: fileTemplates.updateTemplate,
+            updateTemplateName: fileTemplates.updateName,
+            openTemplate: fileTemplates.openTemplate,
+            replaceTemplate: replaceTemplate,
             removeTemplate: fileTemplates.removeTemplate,
             reloadTemplates: fileTemplates.reload
         )
@@ -137,28 +139,13 @@ struct StatusPage: View {
 
     /// 系统选择器只选择一个普通文件；模板库再验证并保存独立副本。
     private func importTemplate() async throws {
-        let panel = NSOpenPanel()
-        panel.title = String(localized: FileTemplatesText.add)
-        panel.canChooseFiles = true
-        panel.canChooseDirectories = false
-        panel.allowsMultipleSelection = false
-        panel.treatsFilePackagesAsDirectories = true
-        let response = await withCheckedContinuation { continuation in
-            if let window = NSApp.keyWindow {
-                panel.beginSheetModal(for: window) { response in
-                    continuation.resume(returning: response)
-                }
-            } else {
-                panel.begin { response in
-                    continuation.resume(returning: response)
-                }
-            }
-        }
-        guard response == .OK else { return }
-        guard let url = panel.url else {
-            preconditionFailure("An accepted open panel must provide its selected file")
-        }
+        guard let url = await FileTemplateFileServices.chooseFile(title: FileTemplatesText.add) else { return }
         try await fileTemplates.importFile(at: url)
+    }
+
+    private func replaceTemplate(id: FileTemplateID) async throws {
+        guard let url = await FileTemplateFileServices.chooseFile(title: FileTemplatesText.replace) else { return }
+        try await fileTemplates.replaceTemplate(id: id, at: url)
     }
 
     // MARK: - ==================== 副作用：刷新系统状态 ====================
@@ -291,9 +278,31 @@ struct StatusPageContent: View {
 
     /// 文件模板操作由主应用或预览边界注入。
     let importTemplate: () async throws -> Void
-    let updateTemplate: (FileTemplate) async throws -> Void
+    let updateTemplateName: (FileTemplateID, FileTemplateNameField, String) async throws -> Void
+    let openTemplate: (FileTemplateID) async throws -> Void
+    let replaceTemplate: (FileTemplateID) async throws -> Void
     let removeTemplate: (FileTemplateID) async throws -> Void
     let reloadTemplates: () async -> Void
+
+    /// 草稿随状态页窗口保留；侧栏切换先完成当前名称提交。
+    @State private var editingTemplateName: FileTemplateNameDraft?
+
+    private var paneSelection: Binding<StatusPagePane> {
+        Binding(get: { selectedPane }, set: selectPane)
+    }
+
+    private func selectPane(_ pane: StatusPagePane) {
+        guard pane != selectedPane else { return }
+        guard let draft = editingTemplateName else {
+            selectedPane = pane
+            return
+        }
+        Task {
+            guard await draft.commit() else { return }
+            if editingTemplateName === draft { editingTemplateName = nil }
+            selectedPane = pane
+        }
+    }
 
     /// 构造不含外部读写的双栏设置界面。
     var body: some View {
@@ -328,7 +337,7 @@ struct StatusPageContent: View {
             }
             .padding(.vertical, StatusPageStyle.contentPadding)
 
-            List(StatusPagePane.allCases, selection: $selectedPane) { pane in
+            List(StatusPagePane.allCases, selection: paneSelection) { pane in
                 HStack(spacing: StatusPageStyle.rowSpacing) {
                     monochromeSystemIcon(pane.systemImageName)
 
@@ -341,7 +350,7 @@ struct StatusPageContent: View {
                     DragGesture(minimumDistance: 0)
                         .onChanged { _ in
                             if selectedPane != pane {
-                                selectedPane = pane
+                                selectPane(pane)
                             }
                         }
                 )
@@ -367,8 +376,11 @@ struct StatusPageContent: View {
             FileTemplatesPage(
                 state: fileTemplateState,
                 isUpdating: isUpdatingFileTemplates,
+                editingName: $editingTemplateName,
                 importTemplate: importTemplate,
-                updateTemplate: updateTemplate,
+                updateName: updateTemplateName,
+                openTemplate: openTemplate,
+                replaceTemplate: replaceTemplate,
                 removeTemplate: removeTemplate,
                 reload: reloadTemplates
             )

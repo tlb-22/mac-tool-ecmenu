@@ -6,6 +6,10 @@
 
 `NSImage.alignmentRect` 是客户端可用于布局的对齐元数据；底边包含基线语义，其他边提供对应方向的对齐信息。图像绘制不会自动应用它，是否采用由客户端决定（macOS 26.5 SDK `NSImage.h:160–168`）。当前 `NSMenuItemCell` 已不再负责菜单绘制，因此不能据此推断 Finder host 会采用 `alignmentRect`。
 
+## 标准动作的自动图标
+
+**官方契约**：[Adopting Liquid Glass](https://developer.apple.com/documentation/technologyoverviews/adopting-liquid-glass#Menus-and-toolbars) 说明，系统根据菜单项的 selector 为剪切、拷贝、粘贴等标准动作选择图标。**项目观察**：2026-09-08 在 macOS 26.6.2（25G83）以 JXA 创建标题为 `TXT`、`target` 为 `nil` 的 `NSMenuItem`，显式设置 `image = nil` 并加入 `NSMenu` 后，`terminate:` 的 `image` 仍返回 `Quit_app` 图标，`performContextCommand:` 则为 `nil`；该探针仅验证 AppKit 对象，未显示 Finder 菜单。**测试约束**：菜单图标测试使用产品实际的 `performContextCommand:`，避免占位标准动作引入系统图标。
+
 ## 项目观察
 
 项目于 2026-08-21 在 macOS 26.6.1（25G76）、Xcode 26.6（17F113）和 macOS 26.5 SDK 中测得系统菜单字体为 13pt、cap height 约 9.16pt；相同字号和常规字重的 SF Symbol `.small` 比例生成约 9pt 高的主体 `alignmentRect`。`photo` 与 `photo.badge.arrow.down` 的主体区域相同，后者只增加主体外的 badge；完整尺寸会随渲染上下文产生约 1pt 的离散变化，不作为产品契约。

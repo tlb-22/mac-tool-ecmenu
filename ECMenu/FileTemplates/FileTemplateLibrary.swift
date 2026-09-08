@@ -16,7 +16,7 @@ actor FileTemplateLibrary {
     }
 
     private let location: Location
-    private var templates: [FileTemplate]?
+    private var records: [FileTemplateRecord]?
     private let fileManager = FileManager.default
     private static let logger = Logger(
         subsystem: ApplicationLogging.subsystem,
@@ -33,8 +33,8 @@ actor FileTemplateLibrary {
 
     /// 恢复索引或执行唯一一次初始化；空索引保留用户已删除全部模板的状态。
     func load() throws -> [FileTemplate] {
-        if let templates {
-            return templates
+        if let records {
+            return records.map(\.template)
         }
 
         let data: Data
@@ -49,62 +49,100 @@ actor FileTemplateLibrary {
 
         let index: FileTemplateIndex
         do {
-            index = try JSONDecoder().decode(FileTemplateIndex.self, from: data)
+            if let migrated = try FileTemplateIndexMigration.migrateIfNeeded(data, copyContent: { template in
+                let oldURL = filesURL.appendingPathComponent(template.id.rawValue.uuidString)
+                return try saveContent(readContent(at: oldURL), named: template.defaultFileName)
+            }) {
+                try commit(migrated.templates)
+                index = migrated
+            } else {
+                index = try JSONDecoder().decode(FileTemplateIndex.self, from: data)
+            }
         } catch let error as FileTemplateLibraryError {
             throw error
         } catch {
             throw FileTemplateLibraryError.invalidIndex(SystemErrorSnapshot(capturing: error))
         }
 
-        templates = index.templates
+        records = index.templates
         cleanUnreferencedFiles(referencedBy: index.templates)
-        return index.templates
+        return index.templates.map(\.template)
     }
 
     /// 完整保存普通源文件的内容后，再把新模板追加到索引。
     func importFile(at sourceURL: URL) throws -> [FileTemplate] {
-        var current = try currentTemplates()
+        var current = try currentRecords()
         let data = try readContent(at: sourceURL)
-        let template = try Self.importedTemplate(from: sourceURL, existing: current)
-        try prepareFilesDirectory()
-        try saveContent(data, for: template.id)
-        current.append(template)
-        try commit(current)
-        return current
+        let template = try Self.importedTemplate(from: sourceURL, existing: current.map(\.template))
+        let file = try saveContent(data, named: sourceURL.lastPathComponent)
+        current.append(FileTemplateRecord(template: template, file: file))
+        do {
+            try commit(current)
+        } catch {
+            cleanContent(at: directoryURL(for: file))
+            throw error
+        }
+        return current.map(\.template)
     }
 
-    /// 名称修改只写索引，保留稳定身份、内容和列表顺序。
+    /// 名称修改只提交元数据，保留稳定身份、内容和列表顺序。
     func update(_ template: FileTemplate) throws -> [FileTemplate] {
-        var current = try currentTemplates()
-        guard let position = current.firstIndex(where: { $0.id == template.id }) else {
+        var current = try currentRecords()
+        guard let position = current.firstIndex(where: { $0.template.id == template.id }) else {
             throw FileTemplateLibraryError.templateNotFound(template.id)
         }
-        current[position] = template
+        current[position] = FileTemplateRecord(template: template, file: current[position].file)
         try commit(current)
-        return current
+        return current.map(\.template)
+    }
+
+    /// 完整复制选定文件后原子发布新引用，保留模板身份、名称和列表顺序。
+    func replaceFile(for id: FileTemplateID, at sourceURL: URL) throws -> [FileTemplate] {
+        var current = try currentRecords()
+        guard let position = current.firstIndex(where: { $0.template.id == id }) else {
+            throw FileTemplateLibraryError.templateNotFound(id)
+        }
+        let original = current[position]
+        let file = try saveContent(readContent(at: sourceURL), named: sourceURL.lastPathComponent)
+        current[position] = FileTemplateRecord(template: original.template, file: file)
+        do {
+            try commit(current)
+        } catch {
+            cleanContent(at: directoryURL(for: file))
+            throw error
+        }
+        // 提交已经成功；旧副本维护失败不可把成功更换变为可重试的提交失败。
+        cleanContent(at: directoryURL(for: original.file))
+        return current.map(\.template)
     }
 
     /// 先提交元数据删除，再清理副本；清理失败仍报告错误，已提交状态可重新加载。
     func remove(id: FileTemplateID) throws -> [FileTemplate] {
-        var current = try currentTemplates()
-        guard let position = current.firstIndex(where: { $0.id == id }) else {
+        var current = try currentRecords()
+        guard let position = current.firstIndex(where: { $0.template.id == id }) else {
             throw FileTemplateLibraryError.templateNotFound(id)
         }
-        current.remove(at: position)
+        let removed = current.remove(at: position)
         try commit(current)
-        try removeContent(at: contentURL(for: id))
-        return current
+        try removeContent(at: directoryURL(for: removed.file))
+        return current.map(\.template)
     }
 
-    /// 在同一串行事务中按身份取得元数据与独立字节快照。
+    /// 每次从实际文件取得独立字节快照，使默认应用保存的编辑用于下一次创建。
     func content(for id: FileTemplateID) throws -> FileTemplateContent {
-        guard let template = try currentTemplates().first(where: { $0.id == id }) else {
-            throw FileTemplateLibraryError.templateNotFound(id)
-        }
+        let record = try record(for: id)
         return FileTemplateContent(
-            template: template,
-            data: try readContent(at: contentURL(for: id))
+            template: record.template,
+            data: try readContent(at: contentURL(for: record.file))
         )
+    }
+
+    /// 提供已保存的内部副本；只检查普通文件，不为系统打开操作读取全部内容。
+    func fileURL(for id: FileTemplateID) throws -> URL {
+        let record = try record(for: id)
+        let url = contentURL(for: record.file)
+        try validateRegularFile(at: url)
+        return url
     }
 
     /// 生产身份仅在实际访问模板库时解析；注册命令和预览构造不依赖应用身份。
@@ -123,44 +161,56 @@ actor FileTemplateLibrary {
         rootURL.appendingPathComponent("Files", isDirectory: true)
     }
 
-    private func contentURL(for id: FileTemplateID) -> URL {
-        filesURL.appendingPathComponent(id.rawValue.uuidString, isDirectory: false)
+    private func directoryURL(for file: FileTemplateFileReference) -> URL {
+        filesURL.appendingPathComponent(file.id.uuidString, isDirectory: true)
     }
 
-    private func currentTemplates() throws -> [FileTemplate] {
-        if let templates {
-            return templates
+    private func contentURL(for file: FileTemplateFileReference) -> URL {
+        directoryURL(for: file).appendingPathComponent(file.fileName, isDirectory: false)
+    }
+
+    private func currentRecords() throws -> [FileTemplateRecord] {
+        if let records { return records }
+        _ = try load()
+        return records!
+    }
+
+    private func record(for id: FileTemplateID) throws -> FileTemplateRecord {
+        guard let record = try currentRecords().first(where: { $0.template.id == id }) else {
+            throw FileTemplateLibraryError.templateNotFound(id)
         }
-        return try load()
+        return record
     }
 
     private func initialize() throws -> [FileTemplate] {
         let template = try FileTemplate(displayName: "TXT", defaultFileName: "untitled.txt")
-        try prepareFilesDirectory()
-        try saveContent(Data(), for: template.id)
-        try commit([template])
-        cleanUnreferencedFiles(referencedBy: [template])
+        let file = try saveContent(Data(), named: "untitled.txt")
+        let initial = [FileTemplateRecord(template: template, file: file)]
+        try commit(initial)
+        cleanUnreferencedFiles(referencedBy: initial)
         return [template]
     }
 
-    private func prepareFilesDirectory() throws {
+    private func saveContent(_ data: Data, named fileName: String) throws -> FileTemplateFileReference {
+        let file = try FileTemplateFileReference(fileName: fileName)
+        let directory = directoryURL(for: file)
         do {
             try fileManager.createDirectory(at: filesURL, withIntermediateDirectories: true)
+            try fileManager.createDirectory(at: directory, withIntermediateDirectories: false)
         } catch {
-            throw failure(.prepareDirectory, at: filesURL, error: error)
+            throw failure(.prepareDirectory, at: directory, error: error)
         }
-    }
-
-    private func saveContent(_ data: Data, for id: FileTemplateID) throws {
-        let url = contentURL(for: id)
+        let url = contentURL(for: file)
         do {
             try data.write(to: url, options: .withoutOverwriting)
         } catch {
+            cleanContent(at: directory)
             throw failure(.saveContent, at: url, error: error)
         }
+        return file
     }
 
-    private func commit(_ updated: [FileTemplate]) throws {
+    private func commit(_ updated: [FileTemplateRecord]) throws {
         // 编码只有已验证值的固定结构，不含可能由用户输入触发的编码失败。
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -170,11 +220,25 @@ actor FileTemplateLibrary {
         } catch {
             throw failure(.saveIndex, at: indexURL, error: error)
         }
-        templates = updated
+        records = updated
+    }
+
+    private func readContent(at url: URL) throws -> Data {
+        try withRegularFile(at: url) { handle in
+            do {
+                return try handle.readToEnd() ?? Data()
+            } catch {
+                throw failure(.readContent, at: url, error: error)
+            }
+        }
+    }
+
+    private func validateRegularFile(at url: URL) throws {
+        try withRegularFile(at: url) { _ in () }
     }
 
     /// O_NOFOLLOW 与 fstat 约束实际打开的对象，避免符号链接或特殊文件被读取。
-    private func readContent(at url: URL) throws -> Data {
+    private func withRegularFile<T>(at url: URL, body: (FileHandle) throws -> T) throws -> T {
         guard url.isFileURL else {
             throw FileTemplateLibraryError.unsupportedFile(url)
         }
@@ -194,11 +258,7 @@ actor FileTemplateLibrary {
         guard attributes.st_mode & S_IFMT == S_IFREG else {
             throw FileTemplateLibraryError.unsupportedFile(url)
         }
-        do {
-            return try handle.readToEnd() ?? Data()
-        } catch {
-            throw failure(.readContent, at: url, error: error)
-        }
+        return try body(handle)
     }
 
     private func removeContent(at url: URL) throws {
@@ -210,16 +270,21 @@ actor FileTemplateLibrary {
         }
     }
 
-    /// 未引用副本不参与任何模板解析；维护失败只记录诊断，不阻塞有效索引。
-    private func cleanUnreferencedFiles(referencedBy templates: [FileTemplate]) {
-        let referencedNames = Set(templates.map { $0.id.rawValue.uuidString })
+    private func cleanContent(at url: URL) {
         do {
-            let urls = try fileManager.contentsOfDirectory(
-                at: filesURL,
-                includingPropertiesForKeys: nil
-            )
+            try removeContent(at: url)
+        } catch {
+            Self.logger.error("Could not clean unused template files: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    /// 只在恢复索引时清理孤儿，保留有效索引引用的内容目录。
+    private func cleanUnreferencedFiles(referencedBy records: [FileTemplateRecord]) {
+        let referencedNames = Set(records.map { $0.file.id.uuidString })
+        do {
+            let urls = try fileManager.contentsOfDirectory(at: filesURL, includingPropertiesForKeys: nil)
             for url in urls where !referencedNames.contains(url.lastPathComponent) {
-                try removeContent(at: url)
+                cleanContent(at: url)
             }
         } catch {
             Self.logger.error("Could not clean unused template files: \(error.localizedDescription, privacy: .public)")
@@ -264,39 +329,4 @@ actor FileTemplateLibrary {
 nonisolated struct FileTemplateContent: Equatable, Sendable {
     let template: FileTemplate
     let data: Data
-}
-
-/// 索引专用版本信封；同一个身份不能在清单中占据多个位置。
-nonisolated private struct FileTemplateIndex: Codable {
-    let templates: [FileTemplate]
-
-    init(templates: [FileTemplate]) {
-        self.templates = templates
-    }
-
-    private enum CodingKeys: String, CodingKey {
-        case schemaVersion, templates
-    }
-
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        let schemaVersion = try container.decode(Int.self, forKey: .schemaVersion)
-        guard schemaVersion == 1 else {
-            throw FileTemplateLibraryError.unsupportedSchema(schemaVersion)
-        }
-        templates = try container.decode([FileTemplate].self, forKey: .templates)
-        guard Set(templates.map(\.id)).count == templates.count else {
-            throw DecodingError.dataCorruptedError(
-                forKey: .templates,
-                in: container,
-                debugDescription: "A file template ID occurs more than once"
-            )
-        }
-    }
-
-    func encode(to encoder: Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encode(1, forKey: .schemaVersion)
-        try container.encode(templates, forKey: .templates)
-    }
 }

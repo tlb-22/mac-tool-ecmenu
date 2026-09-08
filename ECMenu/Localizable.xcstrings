@@ -757,24 +757,6 @@
         }
       }
     },
-    "common.save": {
-      "comment": "Button that saves the current edits",
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Save"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "保存"
-          }
-        }
-      }
-    },
     "common.settings": {
       "comment": "Button or menu item that opens settings",
       "extractionState": "manual",
@@ -829,20 +811,56 @@
         }
       }
     },
-    "fileTemplates.action.edit": {
-      "comment": "Title of the file-template editing sheet",
+    "fileTemplates.action.open": {
+      "comment": "Opens the saved file template in its default application",
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Edit Template"
+            "value": "Open"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "编辑模板"
+            "value": "打开"
+          }
+        }
+      }
+    },
+    "fileTemplates.action.open.help": {
+      "comment": "Explains how the template file is opened",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open with the default application"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "用默认应用打开"
+          }
+        }
+      }
+    },
+    "fileTemplates.action.replace": {
+      "comment": "Selects a file to replace the saved template contents",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Replace…"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "更换…"
           }
         }
       }
@@ -901,20 +919,38 @@
         }
       }
     },
-    "fileTemplates.error.operation": {
-      "comment": "Title of a failed template import or deletion alert",
+    "fileTemplates.error.open": {
+      "comment": "The system could not open the saved template with its default application",
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Unable to Update Templates"
+            "value": "The template file could not be opened with its default application."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "无法更新模板"
+            "value": "无法使用默认应用打开模板文件。"
+          }
+        }
+      }
+    },
+    "fileTemplates.error.operation": {
+      "comment": "Title of a failed template operation alert",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Operation Couldn’t Be Completed"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "操作未完成"
           }
         }
       }

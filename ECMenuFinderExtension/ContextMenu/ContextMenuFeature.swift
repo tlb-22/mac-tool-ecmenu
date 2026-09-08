@@ -239,8 +239,8 @@ nonisolated struct FinderContextMenuActionDescriptor: Equatable, Sendable {
     /// Finder 菜单叶子显示的名称。
     let title: ContextMenuActionTitle
 
-    /// Finder 菜单叶子显示的图标来源。
-    let icon: ContextCommandIcon
+    /// Finder 菜单叶子显示的可选图标来源。
+    let icon: ContextCommandIcon?
 
     /// 所属命令声明的运行依赖，不由具体菜单叶子的图标决定。
     let requiredApplication: ContextCommandApplicationRequirement?
@@ -254,8 +254,8 @@ struct ContextMenuAction<Command: ContextCommandPayload> {
     /// 产品本地化名称或用户定义的模板显示名。
     let title: ContextMenuActionTitle
 
-    /// 菜单叶子的图标来源。
-    let icon: ContextCommandIcon
+    /// 菜单叶子的可选图标来源。
+    let icon: ContextCommandIcon?
 
     /// 构造可执行命令；当前上下文不可用时返回 `nil`。
     let command: (FinderContextMenuEvaluationContext) -> Command?
@@ -264,12 +264,12 @@ struct ContextMenuAction<Command: ContextCommandPayload> {
     /// - Parameters:
     ///   - id: Feature 内保持稳定且唯一的局部标识。
     ///   - title: Finder 显示的叶子名称。
-    ///   - icon: Finder 显示的图标来源。
+    ///   - icon: Finder 显示的图标来源；省略时只显示文字。
     ///   - command: 从本次求值上下文创建类型化命令。
     init(
         id: String,
         title: LocalizedStringResource,
-        icon: ContextCommandIcon,
+        icon: ContextCommandIcon? = nil,
         command: @escaping (FinderContextMenuEvaluationContext) -> Command?
     ) {
         self.init(
@@ -284,7 +284,7 @@ struct ContextMenuAction<Command: ContextCommandPayload> {
     init(
         id: String,
         title: ContextMenuActionTitle,
-        icon: ContextCommandIcon,
+        icon: ContextCommandIcon? = nil,
         command: @escaping (FinderContextMenuEvaluationContext) -> Command?
     ) {
         switch title {
@@ -293,11 +293,8 @@ struct ContextMenuAction<Command: ContextCommandPayload> {
         case .verbatim(let value):
             precondition(!value.isEmpty)
         }
-        switch icon {
-        case .systemSymbol(let name):
+        if case .systemSymbol(let name)? = icon {
             precondition(!name.isEmpty)
-        case .application:
-            break
         }
 
         self.id = ContextMenuActionLocalID(rawValue: id)

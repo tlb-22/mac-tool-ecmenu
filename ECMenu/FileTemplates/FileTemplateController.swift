@@ -63,6 +63,22 @@ final class FileTemplateController: ObservableObject {
         try await perform { try await self.library.update(template) }
     }
 
+    func updateName(for id: FileTemplateID, field: FileTemplateNameField, value: String) async throws {
+        guard let template = templates?.first(where: { $0.id == id }) else {
+            throw FileTemplateLibraryError.templateNotFound(id)
+        }
+        try await updateTemplate(field.updating(template, to: value))
+    }
+
+    func openTemplate(id: FileTemplateID) async throws {
+        let url = try await library.fileURL(for: id)
+        try FileTemplateFileServices.open(url)
+    }
+
+    func replaceTemplate(id: FileTemplateID, at url: URL) async throws {
+        try await perform { try await self.library.replaceFile(for: id, at: url) }
+    }
+
     func removeTemplate(id: FileTemplateID) async throws {
         try await perform { try await self.library.remove(id: id) }
     }

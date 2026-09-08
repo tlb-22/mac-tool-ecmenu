@@ -5,7 +5,7 @@ import XCTest
 
 final class FileTemplateLibraryTests: XCTestCase {
     func testInitialTemplateIsSavedOnceAndEmptyLibrarySurvivesRestart() async throws {
-        let fixture = try Fixture()
+        let fixture = try FileTemplateLibraryFixture()
         defer { fixture.remove() }
         let library = FileTemplateLibrary(rootURL: fixture.libraryURL)
         let initial = try await library.load()
@@ -20,19 +20,20 @@ final class FileTemplateLibraryTests: XCTestCase {
 
         let index = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: fixture.indexURL)) as? [String: Any])
         XCTAssertEqual(Set(index.keys), ["schemaVersion", "templates"])
-        XCTAssertEqual(index["schemaVersion"] as? Int, 1)
+        XCTAssertEqual(index["schemaVersion"] as? Int, 2)
         let records = try XCTUnwrap(index["templates"] as? [[String: Any]])
-        XCTAssertEqual(Set(try XCTUnwrap(records.first).keys), ["id", "displayName", "defaultFileName"])
+        XCTAssertEqual(Set(try XCTUnwrap(records.first).keys), ["template", "file"])
+        let contentURL = try fixture.contentURL(for: template.id)
 
         let deleted = try await library.remove(id: template.id)
         XCTAssertTrue(deleted.isEmpty)
         let restarted = try await FileTemplateLibrary(rootURL: fixture.libraryURL).load()
         XCTAssertTrue(restarted.isEmpty)
-        XCTAssertFalse(FileManager.default.fileExists(atPath: fixture.contentURL(for: template.id).path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: contentURL.path))
     }
 
     func testImportPreservesBinaryContentsIndependentlyOfSourceAndNames() async throws {
-        let fixture = try Fixture()
+        let fixture = try FileTemplateLibraryFixture()
         defer { fixture.remove() }
         let original = Data([0, 255, 10, 0, 128, 127])
         let source = try fixture.source(named: "sample.bin", data: original)
@@ -51,11 +52,13 @@ final class FileTemplateLibraryTests: XCTestCase {
         let content = try await restarted.content(for: template.id)
         XCTAssertEqual(content.template, edited)
         XCTAssertEqual(content.data, original)
-        XCTAssertEqual(fixture.contentURL(for: template.id).lastPathComponent, template.id.rawValue.uuidString)
+        let contentURL = try await restarted.fileURL(for: template.id)
+        XCTAssertEqual(contentURL.lastPathComponent, "sample.bin")
+        XCTAssertNotEqual(contentURL.deletingLastPathComponent().lastPathComponent, template.id.rawValue.uuidString)
     }
 
     func testAutomaticNamesFillFirstAvailableSuffixAndManualNamesMayRepeat() async throws {
-        let fixture = try Fixture()
+        let fixture = try FileTemplateLibraryFixture()
         defer { fixture.remove() }
         let source = try fixture.source(named: "notes.txt", data: Data("note".utf8))
         let library = FileTemplateLibrary(rootURL: fixture.libraryURL)
@@ -79,7 +82,7 @@ final class FileTemplateLibraryTests: XCTestCase {
     }
 
     func testRemovingTemplatePreservesSourceAndOtherTemplateWithSameNames() async throws {
-        let fixture = try Fixture()
+        let fixture = try FileTemplateLibraryFixture()
         defer { fixture.remove() }
         let bytes = Data("sample".utf8)
         let source = try fixture.source(named: "sample.txt", data: bytes)
@@ -102,7 +105,7 @@ final class FileTemplateLibraryTests: XCTestCase {
     }
 
     func testDirectoryPackageSymlinkAndSpecialFileCannotBeImported() async throws {
-        let fixture = try Fixture()
+        let fixture = try FileTemplateLibraryFixture()
         defer { fixture.remove() }
         let fileManager = FileManager.default
         let directory = fixture.rootURL.appendingPathComponent("folder")
@@ -129,15 +132,16 @@ final class FileTemplateLibraryTests: XCTestCase {
     }
 
     func testCorruptAndUnsupportedIndexesAreNotReplacedOrCleaned() async throws {
-        let fixture = try Fixture()
+        let fixture = try FileTemplateLibraryFixture()
         defer { fixture.remove() }
         let library = FileTemplateLibrary(rootURL: fixture.libraryURL)
         let initial = try await library.load()
         let orphan = fixture.filesURL.appendingPathComponent(UUID().uuidString)
         try Data("unreferenced".utf8).write(to: orphan)
+        let originalURL = try fixture.contentURL(for: initial[0].id)
         let corrupt = Data("{invalid json".utf8)
         let missingFields = Data(#"{"schemaVersion":1}"#.utf8)
-        let future = Data(#"{"schemaVersion":2,"templates":[]}"#.utf8)
+        let future = Data(#"{"schemaVersion":3,"templates":[]}"#.utf8)
         let duplicateID = try JSONSerialization.data(withJSONObject: [
             "schemaVersion": 1,
             "templates": [initial[0], initial[0]].map { [
@@ -153,7 +157,7 @@ final class FileTemplateLibraryTests: XCTestCase {
                 XCTFail("An invalid index must not initialize an empty replacement")
             } catch let error as FileTemplateLibraryError {
                 if data == future {
-                    XCTAssertEqual(error, .unsupportedSchema(2))
+                    XCTAssertEqual(error, .unsupportedSchema(3))
                 } else if case .invalidIndex = error {
                     // 当前索引损坏在解码边界明确分类。
                 } else {
@@ -162,12 +166,12 @@ final class FileTemplateLibraryTests: XCTestCase {
             }
             XCTAssertEqual(try Data(contentsOf: fixture.indexURL), data)
             XCTAssertTrue(FileManager.default.fileExists(atPath: orphan.path))
-            XCTAssertTrue(FileManager.default.fileExists(atPath: fixture.contentURL(for: initial[0].id).path))
+            XCTAssertTrue(FileManager.default.fileExists(atPath: originalURL.path))
         }
     }
 
     func testMissingContentFailsWithoutSubstitutingAnEmptyFile() async throws {
-        let fixture = try Fixture()
+        let fixture = try FileTemplateLibraryFixture()
         defer { fixture.remove() }
         let library = FileTemplateLibrary(rootURL: fixture.libraryURL)
         let templates = try await library.load()
@@ -186,10 +190,11 @@ final class FileTemplateLibraryTests: XCTestCase {
     }
 
     func testMissingIndexInAnExistingLibraryIsNotReinitialized() async throws {
-        let fixture = try Fixture()
+        let fixture = try FileTemplateLibraryFixture()
         defer { fixture.remove() }
         let library = FileTemplateLibrary(rootURL: fixture.libraryURL)
         let initial = try await library.load()
+        let contentDirectoryName = try fixture.contentURL(for: initial[0].id).deletingLastPathComponent().lastPathComponent
         try FileManager.default.removeItem(at: fixture.indexURL)
         let cached = try await library.load()
         XCTAssertEqual(cached, initial)
@@ -203,11 +208,11 @@ final class FileTemplateLibraryTests: XCTestCase {
         }
         XCTAssertFalse(FileManager.default.fileExists(atPath: fixture.indexURL.path))
         let files = try FileManager.default.contentsOfDirectory(atPath: fixture.filesURL.path)
-        XCTAssertEqual(files, [initial[0].id.rawValue.uuidString])
+        XCTAssertEqual(files, [contentDirectoryName])
     }
 
     func testLoadCleansOnlyUnreferencedFiles() async throws {
-        let fixture = try Fixture()
+        let fixture = try FileTemplateLibraryFixture()
         defer { fixture.remove() }
         let library = FileTemplateLibrary(rootURL: fixture.libraryURL)
         let initial = try await library.load()
@@ -219,16 +224,17 @@ final class FileTemplateLibraryTests: XCTestCase {
         let loaded = try await FileTemplateLibrary(rootURL: fixture.libraryURL).load()
         XCTAssertEqual(loaded, initial)
         XCTAssertFalse(FileManager.default.fileExists(atPath: orphan.path))
-        XCTAssertTrue(FileManager.default.fileExists(atPath: fixture.contentURL(for: initial[0].id).path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: try fixture.contentURL(for: initial[0].id).path))
     }
 
     func testIndexWriteFailureDoesNotPublishImportedTemplateAndRetryCleansOrphan() async throws {
-        let fixture = try Fixture()
+        let fixture = try FileTemplateLibraryFixture()
         defer { fixture.remove() }
         let library = FileTemplateLibrary(rootURL: fixture.libraryURL)
         let initial = try await library.load()
         let source = try fixture.source(named: "sample.txt", data: Data("new".utf8))
         let savedIndex = try Data(contentsOf: fixture.indexURL)
+        let contentDirectoryName = try fixture.contentURL(for: initial[0].id).deletingLastPathComponent().lastPathComponent
         try FileManager.default.removeItem(at: fixture.indexURL)
         try FileManager.default.createDirectory(at: fixture.indexURL, withIntermediateDirectories: false)
         do {
@@ -247,14 +253,14 @@ final class FileTemplateLibraryTests: XCTestCase {
         let loaded = try await FileTemplateLibrary(rootURL: fixture.libraryURL).load()
         XCTAssertEqual(loaded, initial)
         let files = try FileManager.default.contentsOfDirectory(atPath: fixture.filesURL.path)
-        XCTAssertEqual(files, [initial[0].id.rawValue.uuidString])
+        XCTAssertEqual(files, [contentDirectoryName])
     }
 
     func testRemovalReportsCleanupFailureWhileKeepingCommittedSnapshot() async throws {
-        let fixture = try Fixture()
+        let fixture = try FileTemplateLibraryFixture()
         let library = FileTemplateLibrary(rootURL: fixture.libraryURL)
         let initial = try await library.load()
-        let contentURL = fixture.contentURL(for: initial[0].id)
+        let contentURL = try fixture.contentURL(for: initial[0].id)
         defer {
             _ = chflags(contentURL.path, 0)
             fixture.remove()
@@ -280,7 +286,7 @@ final class FileTemplateLibraryTests: XCTestCase {
     }
 }
 
-nonisolated private struct Fixture {
+nonisolated struct FileTemplateLibraryFixture {
     let rootURL: URL
 
     init() throws {
@@ -291,8 +297,28 @@ nonisolated private struct Fixture {
     var filesURL: URL { libraryURL.appendingPathComponent("Files", isDirectory: true) }
     var indexURL: URL { libraryURL.appendingPathComponent("index.json") }
 
-    func contentURL(for id: FileTemplateID) -> URL {
-        filesURL.appendingPathComponent(id.rawValue.uuidString)
+    func contentURL(for id: FileTemplateID) throws -> URL {
+        let index = try JSONDecoder().decode(FileTemplateIndex.self, from: Data(contentsOf: indexURL))
+        let file = try XCTUnwrap(index.templates.first { $0.template.id == id }).file
+        return filesURL.appendingPathComponent(file.id.uuidString, isDirectory: true)
+            .appendingPathComponent(file.fileName)
+    }
+
+    func saveLegacyIndex(_ templates: [FileTemplate]) throws -> Data {
+        nonisolated struct LegacyIndex: Encodable {
+            let schemaVersion = 1
+            let templates: [FileTemplate]
+        }
+        try FileManager.default.createDirectory(at: filesURL, withIntermediateDirectories: true)
+        let data = try JSONEncoder().encode(LegacyIndex(templates: templates))
+        try data.write(to: indexURL)
+        return data
+    }
+
+    func saveLegacyContent(_ data: Data, for id: FileTemplateID) throws -> URL {
+        let url = filesURL.appendingPathComponent(id.rawValue.uuidString)
+        try data.write(to: url)
+        return url
     }
 
     func source(named name: String, data: Data) throws -> URL {

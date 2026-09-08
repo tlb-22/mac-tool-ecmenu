@@ -206,7 +206,7 @@ final class FinderContextMenuController {
             )
             menuItem.isEnabled = true
             menuItem.tag = retain(preparedAction)
-            menuItem.image = menuIcon(for: descriptor.icon)
+            menuItem.image = descriptor.icon.flatMap { menuIcon(for: $0) }
             return menuItem
 
         case .separator:

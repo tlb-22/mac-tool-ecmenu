@@ -1,17 +1,35 @@
 import SwiftUI
 
-/// 模板管理的纯呈现层；导入、存储和重试均经由注入的操作执行。
+/// 文件模板页面的布局调节入口；页面通用参数沿用 StatusPageStyle。
+enum FileTemplatesStyle {
+    /// 命令名与默认文件名之间的间距。
+    static let rowNameSpacing: CGFloat = 4
+    /// 每个名称的最小高度，原地编辑前后保持一致。
+    static let nameHeight: CGFloat = 18
+    /// 模板行的水平与垂直内边距。
+    static let rowHorizontalPadding: CGFloat = 8
+    static let rowVerticalPadding: CGFloat = 8
+    /// 打开、更换和删除操作之间的间距。
+    static let actionSpacing: CGFloat = 8
+}
+
+/// 模板管理的呈现层；每次名称编辑和文件操作分别提交。
 struct FileTemplatesPage: View {
     let state: FileTemplatePageState
     let isUpdating: Bool
+    @Binding var editingName: FileTemplateNameDraft?
     let importTemplate: () async throws -> Void
-    let updateTemplate: (FileTemplate) async throws -> Void
+    let updateName: (FileTemplateID, FileTemplateNameField, String) async throws -> Void
+    let openTemplate: (FileTemplateID) async throws -> Void
+    let replaceTemplate: (FileTemplateID) async throws -> Void
     let removeTemplate: (FileTemplateID) async throws -> Void
     let reload: () async -> Void
 
-    @State private var editingTemplate: FileTemplate?
+    @FocusState private var focusedName: FileTemplateNameTarget?
     @State private var operationError: String?
-    @State private var isImporting = false
+    @State private var actionTask: Task<Void, Never>?
+
+    private var isBusy: Bool { isUpdating || actionTask != nil }
 
     var body: some View {
         VStack(spacing: StatusPageStyle.sectionSpacing) {
@@ -38,15 +56,7 @@ struct FileTemplatesPage: View {
 
                 HStack {
                     Button {
-                        isImporting = true
-                        Task {
-                            defer { isImporting = false }
-                            do {
-                                try await importTemplate()
-                            } catch {
-                                operationError = error.localizedDescription
-                            }
-                        }
+                        perform(importTemplate)
                     } label: {
                         Label {
                             Text(FileTemplatesText.add)
@@ -54,7 +64,7 @@ struct FileTemplatesPage: View {
                             Image(systemName: "plus")
                         }
                     }
-                    .disabled(isUpdating || isImporting)
+                    .disabled(isBusy)
 
                     Spacer()
 
@@ -66,8 +76,16 @@ struct FileTemplatesPage: View {
             }
         }
         .padding(StatusPageStyle.contentPadding)
-        .sheet(item: $editingTemplate) { template in
-            FileTemplateEditor(template: template, save: updateTemplate)
+        .onChange(of: focusedName) { previous, current in
+            guard let draft = editingName,
+                  draft.target == previous, current != previous else { return }
+            Task { await finishEditing(draft) }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
+            if let draft = editingName { Task { await finishEditing(draft) } }
+        }
+        .onDisappear {
+            if let draft = editingName { Task { await finishEditing(draft) } }
         }
         .alert(
             Text(FileTemplatesText.operationFailed),
@@ -102,9 +120,7 @@ struct FileTemplatesPage: View {
                     LazyVStack(spacing: 0) {
                         ForEach(templates) { template in
                             templateRow(template)
-                            if template.id != templates.last?.id {
-                                Divider()
-                            }
+                            Divider()
                         }
                     }
                 }
@@ -115,155 +131,155 @@ struct FileTemplatesPage: View {
 
     private func templateRow(_ template: FileTemplate) -> some View {
         HStack(spacing: StatusPageStyle.rowSpacing) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(verbatim: template.displayName)
-                    .lineLimit(1)
-                Text(verbatim: template.defaultFileName)
+            VStack(alignment: .leading, spacing: FileTemplatesStyle.rowNameSpacing) {
+                name(template, field: .displayName)
+                name(template, field: .defaultFileName)
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                    .lineLimit(1)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            Button {
-                editingTemplate = template
-            } label: {
-                Image(systemName: "pencil")
-            }
-            .help(Text(FileTemplatesText.edit))
-            .accessibilityLabel(Text(FileTemplatesText.edit))
+            HStack(spacing: FileTemplatesStyle.actionSpacing) {
+                Button {
+                    perform { try await openTemplate(template.id) }
+                } label: {
+                    Text(FileTemplatesText.open)
+                }
+                .help(Text(FileTemplatesText.openHelp))
 
-            Button(role: .destructive) {
-                Task {
-                    do {
-                        try await removeTemplate(template.id)
-                    } catch {
-                        operationError = error.localizedDescription
+                Button {
+                    perform { try await replaceTemplate(template.id) }
+                } label: {
+                    Text(FileTemplatesText.replace)
+                }
+
+                Button(role: .destructive) {
+                    perform { try await removeTemplate(template.id) }
+                } label: {
+                    Image(systemName: "trash")
+                        .foregroundStyle(.red)
+                }
+                .buttonStyle(.borderless)
+                .help(Text(FileTemplatesText.delete))
+                .accessibilityLabel(Text(FileTemplatesText.delete))
+            }
+            .disabled(isBusy)
+        }
+        .padding(.horizontal, FileTemplatesStyle.rowHorizontalPadding)
+        .padding(.vertical, FileTemplatesStyle.rowVerticalPadding)
+    }
+
+    @ViewBuilder
+    private func name(_ template: FileTemplate, field: FileTemplateNameField) -> some View {
+        let target = FileTemplateNameTarget(templateID: template.id, field: field)
+        let title = field == .displayName ? FileTemplatesText.displayName : FileTemplatesText.defaultFileName
+        if let draft = editingName, draft.target == target {
+            FileTemplateInlineNameEditor(
+                draft: draft,
+                title: title,
+                focus: $focusedName,
+                submit: { Task { await finishEditing(draft) } },
+                cancel: {
+                    editingName = nil
+                    focusedName = nil
+                }
+            )
+        } else {
+            Button {
+                perform {
+                    let draft = FileTemplateNameDraft(template: template, field: field) { value in
+                        try await updateName(template.id, field, value)
                     }
+                    editingName = draft
+                    focusedName = target
                 }
             } label: {
-                Image(systemName: "trash")
+                Text(verbatim: field.value(in: template))
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, minHeight: FileTemplatesStyle.nameHeight, alignment: .leading)
+                    .contentShape(Rectangle())
             }
-            .help(Text(FileTemplatesText.delete))
-            .accessibilityLabel(Text(FileTemplatesText.delete))
+            .buttonStyle(.plain)
+            .disabled(isBusy)
+            .accessibilityLabel(Text(title))
+            .accessibilityValue(field.value(in: template))
         }
-        .buttonStyle(.borderless)
-        .disabled(isUpdating || isImporting)
-        .padding(.horizontal, StatusPageStyle.rowHorizontalPadding)
-        .padding(.vertical, 8)
+    }
+
+    /// 失焦与点击后续操作可以同时到达；同一草稿负责合并提交。
+    @discardableResult
+    private func finishEditing(_ draft: FileTemplateNameDraft) async -> Bool {
+        let saved = await draft.commit()
+        guard editingName === draft else { return saved }
+        if saved {
+            editingName = nil
+            focusedName = nil
+        } else {
+            focusedName = draft.target
+        }
+        return saved
+    }
+
+    private func perform(_ operation: @escaping () async throws -> Void) {
+        guard actionTask == nil else { return }
+        actionTask = Task {
+            defer { actionTask = nil }
+            if let draft = editingName, !(await finishEditing(draft)) { return }
+            do {
+                try await operation()
+            } catch {
+                operationError = error.localizedDescription
+            }
+        }
     }
 }
 
-/// 编辑期间只保留输入草稿；点击保存后才创建有效模板并提交持久化。
-struct FileTemplateEditor: View {
-    let template: FileTemplate
-    let save: (FileTemplate) async throws -> Void
-
-    @Environment(\.dismiss) private var dismiss
-    @State private var displayName: String
-    @State private var defaultFileName: String
-    @State private var validationMessage: String?
-    @State private var isSaving = false
-
-    init(
-        template: FileTemplate,
-        save: @escaping (FileTemplate) async throws -> Void
-    ) {
-        self.template = template
-        self.save = save
-        _displayName = State(initialValue: template.displayName)
-        _defaultFileName = State(initialValue: template.defaultFileName)
-    }
+/// 草稿通知只重绘当前字段，保留失败输入并支持重试或 Escape 放弃。
+private struct FileTemplateInlineNameEditor: View {
+    @ObservedObject var draft: FileTemplateNameDraft
+    let title: LocalizedStringResource
+    let focus: FocusState<FileTemplateNameTarget?>.Binding
+    let submit: () -> Void
+    let cancel: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            Text(FileTemplatesText.edit)
-                .font(.headline)
+        VStack(alignment: .leading, spacing: FileTemplatesStyle.rowNameSpacing) {
+            TextField(text: $draft.value) { Text(title) }
+                .textFieldStyle(.plain)
+                .frame(minHeight: FileTemplatesStyle.nameHeight)
+                .focused(focus, equals: draft.target)
+                .disabled(draft.isSaving)
+                .onSubmit(submit)
+                .onExitCommand(perform: cancel)
+                .onAppear { focus.wrappedValue = draft.target }
 
-            Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 16) {
-                GridRow {
-                    Text(FileTemplatesText.displayName)
-                        .gridColumnAlignment(.trailing)
-                    TextField(text: $displayName) {
-                        Text(FileTemplatesText.displayName)
-                    }
-                }
-                GridRow {
-                    Text(FileTemplatesText.defaultFileName)
-                    TextField(text: $defaultFileName) {
-                        Text(FileTemplatesText.defaultFileName)
-                    }
-                }
-            }
-            .textFieldStyle(.roundedBorder)
-            .disabled(isSaving)
-
-            if let validationMessage {
-                Text(verbatim: validationMessage)
-                    .font(.callout)
+            if let message = draft.errorMessage {
+                Text(verbatim: message)
+                    .font(.caption)
                     .foregroundStyle(.red)
                     .fixedSize(horizontal: false, vertical: true)
             }
-
-            HStack {
-                Spacer()
-                Button {
-                    dismiss()
-                } label: {
-                    Text(FileTemplatesText.cancel)
-                }
-                .keyboardShortcut(.cancelAction)
-
-                Button {
-                    saveChanges()
-                } label: {
-                    Text(FileTemplatesText.save)
-                }
-                .keyboardShortcut(.defaultAction)
-            }
-            .disabled(isSaving)
-        }
-        .padding(24)
-        .frame(width: 440)
-        .interactiveDismissDisabled(isSaving)
-    }
-
-    private func saveChanges() {
-        let edited: FileTemplate
-        do {
-            edited = try FileTemplate(
-                id: template.id,
-                displayName: displayName,
-                defaultFileName: defaultFileName
-            )
-        } catch {
-            validationMessage = error.localizedDescription
-            return
-        }
-
-        validationMessage = nil
-        isSaving = true
-        Task {
-            defer { isSaving = false }
-            do {
-                try await save(edited)
-                dismiss()
-            } catch {
-                validationMessage = error.localizedDescription
-            }
         }
     }
 }
 
-/// 模板页面、编辑表单与文件选择器共用的产品用语。
+/// 模板页面与文件选择器共用的产品用语。
 enum FileTemplatesText {
+    static let open = LocalizedStringResource(
+        "fileTemplates.action.open", defaultValue: "Open",
+        comment: "Opens the saved template file with its default application"
+    )
+    static let openHelp = LocalizedStringResource(
+        "fileTemplates.action.open.help", defaultValue: "Open with the default application",
+        comment: "Help for the template file open button"
+    )
+    static let replace = LocalizedStringResource(
+        "fileTemplates.action.replace", defaultValue: "Replace…",
+        comment: "Chooses another ordinary file to replace the saved template"
+    )
     static let add = LocalizedStringResource(
         "fileTemplates.action.add", defaultValue: "Add Template…",
         comment: "Button that imports an ordinary file as a template"
-    )
-    static let edit = LocalizedStringResource(
-        "fileTemplates.action.edit", defaultValue: "Edit Template",
-        comment: "Title of the file-template editing sheet"
     )
     static let delete = LocalizedStringResource(
         "fileTemplates.action.delete", defaultValue: "Delete Template",
@@ -291,20 +307,12 @@ enum FileTemplatesText {
         comment: "Title shown when the template library cannot be read"
     )
     static let operationFailed = LocalizedStringResource(
-        "fileTemplates.error.operation", defaultValue: "Unable to Update Templates",
-        comment: "Title of a failed template import or deletion alert"
+        "fileTemplates.error.operation", defaultValue: "Operation Couldn’t Be Completed",
+        comment: "Title of a failed template operation alert"
     )
     static let retry = LocalizedStringResource(
         "common.retry", defaultValue: "Retry",
         comment: "Button that retries an operation"
-    )
-    static let save = LocalizedStringResource(
-        "common.save", defaultValue: "Save",
-        comment: "Button that saves the current edits"
-    )
-    static let cancel = LocalizedStringResource(
-        "common.cancel", defaultValue: "Cancel",
-        comment: "Button that cancels the current operation"
     )
     static let ok = LocalizedStringResource(
         "common.ok", defaultValue: "OK",

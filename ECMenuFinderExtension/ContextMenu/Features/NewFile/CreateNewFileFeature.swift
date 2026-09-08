@@ -25,7 +25,6 @@ final class CreateNewFileFeature: ContextMenuFeature {
                 .item(ContextMenuAction(
                     id: template.id.rawValue.uuidString,
                     title: .verbatim(template.displayName),
-                    icon: Command.descriptor.icon,
                     command: { [self] context in
                         command(templateID: template.id, in: context)
                     }

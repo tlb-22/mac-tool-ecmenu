@@ -635,7 +635,8 @@ final class ContextMenuCompositionTests: XCTestCase {
         )
         let menu = try XCTUnwrap(controller.menu(
             for: .container(path: targetPath),
-            action: #selector(NSApplication.terminate(_:))
+            // AppKit 会为 terminate: 自动补系统图标；使用 Finder 的实际命令入口。
+            action: NSSelectorFromString("performContextCommand:")
         ))
         let parent = try XCTUnwrap(menu.items.first)
         let submenu = try XCTUnwrap(parent.submenu)
@@ -645,6 +646,7 @@ final class ContextMenuCompositionTests: XCTestCase {
         XCTAssertNotNil(parent.image)
         XCTAssertNil(controller.preparedAction(for: parent))
         XCTAssertEqual(submenu.items.map(\.title), templates.map(\.displayName))
+        XCTAssertTrue(submenu.items.allSatisfy { $0.image == nil })
         XCTAssertTrue(submenu.items.allSatisfy { $0.submenu == nil })
         XCTAssertNotEqual(submenu.items[0].tag, submenu.items[1].tag)
         submenu.items.forEach { controller.perform($0) }
