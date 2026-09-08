@@ -157,6 +157,102 @@ final class FileTemplatesPageTests: XCTestCase {
         assertIdentity(middle, target: fixture.firstFileName, in: host)
     }
 
+    func testBlankAndFieldClicksKeepTheLastDestinationWhileSaving() async throws {
+        for finishLast in [false, true] {
+            let fixture = try FileTemplatesPageFixture()
+            let gate = FileTemplatesNativeSaveGate()
+            fixture.harness.saveBoundary = { try await gate.save($0) }
+            let host = FileTemplatesNativePageHost(harness: fixture.harness)
+            defer {
+                gate.finish()
+                host.close()
+            }
+            let first = try await field(for: fixture.firstName, in: host)
+            let middle = try await field(for: fixture.firstFileName, in: host)
+            let latest = try await field(for: fixture.secondName, in: host)
+            try click(first, in: host)
+            try await assertEditing(fixture.firstName, field: first, host: host)
+            try typeIntoFirstResponder("Save before final click", in: host)
+            let originalEditor = try XCTUnwrap(first.currentEditor())
+            try click(middle, in: host)
+            await gate.waitUntilSaving()
+
+            if finishLast {
+                try click(latest, in: host)
+                try clickBlank(.belowLastRow, in: host)
+            } else {
+                try clickBlank(.belowLastRow, in: host)
+                try click(latest, in: host)
+            }
+            gate.finish()
+            if finishLast {
+                for _ in 0..<100 {
+                    if fixture.harness.nameEditing.draft == nil,
+                       !fixture.harness.nameEditing.isTransitioning { break }
+                    await Task.yield()
+                }
+                XCTAssertNil(fixture.harness.nameEditing.draft)
+                XCTAssertNil(first.currentEditor())
+                XCTAssertNil(latest.currentEditor())
+                XCTAssertFalse(host.window.firstResponder === originalEditor)
+            } else {
+                try await assertEditing(fixture.secondName, field: latest, host: host)
+                try typeIntoFirstResponder("The last field wins", in: host)
+                XCTAssertEqual(fixture.harness.nameEditing.draft?.value, "The last field wins")
+            }
+            XCTAssertEqual(gate.values, [
+                FileTemplatesNativeSave(target: fixture.firstName, value: "Save before final click"),
+            ])
+        }
+    }
+
+    func testBlankAreasCommitTheNameAndReleaseTheNativeEditor() async throws {
+        for area in [FileTemplatesBlankArea.belowLastRow, .outerMargin, .footer] {
+            let fixture = try FileTemplatesPageFixture()
+            let host = FileTemplatesNativePageHost(harness: fixture.harness)
+            defer { host.close() }
+            let name = try await field(for: fixture.firstName, in: host)
+            try click(name, in: host)
+            try await assertEditing(fixture.firstName, field: name, host: host)
+            try typeIntoFirstResponder("Saved from blank", in: host)
+            let editor = try XCTUnwrap(name.currentEditor())
+            try clickBlank(area, in: host)
+            for _ in 0..<100 {
+                if fixture.harness.nameEditing.draft == nil, !fixture.harness.nameEditing.isTransitioning { break }
+                await Task.yield()
+            }
+            XCTAssertNil(fixture.harness.nameEditing.draft, "Clicking \(area) must finish the name edit")
+            XCTAssertNil(name.currentEditor())
+            XCTAssertFalse(host.window.firstResponder === editor)
+            XCTAssertEqual(fixture.harness.saved, [
+                FileTemplatesNativeSave(target: fixture.firstName, value: "Saved from blank"),
+            ])
+            assertIdentity(name, target: fixture.firstName, in: host)
+        }
+    }
+
+    func testBlankClickWithInvalidInputKeepsOriginalTextAndNativeFocus() async throws {
+        let fixture = try FileTemplatesPageFixture()
+        let host = FileTemplatesNativePageHost(harness: fixture.harness)
+        defer { host.close() }
+        let name = try await field(for: fixture.firstName, in: host)
+        try click(name, in: host)
+        try await assertEditing(fixture.firstName, field: name, host: host)
+        try typeIntoFirstResponder("  ", in: host)
+        try clickBlank(.belowLastRow, in: host)
+        for _ in 0..<100 {
+            if fixture.harness.nameEditing.draft?.errorMessage != nil,
+               !fixture.harness.nameEditing.isTransitioning { break }
+            await Task.yield()
+        }
+        try await assertEditing(fixture.firstName, field: name, host: host)
+        XCTAssertEqual(fixture.harness.nameEditing.draft?.value, "  ")
+        XCTAssertNotNil(fixture.harness.nameEditing.draft?.errorMessage)
+        XCTAssertTrue(fixture.harness.saved.isEmpty)
+        try typeIntoFirstResponder("Corrected after blank click", in: host)
+        XCTAssertEqual(fixture.harness.nameEditing.draft?.value, "Corrected after blank click")
+    }
+
     func testFileOperationSaveFailureKeepsOriginalNativeFocusAndDoesNotRunOperation() async throws {
         let fixture = try FileTemplatesPageFixture()
         let host = FileTemplatesNativePageHost(harness: fixture.harness)
@@ -168,6 +264,13 @@ final class FileTemplatesPageTests: XCTestCase {
         let open = try XCTUnwrap(operationButtons(in: host).first {
             $0.text.contains(String(localized: FileTemplatesText.open))
         })
+        let frame = open.frame
+        XCTAssertFalse(frame.isEmpty, "The Open button must have a real accessible frame")
+        let windowPoint = host.window.convertPoint(fromScreen: NSPoint(x: frame.midX, y: frame.midY))
+        let hostPoint = host.view.convert(windowPoint, from: nil)
+        let hit = try hitView(at: hostPoint, in: host)
+        XCTAssertFalse(hit is FileTemplateEditingBackgroundView,
+                       "The editing background must not cover the Open button")
         XCTAssertTrue(open.press())
         for _ in 0..<100 {
             if fixture.harness.nameEditing.draft?.errorMessage != nil,
@@ -207,26 +310,71 @@ final class FileTemplatesPageTests: XCTestCase {
     }
 
     private func click(_ field: FileTemplateNameNativeField, in host: FileTemplatesNativePageHost) throws {
-        let position = field.convert(NSPoint(x: field.bounds.midX, y: field.bounds.midY), to: nil)
+        host.layout()
+        let point = field.convert(NSPoint(x: field.bounds.midX, y: field.bounds.midY), to: host.view)
+        let hit = try hitView(at: point, in: host)
+        XCTAssertTrue(hit === field, "The name field must receive its own hit-tested mouse down; received \(type(of: hit))")
+        try mouseDown(on: hit, at: point, in: host)
+    }
+
+    private func clickBlank(_ area: FileTemplatesBlankArea, in host: FileTemplatesNativePageHost) throws {
+        host.layout()
+        let point: NSPoint
+        switch area {
+        case .belowLastRow:
+            let scrollView = try XCTUnwrap(descendants(in: host.view).compactMap { $0 as? NSScrollView }.first)
+            let viewport = scrollView.contentView.convert(scrollView.contentView.bounds, to: host.view)
+            let fieldFrames = nativeFields(in: host.view).map { $0.convert($0.bounds, to: host.view) }
+            if host.view.isFlipped {
+                let lastFieldEdge = try XCTUnwrap(fieldFrames.map(\.maxY).max())
+                point = NSPoint(x: viewport.midX, y: (lastFieldEdge + viewport.maxY) / 2)
+            } else {
+                let lastFieldEdge = try XCTUnwrap(fieldFrames.map(\.minY).min())
+                point = NSPoint(x: viewport.midX, y: (viewport.minY + lastFieldEdge) / 2)
+            }
+        case .outerMargin:
+            point = NSPoint(x: 2, y: host.view.bounds.midY)
+        case .footer:
+            point = NSPoint(x: host.view.bounds.maxX - 40,
+                            y: host.view.isFlipped ? host.view.bounds.maxY - 24 : 24)
+        }
+        let hit = try hitView(at: point, in: host)
+        XCTAssertTrue(hit is FileTemplateEditingBackgroundView,
+                      "Blank \(area) must reach the editing background; received \(type(of: hit)) at \(point)")
+        try mouseDown(on: hit, at: point, in: host)
+    }
+
+    private func descendants(in view: NSView) -> [NSView] {
+        view.subviews.flatMap { [$0] + descendants(in: $0) }
+    }
+
+    private func hitView(at hostPoint: NSPoint, in host: FileTemplatesNativePageHost) throws -> NSView {
+        let parentPoint = host.view.convert(hostPoint, to: host.view.superview)
+        return try XCTUnwrap(host.view.hitTest(parentPoint), "The hosted page must hit-test its own content")
+    }
+
+    private func mouseDown(on hit: NSView, at hostPoint: NSPoint, in host: FileTemplatesNativePageHost) throws {
+        let windowPoint = host.view.convert(hostPoint, to: nil)
         let event = try XCTUnwrap(NSEvent.mouseEvent(
-            with: .leftMouseDown, location: position, modifierFlags: [],
+            with: .leftMouseDown, location: windowPoint, modifierFlags: [],
             timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: host.window.windowNumber,
             context: nil, eventNumber: 1, clickCount: 1, pressure: 1
         ))
-        field.mouseDown(with: event)
+        hit.mouseDown(with: event)
     }
 
-    private func assertEditing(_ target: FileTemplateNameTarget, field: FileTemplateNameNativeField, host: FileTemplatesNativePageHost) async throws {
+    private func assertEditing(_ target: FileTemplateNameTarget, field: FileTemplateNameNativeField, host: FileTemplatesNativePageHost,
+                               file: StaticString = #filePath, line: UInt = #line) async throws {
         for _ in 0..<100 {
             if host.harness.nameEditing.draft?.target == target, !host.harness.nameEditing.isTransitioning { break }
             await Task.yield()
         }
         host.layout()
-        XCTAssertEqual(host.harness.nameEditing.draft?.target, target)
-        XCTAssertFalse(host.harness.nameEditing.isTransitioning)
-        let editor = try XCTUnwrap(field.currentEditor() as? NSTextView, "Target field must own the native field editor")
-        XCTAssertTrue(host.window.firstResponder === editor, "Visible editing state must correspond to the native first responder")
-        XCTAssertTrue(editor.isEditable)
+        XCTAssertEqual(host.harness.nameEditing.draft?.target, target, file: file, line: line)
+        XCTAssertFalse(host.harness.nameEditing.isTransitioning, file: file, line: line)
+        let editor = try XCTUnwrap(field.currentEditor() as? NSTextView, "Target field must own the native field editor", file: file, line: line)
+        XCTAssertTrue(host.window.firstResponder === editor, "Visible editing state must correspond to the native first responder", file: file, line: line)
+        XCTAssertTrue(editor.isEditable, file: file, line: line)
     }
 
     private func typeIntoFirstResponder(_ text: String, in host: FileTemplatesNativePageHost) throws {
@@ -369,6 +517,7 @@ private struct FileTemplatesNativeAccessibilityElement {
     let object: AnyObject
     var identity: ObjectIdentifier { ObjectIdentifier(object) }
     var role: NSAccessibility.Role? { object.accessibilityRole?() }
+    var frame: NSRect { object.accessibilityFrame?() ?? .zero }
     var isEnabled: Bool { object.isAccessibilityEnabled?() ?? false }
     func press() -> Bool { object.accessibilityPerformPress?() ?? false }
     var text: [String] {
@@ -380,4 +529,10 @@ private struct FileTemplatesNativeAccessibilityElement {
         let children: [Any] = object.accessibilityChildren?() ?? []
         return children.map { FileTemplatesNativeAccessibilityElement(object: $0 as AnyObject) }
     }
+}
+
+private enum FileTemplatesBlankArea {
+    case belowLastRow
+    case outerMargin
+    case footer
 }

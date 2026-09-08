@@ -314,6 +314,9 @@ struct StatusPageContent: View {
                 .frame(width: StatusPageStyle.detailWidth, height: StatusPageStyle.pageHeight)
         }
         .frame(height: StatusPageStyle.pageHeight)
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
+            Task { await templateNameEditing.finishEditing() }
+        }
     }
 
     /// 显示产品身份与设置分类的窄侧栏。

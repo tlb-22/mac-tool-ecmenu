@@ -84,9 +84,7 @@ struct FileTemplatesPage: View {
             }
         }
         .padding(StatusPageStyle.contentPadding)
-        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
-            Task { await nameEditing.finishEditing() }
-        }
+        .background { editingBackground }
         .onDisappear {
             Task { await nameEditing.finishEditing() }
         }
@@ -119,17 +117,28 @@ struct FileTemplatesPage: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                ScrollView {
-                    VStack(spacing: 0) {
-                        ForEach(templates) { template in
-                            templateRow(template)
-                            Divider()
+                GeometryReader { geometry in
+                    ScrollView {
+                        VStack(spacing: 0) {
+                            ForEach(templates) { template in
+                                templateRow(template)
+                                Divider()
+                            }
                         }
+                        .frame(maxWidth: .infinity, minHeight: geometry.size.height, alignment: .top)
+                        .background { editingBackground }
                     }
                 }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var editingBackground: some View {
+        FileTemplateEditingBackground {
+            nameEditing.requestFinishing()
+        }
+        .accessibilityHidden(true)
     }
 
     private func templateRow(_ template: FileTemplate) -> some View {
@@ -202,6 +211,35 @@ struct FileTemplatesPage: View {
                 operationError = error.localizedDescription
             }
         }
+    }
+}
+
+/// 背景只接收未命中前景控件的点击，字段和操作按钮保持自己的事件路径。
+private struct FileTemplateEditingBackground: NSViewRepresentable {
+    let clicked: () -> Void
+
+    func makeNSView(context: Context) -> FileTemplateEditingBackgroundView {
+        FileTemplateEditingBackgroundView(clicked: clicked)
+    }
+
+    func updateNSView(_ view: FileTemplateEditingBackgroundView, context: Context) {
+        view.clicked = clicked
+    }
+}
+
+final class FileTemplateEditingBackgroundView: NSView {
+    var clicked: () -> Void
+
+    init(clicked: @escaping () -> Void) {
+        self.clicked = clicked
+        super.init(frame: .zero)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("Use init(clicked:)") }
+
+    override func mouseDown(with event: NSEvent) {
+        clicked()
     }
 }
 

@@ -60,11 +60,16 @@ final class FileTemplateNameEditingSession: ObservableObject {
     }
 
     @discardableResult
-    func finishEditing() async -> Bool {
+    func requestFinishing() -> Task<Bool, Never> {
         if let transition, case .finish = transition.request.destination {
-            return await transition.task.value
+            return transition.task
         }
-        return await request(.finish).value
+        return request(.finish)
+    }
+
+    @discardableResult
+    func finishEditing() async -> Bool {
+        await requestFinishing().value
     }
 
     func cancelEditing() {
@@ -81,7 +86,7 @@ final class FileTemplateNameEditingSession: ObservableObject {
     func editingDidEnd(_ control: any FileTemplateNameControl) {
         guard isEditing(control), transition == nil else { return }
         // 在原生回调内登记请求，后续目标点击可直接替换目的地。
-        request(.finish)
+        requestFinishing()
     }
 
     @discardableResult
