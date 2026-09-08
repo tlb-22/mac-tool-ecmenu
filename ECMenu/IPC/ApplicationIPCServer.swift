@@ -41,7 +41,7 @@ final class ApplicationIPCServer {
     /// 只连接运行时与快照读取边界，模板可用性由菜单能力解释。
     convenience init(
         router: ContextCommandRouter,
-        menuSnapshot: @escaping @MainActor @Sendable () async -> CommandMenuConfigSnapshot,
+        menuSnapshot: @escaping @MainActor @Sendable () async -> CommandMenuSettingsSnapshot,
         didStart: @escaping () -> Void
     ) {
         self.init(makeTransport: { didFail in
@@ -53,7 +53,7 @@ final class ApplicationIPCServer {
                         router.run(invocation)
                     }
                 },
-                commandMenuConfigProvider: { reply in
+                commandMenuSettingsProvider: { reply in
                     Task { @MainActor in reply(.success(await menuSnapshot())) }
                 },
                 didFail: didFail

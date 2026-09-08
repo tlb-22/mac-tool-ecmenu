@@ -17,11 +17,11 @@ nonisolated protocol ContextCommandSending: AnyObject, Sendable {
 }
 
 /// 允许生产客户端和测试替身共享菜单配置查询边界。
-nonisolated protocol CommandMenuConfigRequesting: AnyObject, Sendable {
+nonisolated protocol CommandMenuSettingsRequesting: AnyObject, Sendable {
     /// 从经过双向身份验证的连接取得主应用当前配置。
-    func fetchCommandMenuConfig(
+    func fetchCommandMenuSettings(
         completion: @escaping @Sendable (
-            Result<CommandMenuConfigSnapshot, Error>
+            Result<CommandMenuSettingsSnapshot, Error>
         ) -> Void
     )
 }

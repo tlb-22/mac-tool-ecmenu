@@ -14,20 +14,20 @@ nonisolated final class AuthenticatedLocalSocketConnectionHandler: Sendable {
     )
     private let peerValidator: LocalSocketPeerValidator
     private let contextCommandSink: AuthenticatedLocalSocketServer.ContextCommandSink
-    private let commandMenuConfigProvider: AuthenticatedLocalSocketServer.CommandMenuConfigProvider
+    private let commandMenuSettingsProvider: AuthenticatedLocalSocketServer.CommandMenuSettingsProvider
     private let connectionTimeout: TimeInterval
 
     init(
         expectedClientSigningIdentifier: String,
         contextCommandSink: @escaping AuthenticatedLocalSocketServer.ContextCommandSink,
-        commandMenuConfigProvider: @escaping AuthenticatedLocalSocketServer.CommandMenuConfigProvider,
+        commandMenuSettingsProvider: @escaping AuthenticatedLocalSocketServer.CommandMenuSettingsProvider,
         connectionTimeout: TimeInterval
     ) throws {
         peerValidator = try LocalSocketPeerValidator(
             expectedSigningIdentifier: expectedClientSigningIdentifier
         )
         self.contextCommandSink = contextCommandSink
-        self.commandMenuConfigProvider = commandMenuConfigProvider
+        self.commandMenuSettingsProvider = commandMenuSettingsProvider
         self.connectionTimeout = connectionTimeout
     }
 
@@ -54,9 +54,9 @@ nonisolated final class AuthenticatedLocalSocketConnectionHandler: Sendable {
                 // 命令是单向消息：交给应用层后立即关闭连接，不等待接管
                 // 回执或业务执行结果。
                 contextCommandSink(request)
-            case .commandMenuConfig:
-                let waiter = CommandMenuConfigResponseWaiter()
-                commandMenuConfigProvider { configuration in
+            case .commandMenuSettings:
+                let waiter = CommandMenuSettingsResponseWaiter()
+                commandMenuSettingsProvider { configuration in
                     waiter.fulfill(configuration)
                 }
                 let configuration = try waiter.wait(deadline: deadline)
@@ -73,19 +73,19 @@ nonisolated final class AuthenticatedLocalSocketConnectionHandler: Sendable {
 }
 
 /// 把 MainActor 上取得的菜单配置交还给单个后台查询连接。
-nonisolated private final class CommandMenuConfigResponseWaiter:
+nonisolated private final class CommandMenuSettingsResponseWaiter:
     @unchecked Sendable
 {
     private enum State {
         case waiting
-        case fulfilled(Result<CommandMenuConfigSnapshot, Error>)
+        case fulfilled(Result<CommandMenuSettingsSnapshot, Error>)
     }
 
     private let lock = NSLock()
     private let semaphore = DispatchSemaphore(value: 0)
     private var state = State.waiting
 
-    func fulfill(_ response: Result<CommandMenuConfigSnapshot, Error>) {
+    func fulfill(_ response: Result<CommandMenuSettingsSnapshot, Error>) {
         lock.lock()
         guard case .waiting = state else {
             lock.unlock()
@@ -98,7 +98,7 @@ nonisolated private final class CommandMenuConfigResponseWaiter:
         semaphore.signal()
     }
 
-    func wait(deadline: LocalSocketDeadline) throws -> CommandMenuConfigSnapshot {
+    func wait(deadline: LocalSocketDeadline) throws -> CommandMenuSettingsSnapshot {
         guard semaphore.wait(timeout: deadline.dispatchTime) == .success else {
             throw ApplicationIPCError.deadlineExceeded
         }

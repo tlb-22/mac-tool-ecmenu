@@ -17,4 +17,4 @@
 2. [存储与内容契约](Persistence.md)：模板身份、存储布局、初始化、提交、迁移、文件 API 和外部编辑边界。
 3. [名称编辑与交互会话](Editing.md)：原生 field editor、单字段提交、焦点交接、文件操作占用和平台证据。
 
-配置提示与 Extension 副本同步见[菜单配置](../../Runtime/CommandMenuConfig.md)，文件权限范围见[文件访问](../../Platform/FileAccess.md)。这两份专题维护公共机制，本能力只规定调用它们的时机。
+配置提示与 Extension 副本同步见[菜单配置](../../Runtime/CommandMenuSettings.md)，文件权限范围见[文件访问](../../Platform/FileAccess.md)。这两份专题维护公共机制，本能力只规定调用它们的时机。

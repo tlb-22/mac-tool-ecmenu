@@ -1,6 +1,6 @@
 # 应用运行生命周期
 
-主应用以一个进程同时承担配置界面和后台命令宿主；配置会话关闭时，命令监听、已开始的任务和业务窗口继续按各自生命周期运行。用户可见行为见[应用生命周期需求](../../Requirements/ApplicationLifecycle.md)，页面内容和登录项管理见[通用设置](../Features/ApplicationSettings.md)。
+主应用以一个进程同时承担配置界面和后台命令宿主；配置会话关闭时，命令监听、已开始的任务和业务窗口继续按各自生命周期运行。用户可见行为见[应用生命周期需求](../../Requirements/ApplicationLifecycle.md)，页面内容和登录项管理见[通用设置](../Features/GeneralSettings.md)。
 
 ## 启动、打开与关闭
 
@@ -102,11 +102,11 @@ flowchart TB
 
 显示路径在取得 regular 策略后执行窗口显示与应用激活；这些 Void API 不提供“用户已经看到窗口”或 Space 切换完成的回执。关闭窗口的 Bool 只表示本次是否实际发起了状态页关闭，不代表进程或命令已结束。
 
-页面标识、名称编辑交接及系统状态重读见[设置外壳](../Features/ApplicationSettings.md#设置外壳导航与能力页面)；这些界面状态不决定命令服务器存活。
+页面标识、名称编辑交接及系统状态重读见[设置外壳](../Features/GeneralSettings.md#设置外壳导航与能力页面)；这些界面状态不决定命令服务器存活。
 
 ## 登录启动
 
-[`SMAppService.mainApp`](https://developer.apple.com/documentation/servicemanagement/smappservice/mainapp) 管理主应用自身的登录项，不增加 Helper、Launch Agent 或 XPC Service。登记与取消登记只影响后续登录，不启动或终止当前进程；状态和变更算法由[登录项能力](../Features/ApplicationSettings.md#登录项变更)维护。
+[`SMAppService.mainApp`](https://developer.apple.com/documentation/servicemanagement/smappservice/mainapp) 管理主应用自身的登录项，不增加 Helper、Launch Agent 或 XPC Service。登记与取消登记只影响后续登录，不启动或终止当前进程；状态和变更算法由[登录项能力](../Features/GeneralSettings.md#登录项变更)维护。
 
 Xcode 26.6（17F113）附带的 macOS 26.5 SDK 将 `keyAELaunchedAsLogInItem` 定义为 `kAEOpenApplication` 的登录项启动标记。项目在 macOS 26.6.1（25G76）的真实注销、登录中观察到，loginwindow 只发送一次 Open Application 事件，并把标记作为 `keyAEPropData` 的枚举值携带。无论登录窗口是否选择重新打开窗口，注销前隐藏的配置会话都没有被会话恢复重新显示。这是指定环境中的项目观察，既有记录未标注精确源码提交，不扩展为平台对未来版本的保证。
 

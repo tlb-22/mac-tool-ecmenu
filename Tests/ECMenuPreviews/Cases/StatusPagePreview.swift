@@ -45,7 +45,7 @@ private enum StatusPagePreviewParameters {
         StatusPagePreviewState(
             isExtensionEnabled: isExtensionEnabled,
             loginItemState: loginItemState,
-            configuration: CommandMenuConfig(
+            configuration: CommandMenuSettings(
                 isEnabled: isEnabled,
                 hiddenFeatureIDs: initiallyHiddenFeatureIDs
             ),
@@ -94,7 +94,7 @@ struct StatusPagePreviewState {
     let loginItemState: LoginItemRegistrationState
 
     /// 产品总开关与各菜单命令的可见性。
-    let configuration: CommandMenuConfig
+    let configuration: CommandMenuSettings
 
     /// 外部应用的可用状态与图标，以 bundle identifier 索引。
     let applicationIcons: [String: NSImage]
@@ -147,7 +147,7 @@ private struct StatusPagePreviewContent: View {
     @State private var selectedPane: StatusPagePane
 
     /// 当前预览会话内的菜单可见性，不读取也不写入产品偏好。
-    @State private var configuration: CommandMenuConfig
+    @State private var configuration: CommandMenuSettings
 
     /// 当前预览会话内的登录项状态，不访问 Service Management。
     @State private var loginItemState: LoginItemRegistrationState

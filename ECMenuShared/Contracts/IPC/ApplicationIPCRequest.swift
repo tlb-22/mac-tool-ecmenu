@@ -11,14 +11,14 @@ nonisolated enum ApplicationIPCRequest: Equatable, Sendable {
     case contextCommand(ContextCommandRequest)
 
     /// 获取主应用当前的菜单配置真相。
-    case commandMenuConfig
+    case commandMenuSettings
 }
 
 nonisolated extension ApplicationIPCRequest: Codable {
     /// 线上 JSON 中稳定的请求种类。
     private enum Kind: String, Codable {
         case contextCommand
-        case commandMenuConfig = "menuConfiguration"
+        case commandMenuSettings = "menuConfiguration"
     }
 
     /// 线上 JSON 的显式字段，避免依赖 Swift enum 的合成布局。
@@ -37,7 +37,7 @@ nonisolated extension ApplicationIPCRequest: Codable {
                     forKey: .contextCommand
                 )
             )
-        case .commandMenuConfig:
+        case .commandMenuSettings:
             guard !container.contains(.contextCommand) else {
                 throw DecodingError.dataCorruptedError(
                     forKey: .contextCommand,
@@ -45,7 +45,7 @@ nonisolated extension ApplicationIPCRequest: Codable {
                     debugDescription: "Menu configuration request has a command payload"
                 )
             }
-            self = .commandMenuConfig
+            self = .commandMenuSettings
         }
     }
 
@@ -55,8 +55,8 @@ nonisolated extension ApplicationIPCRequest: Codable {
         case let .contextCommand(request):
             try container.encode(Kind.contextCommand, forKey: .kind)
             try container.encode(request, forKey: .contextCommand)
-        case .commandMenuConfig:
-            try container.encode(Kind.commandMenuConfig, forKey: .kind)
+        case .commandMenuSettings:
+            try container.encode(Kind.commandMenuSettings, forKey: .kind)
         }
     }
 }

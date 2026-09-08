@@ -32,7 +32,7 @@ private enum READMEStatusPagePreviewState {
         return StatusPagePreviewState(
             isExtensionEnabled: true,
             loginItemState: .enabled,
-            configuration: CommandMenuConfig(
+            configuration: CommandMenuSettings(
                 isEnabled: true,
                 hiddenFeatureIDs: []
             ),

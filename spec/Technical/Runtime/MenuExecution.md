@@ -155,7 +155,7 @@ Server 认证、framing 或请求解码失败只记录并关闭；Client 是否�
 sequenceDiagram
     autonumber
     box Finder Extension 进程
-        participant P as CommandMenuConfigReplica
+        participant P as CommandMenuSettingsReplica
         participant D as CacheStore 与 UserDefaults
         participant T as 认证查询客户端
     end
@@ -178,7 +178,7 @@ sequenceDiagram
         P->>P: 标记 refreshAgain，此刻不创建第二个查询
     else 当前空闲
         P->>T: idle → fetching，查询完整快照
-        T->>S: 双向认证、认证 ACK、commandMenuConfig 请求
+        T->>S: 双向认证、认证 ACK、commandMenuSettings 请求
         S->>A: 调用注入的快照读取边界
         opt 拉取期间又收到提示
             N->>P: 标记 refreshAgain
@@ -199,19 +199,19 @@ sequenceDiagram
 
 | 模块与源码入口 | 输入 → 输出 | 外部 API、失败和状态归属 |
 |---|---|---|
-| [CommandMenuConfigReplica](../../../ECMenuFinderExtension/CommandMenuConfig/Application/CommandMenuConfigReplica.swift) | 初始化、无正文提示、查询结果 → 已应用快照 | 唯一持有内存快照与 `idle / fetching(refreshAgain)`。`DistributedNotificationCenter.addObserver/removeObserver` 管理通知；响应通过 `Task @MainActor` 应用。拉取期间的新提示会淘汰当前成功或失败结果，再查询一次 |
-| [CacheStore](../../../ECMenuFinderExtension/CommandMenuConfig/Persistence/CommandMenuConfigCacheStore.swift)、[迁移](../../../ECMenuFinderExtension/CommandMenuConfig/Persistence/CommandMenuConfigCacheMigration.swift)与[缓存格式](../../../ECMenuFinderExtension/CommandMenuConfig/Persistence/CommandMenuConfigSnapshotCache.swift) | Extension 自身偏好 → 最后有效快照；已接受响应 → 缓存 | `UserDefaults.data/object/set/removeObject`、`JSONEncoder/JSONDecoder`。迁移只处理旧开关缓存；损坏/缺失缓存返回 nil，副本采用 standard。store 不另存一份内存快照；`set` 不提供同步落盘回执 |
-| [MenuChangePublisher](../../../ECMenu/CommandMenuConfig/Application/MenuChangePublisher.swift)与[提示适配](../../../ECMenuShared/Platform/IPC/CommandMenuConfigSignal.swift) | 主应用已更新状态或恢复监听 → 可能到达的变化提示 | `DistributedNotificationCenter.postNotificationName(..., userInfo: nil, deliverImmediately: true)`；通知无权威数据、无到达回执。任意本机进程伪造提示至多触发一次经过认证的查询 |
-| [查询客户端](../../../ECMenuShared/Platform/IPC/AuthenticatedLocalSocketClient.swift)与[连接处理器](../../../ECMenuShared/Platform/IPC/AuthenticatedLocalSocketConnectionHandler.swift) | `.commandMenuConfig` → 完整快照或 Error | 复用 [IPC API 与期限](IPC.md#实现边界与源码入口)；服务端以 `DispatchSemaphore` 等待异步提供者，响应等待与读写共用该连接期限 |
-| [MenuSnapshotProvider](../../../ECMenu/CommandMenuConfig/Application/MenuSnapshotProvider.swift) | 当前配置读取边界与模板菜单读取边界 → 完整快照 | `currentSnapshot()` 先等待模板读取边界，再读取当前开关；自身无文件 I/O，IPC 只调用注入的查询边界。模板不可用仍返回当前开关与 unavailable，不伪装成传输失败；各所有者没有共同修订号或跨存储事务 |
-| [共享快照契约](../../../ECMenuShared/Contracts/CommandMenuConfig/CommandMenuConfigSnapshot.swift) | JSON → 有效 `CommandMenuConfigSnapshot` | `JSONDecoder` 验证 schema、必需字段与模板 ID 唯一性，任一不合法拒绝整份响应；available 空清单和 unavailable 是不同有效值 |
+| [CommandMenuSettingsReplica](../../../ECMenuFinderExtension/CommandMenuSettings/Application/CommandMenuSettingsReplica.swift) | 初始化、无正文提示、查询结果 → 已应用快照 | 唯一持有内存快照与 `idle / fetching(refreshAgain)`。`DistributedNotificationCenter.addObserver/removeObserver` 管理通知；响应通过 `Task @MainActor` 应用。拉取期间的新提示会淘汰当前成功或失败结果，再查询一次 |
+| [CacheStore](../../../ECMenuFinderExtension/CommandMenuSettings/Persistence/CommandMenuSettingsCacheStore.swift)、[迁移](../../../ECMenuFinderExtension/CommandMenuSettings/Persistence/CommandMenuSettingsCacheMigration.swift)与[缓存格式](../../../ECMenuFinderExtension/CommandMenuSettings/Persistence/CommandMenuSettingsSnapshotCache.swift) | Extension 自身偏好 → 最后有效快照；已接受响应 → 缓存 | `UserDefaults.data/object/set/removeObject`、`JSONEncoder/JSONDecoder`。迁移只处理旧开关缓存；损坏/缺失缓存返回 nil，副本采用 standard。store 不另存一份内存快照；`set` 不提供同步落盘回执 |
+| [MenuChangePublisher](../../../ECMenu/CommandMenuSettings/Application/MenuChangePublisher.swift)与[提示适配](../../../ECMenuShared/Platform/IPC/CommandMenuSettingsSignal.swift) | 主应用已更新状态或恢复监听 → 可能到达的变化提示 | `DistributedNotificationCenter.postNotificationName(..., userInfo: nil, deliverImmediately: true)`；通知无权威数据、无到达回执。任意本机进程伪造提示至多触发一次经过认证的查询 |
+| [查询客户端](../../../ECMenuShared/Platform/IPC/AuthenticatedLocalSocketClient.swift)与[连接处理器](../../../ECMenuShared/Platform/IPC/AuthenticatedLocalSocketConnectionHandler.swift) | `.commandMenuSettings` → 完整快照或 Error | 复用 [IPC API 与期限](IPC.md#实现边界与源码入口)；服务端以 `DispatchSemaphore` 等待异步提供者，响应等待与读写共用该连接期限 |
+| [MenuSnapshotProvider](../../../ECMenu/CommandMenuSettings/Application/MenuSnapshotProvider.swift) | 当前配置读取边界与模板菜单读取边界 → 完整快照 | `currentSnapshot()` 先等待模板读取边界，再读取当前开关；自身无文件 I/O，IPC 只调用注入的查询边界。模板不可用仍返回当前开关与 unavailable，不伪装成传输失败；各所有者没有共同修订号或跨存储事务 |
+| [共享快照契约](../../../ECMenuShared/Contracts/CommandMenuSettings/CommandMenuSettingsSnapshot.swift) | JSON → 有效 `CommandMenuSettingsSnapshot` | `JSONDecoder` 验证 schema、必需字段与模板 ID 唯一性，任一不合法拒绝整份响应；available 空清单和 unavailable 是不同有效值 |
 | 下一次菜单构建 | 已应用内存快照 → 开关及有序模板描述 | 无外部 I/O；不触发同步查询，不修改已返回的菜单或冻结动作 |
 
 ### 更新保证
 
 刷新入口是 Extension 初始化与收到分布式提示；拉取期间的新提示会追加查询。不存在菜单打开时查询、周期刷新、超时自动重试或命令失败后刷新。查询失败后保留原快照，等待后续提示或新实例；transport 初始化失败后，该实例不自动创建新 transport。
 
-模板 unavailable 是成功响应中的领域状态：它替换并缓存原快照，隐藏新建菜单，同时让其他开关继续同步。连接、认证或解码失败则保留整份原快照。通知不携带修订号，也不保证及时可靠到达，因此不能保证副本在有限时间内收敛；机制约束的权威说明见[菜单配置](CommandMenuConfig.md)。
+模板 unavailable 是成功响应中的领域状态：它替换并缓存原快照，隐藏新建菜单，同时让其他开关继续同步。连接、认证或解码失败则保留整份原快照。通知不携带修订号，也不保证及时可靠到达，因此不能保证副本在有限时间内收敛；机制约束的权威说明见[菜单配置](CommandMenuSettings.md)。
 
 ## 设计依据与验证
 
@@ -222,7 +222,7 @@ sequenceDiagram
 - [范围登记测试](../../../Tests/ECMenuFinderExtensionTests/App/FinderDirectoryRegistrationTests.swift)：根目录回退、标准化和去重。
 - [菜单组合](../../../Tests/ECMenuFinderExtensionTests/Menu/ContextMenuCompositionTests.swift)、[功能条件](../../../Tests/ECMenuFinderExtensionTests/Menu/ContextCommandFeatureTests.swift)、[布局](../../../Tests/ECMenuFinderExtensionTests/Menu/ContextMenuLayoutTests.swift)：字段映射、开关/依赖过滤、共享事实、旧 action 保留路径、模板更新只影响下一次构建、大模板菜单保留所有当前叶子及树规范化。
 - [发送客户端](../../../Tests/ECMenuFinderExtensionTests/IPC/ContextCommandClientTests.swift)：单次发送、失败提示一次且不重试。
-- [配置副本](../../../Tests/ECMenuFinderExtensionTests/CommandMenuConfig/CommandMenuConfigReplicaTests.swift)：缓存迁移、失败保留、后续刷新、并发提示合并及过时结果淘汰。
+- [配置副本](../../../Tests/ECMenuFinderExtensionTests/CommandMenuSettings/CommandMenuSettingsReplicaTests.swift)：缓存迁移、失败保留、后续刷新、并发提示合并及过时结果淘汰。
 - [IPC 测试](../../../Tests/ECMenuTests/IPC/ContextCommandTransportTests.swift)：wire 验证、对称认证、单向/并发投递、错误 ACK、截断 frame、静默对端期限、提供者期限及监听失败清理。
 
 这些链接是验证定义，不代表任意源码版本均已执行通过。完整自动化入口为 [test.sh](../../../scripts/test.sh)；真实菜单驱动入口与限制见[菜单自动截图](../FinderMenuCapture.md)。

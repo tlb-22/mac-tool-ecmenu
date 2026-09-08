@@ -63,7 +63,7 @@ sequenceDiagram
 | `initialized` | 本次首次初始化已提交 | 是 | 是，只发一次 |
 | `migrated` | 本次独立迁移已提交 | 是 | 是，只发一次 |
 
-这张表只描述发布触发条件。失效提示可能丢失，且不携带配置正文；它不等于 Extension 已应用清单。通知 API、快照中 `.unavailable` 与 `.available([])` 的区分和传输完成点由[菜单配置](../../Runtime/CommandMenuConfig.md)维护。
+这张表只描述发布触发条件。失效提示可能丢失，且不携带配置正文；它不等于 Extension 已应用清单。通知 API、快照中 `.unavailable` 与 `.available([])` 的区分和传输完成点由[菜单配置](../../Runtime/CommandMenuSettings.md)维护。
 
 ## 导入、更换与删除
 
@@ -128,7 +128,7 @@ sequenceDiagram
 | [模板库 Library](../../../../ECMenu/NewFileTemplates/Persistence/FileTemplateLibrary.swift) | 管理意图 → 权威提交结果；唯一拥有 records，串行组合名称规则、副本准备、提交与清理 | 调用 Storage，无直接系统调用 |
 | [领域名称与导入规则](../../../../ECMenu/NewFileTemplates/Domain/FileTemplateImportNaming.swift) | 源文件名、现有清单或单字段值 → 有效模板/验证失败 | 纯规则，无外部 I/O |
 | [文件存储 Storage](../../../../ECMenu/NewFileTemplates/Persistence/FileTemplateStorage.swift) | 路径、Data、索引记录 → 已读取字节、已完成写入或类型化失败；拥有每次打开的 handle 生命周期 | [P01–P06](Persistence.md#文件-api-与完成点) |
-| [菜单变更发布](../../../../ECMenu/CommandMenuConfig/Application/MenuChangePublisher.swift) | 已提交清单或可用性重新确认 → 分布式失效提示；不保存清单 | [菜单配置](../../Runtime/CommandMenuConfig.md)的 `DistributedNotificationCenter` 边界 |
+| [菜单变更发布](../../../../ECMenu/CommandMenuSettings/Application/MenuChangePublisher.swift) | 已提交清单或可用性重新确认 → 分布式失效提示；不保存清单 | [菜单配置](../../Runtime/CommandMenuSettings.md)的 `DistributedNotificationCenter` 边界 |
 
 ## 打开内部副本与外部编辑
 

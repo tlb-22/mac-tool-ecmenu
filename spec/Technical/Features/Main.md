@@ -4,8 +4,8 @@
 
 - [新建文件](NewFile.md)：从 Finder 子菜单到模板内容读取、不覆盖写入和 Finder 结果选择。
 - [文件模板](NewFileTemplates/Main.md)：模板加载、导入、编辑、更换、删除、持久化与原生编辑会话。
-- [菜单配置](../Runtime/CommandMenuConfig.md)：开关修改、菜单快照、失效发布与 Extension 副本同步。
-- [通用设置](ApplicationSettings.md)：登录项状态、系统设置入口和设置页面的能力边界。
+- [菜单配置](../Runtime/CommandMenuSettings.md)：开关修改、菜单快照、失效发布与 Extension 副本同步。
+- [通用设置](GeneralSettings.md)：登录项状态、系统设置入口和设置页面的能力边界。
 - [拷贝路径](CopyPath.md)：路径对象存在性和系统剪贴板表示。
 - [隐藏项目 / 显示项目](Visibility.md)：隐藏属性、点号名称、菜单条件和符号链接。
 - [进入外部应用](OpenInApplications.md)：文件系统目标语义与 Launch Services 边界。

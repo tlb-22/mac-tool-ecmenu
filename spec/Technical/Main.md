@@ -12,9 +12,9 @@
 ECMenu/                         主应用
 ├── App/                        进程与配置会话生命周期
 ├── Settings/                   设置窗口、导航和页面装配
-├── ApplicationSettings/        通用设置、登录项与系统设置入口
-├── CommandMenuConfig/          配置真相源
-├── NewFileTemplates/              模板库、文件副本与管理状态
+├── GeneralSettings/            通用设置、登录项与系统设置入口
+├── CommandMenuSettings/        命令菜单偏好、快照与更新发布
+├── NewFileTemplates/           模板库、文件副本与管理状态
 ├── IPC/                        应用侧进程边界
 ├── Commands/                   按能力组织的命令执行
 ├── CommandRuntime/             命令任务与进度事实
@@ -22,7 +22,7 @@ ECMenu/                         主应用
 └── FileSystem/                 跨能力共用的命名与错误模型
 ECMenuFinderExtension/          Finder Extension
 ├── App/                        Extension 生命周期
-├── CommandMenuConfig/          配置只读副本
+├── CommandMenuSettings/        配置只读副本
 ├── IPC/                        请求发送
 ├── Menu/                       Finder 上下文、菜单构建与渲染
 └── Commands/                   各能力菜单规则

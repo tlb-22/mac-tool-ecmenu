@@ -95,8 +95,8 @@ final class ContextCommandTransportTests: XCTestCase {
         )
     }
 
-    func testCommandMenuConfigWireRoundTrip() throws {
-        let request = ApplicationIPCRequest.commandMenuConfig
+    func testCommandMenuSettingsWireRoundTrip() throws {
+        let request = ApplicationIPCRequest.commandMenuSettings
         let encodedRequest = try JSONEncoder().encode(request)
         let object = try XCTUnwrap(
             JSONSerialization.jsonObject(with: encodedRequest) as? [String: String]
@@ -110,8 +110,8 @@ final class ContextCommandTransportTests: XCTestCase {
             request
         )
 
-        let configuration = CommandMenuConfigSnapshot(
-            configuration: CommandMenuConfig(isEnabled: false, hiddenFeatureIDs: ["new-text-file"]),
+        let configuration = CommandMenuSettingsSnapshot(
+            configuration: CommandMenuSettings(isEnabled: false, hiddenFeatureIDs: ["new-text-file"]),
             newFileTemplates: [
                 FileTemplateMenuItem(id: .init(), displayName: "TXT"),
                 FileTemplateMenuItem(id: .init(), displayName: "TXT")
@@ -119,14 +119,14 @@ final class ContextCommandTransportTests: XCTestCase {
         )
         XCTAssertEqual(
             try JSONDecoder().decode(
-                CommandMenuConfigSnapshot.self,
+                CommandMenuSettingsSnapshot.self,
                 from: JSONEncoder().encode(configuration)
             ),
             configuration
         )
     }
 
-    func testMatchingRuntimeIdentityAllowsCommandMenuConfigQuery() async throws {
+    func testMatchingRuntimeIdentityAllowsCommandMenuSettingsQuery() async throws {
         let socketURL = try ProjectTestDirectory.makeUniqueSocketURL()
         let server = try AuthenticatedLocalSocketServer(
             expectedClientSigningIdentifier:
@@ -135,7 +135,7 @@ final class ContextCommandTransportTests: XCTestCase {
             contextCommandSink: { _ in
                 XCTFail("A configuration query reached the command sink")
             },
-            commandMenuConfigProvider: { reply in reply(.success(.standard)) }
+            commandMenuSettingsProvider: { reply in reply(.success(.standard)) }
         )
         defer { server.stop() }
 
@@ -145,7 +145,7 @@ final class ContextCommandTransportTests: XCTestCase {
             socketURL: socketURL
         )
         let configuration = try await Task.detached {
-            try client.fetchCommandMenuConfig()
+            try client.fetchCommandMenuSettings()
         }.value
 
         XCTAssertEqual(configuration, .standard)
@@ -153,15 +153,15 @@ final class ContextCommandTransportTests: XCTestCase {
 
     func testMenuSnapshotRejectsInvalidTemplateIdentitiesAndUnsupportedSchema() throws {
         let item = FileTemplateMenuItem(id: .init(), displayName: "TXT")
-        let snapshot = CommandMenuConfigSnapshot(configuration: .standard, newFileTemplates: [item])
+        let snapshot = CommandMenuSettingsSnapshot(configuration: .standard, newFileTemplates: [item])
         let data = try JSONEncoder().encode(snapshot)
         var object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
         let items = try JSONSerialization.jsonObject(with: JSONEncoder().encode([item, item]))
         object["fileTemplates"] = ["available": ["_0": items]]
-        XCTAssertThrowsError(try JSONDecoder().decode(CommandMenuConfigSnapshot.self, from: JSONSerialization.data(withJSONObject: object)))
+        XCTAssertThrowsError(try JSONDecoder().decode(CommandMenuSettingsSnapshot.self, from: JSONSerialization.data(withJSONObject: object)))
         object["fileTemplates"] = ["unavailable": [:]]
         object["schemaVersion"] = 999
-        XCTAssertThrowsError(try JSONDecoder().decode(CommandMenuConfigSnapshot.self, from: JSONSerialization.data(withJSONObject: object)))
+        XCTAssertThrowsError(try JSONDecoder().decode(CommandMenuSettingsSnapshot.self, from: JSONSerialization.data(withJSONObject: object)))
     }
 
     func testProviderFailureDoesNotPublishAnEmptyMenuSnapshot() async throws {
@@ -170,14 +170,14 @@ final class ContextCommandTransportTests: XCTestCase {
             expectedClientSigningIdentifier: ApplicationIPC.applicationSigningIdentifier,
             socketURL: socketURL,
             contextCommandSink: { _ in XCTFail("A configuration query reached the command sink") },
-            commandMenuConfigProvider: { $0(.failure(CocoaError(.fileReadCorruptFile))) }
+            commandMenuSettingsProvider: { $0(.failure(CocoaError(.fileReadCorruptFile))) }
         )
         defer { server.stop() }
         let client = try AuthenticatedLocalSocketClient(
             expectedServerSigningIdentifier: ApplicationIPC.applicationSigningIdentifier,
             socketURL: socketURL
         )
-        let result = await Task.detached { Result { try client.fetchCommandMenuConfig() } }.value
+        let result = await Task.detached { Result { try client.fetchCommandMenuSettings() } }.value
         if case .success = result { XCTFail("A failed template read was published as a valid snapshot") }
     }
 
@@ -192,14 +192,14 @@ final class ContextCommandTransportTests: XCTestCase {
         let validIndex = try Data(contentsOf: indexURL)
         try Data("invalid".utf8).write(to: indexURL)
         let library = FileTemplateLibrary(rootURL: libraryURL)
-        let switches = CommandMenuConfig(isEnabled: false, hiddenFeatureIDs: ["new-text-file"])
+        let switches = CommandMenuSettings(isEnabled: false, hiddenFeatureIDs: ["new-text-file"])
 
         let provider = MenuSnapshotProvider(configuration: { switches }, templates: { try await library.load().templates })
         let failed = await provider.currentSnapshot()
         XCTAssertEqual(failed.configuration, switches)
         XCTAssertEqual(failed.fileTemplateState, .unavailable)
-        XCTAssertEqual(try JSONDecoder().decode(CommandMenuConfigSnapshot.self, from: JSONEncoder().encode(failed)), failed)
-        XCTAssertNotEqual(failed, CommandMenuConfigSnapshot(configuration: switches, newFileTemplates: []))
+        XCTAssertEqual(try JSONDecoder().decode(CommandMenuSettingsSnapshot.self, from: JSONEncoder().encode(failed)), failed)
+        XCTAssertNotEqual(failed, CommandMenuSettingsSnapshot(configuration: switches, newFileTemplates: []))
 
         try validIndex.write(to: indexURL)
         let recovered = await provider.currentSnapshot()
@@ -214,7 +214,7 @@ final class ContextCommandTransportTests: XCTestCase {
                 ApplicationIPC.applicationSigningIdentifier,
             socketURL: socketURL,
             contextCommandSink: { _ in },
-            commandMenuConfigProvider: { _ in }
+            commandMenuSettingsProvider: { _ in }
         )
         defer {
             _ = Darwin.chmod(socketURL.path, S_IRUSR | S_IWUSR)
@@ -229,7 +229,7 @@ final class ContextCommandTransportTests: XCTestCase {
                     ApplicationIPC.applicationSigningIdentifier,
                 socketURL: socketURL,
                 contextCommandSink: { _ in },
-                commandMenuConfigProvider: { _ in }
+                commandMenuSettingsProvider: { _ in }
             )
         ) { error in
             guard
@@ -258,7 +258,7 @@ final class ContextCommandTransportTests: XCTestCase {
                 XCTAssertEqual(request, expected)
                 routed.fulfill()
             },
-            commandMenuConfigProvider: { _ in
+            commandMenuSettingsProvider: { _ in
                 XCTFail("A command reached the configuration provider")
             }
         )
@@ -304,7 +304,7 @@ final class ContextCommandTransportTests: XCTestCase {
                 requestRecorder.append(request)
                 routed.fulfill()
             },
-            commandMenuConfigProvider: { _ in
+            commandMenuSettingsProvider: { _ in
                 XCTFail("A command reached the configuration provider")
             }
         )
@@ -358,7 +358,7 @@ final class ContextCommandTransportTests: XCTestCase {
                 ApplicationIPC.finderExtensionSigningIdentifier,
             socketURL: socketURL,
             contextCommandSink: { _ in routed.fulfill() },
-            commandMenuConfigProvider: { _ in routed.fulfill() }
+            commandMenuSettingsProvider: { _ in routed.fulfill() }
         )
         defer { server.stop() }
 
@@ -389,7 +389,7 @@ final class ContextCommandTransportTests: XCTestCase {
                 ApplicationIPC.applicationSigningIdentifier,
             socketURL: socketURL,
             contextCommandSink: { _ in routed.fulfill() },
-            commandMenuConfigProvider: { _ in routed.fulfill() }
+            commandMenuSettingsProvider: { _ in routed.fulfill() }
         )
         defer { server.stop() }
 
@@ -417,7 +417,7 @@ final class ContextCommandTransportTests: XCTestCase {
             expectedClientSigningIdentifier: ApplicationIPC.applicationSigningIdentifier,
             socketURL: socketURL,
             contextCommandSink: { _ in routed.fulfill() },
-            commandMenuConfigProvider: { $0(.success(.standard)) },
+            commandMenuSettingsProvider: { $0(.success(.standard)) },
             acceptConnection: { acceptor.accept($0) },
             didFail: { error in XCTFail("Resource failure stopped the listener: \(error)") }
         )
@@ -440,7 +440,7 @@ final class ContextCommandTransportTests: XCTestCase {
                 expectedClientSigningIdentifier: ApplicationIPC.applicationSigningIdentifier,
                 socketURL: socketURL,
                 contextCommandSink: { _ in XCTFail("Resource-exhausted listener routed a command") },
-                commandMenuConfigProvider: { $0(.success(.standard)) },
+                commandMenuSettingsProvider: { $0(.success(.standard)) },
                 acceptConnection: { acceptor.accept($0) },
                 didFail: { error in XCTFail("Stopping reported a fatal failure: \(error)") }
             )
@@ -482,7 +482,7 @@ final class ContextCommandTransportTests: XCTestCase {
             expectedClientSigningIdentifier: ApplicationIPC.applicationSigningIdentifier,
             socketURL: socketURL,
             contextCommandSink: { _ in XCTFail("Failed listener routed a command") },
-            commandMenuConfigProvider: { $0(.success(.standard)) },
+            commandMenuSettingsProvider: { $0(.success(.standard)) },
             acceptConnection: { _ in .failure(.posix(operation: "accept", code: EBADF)) },
             didFail: { error in
                 XCTAssertEqual(error, .posix(operation: "accept", code: EBADF))
@@ -496,7 +496,7 @@ final class ContextCommandTransportTests: XCTestCase {
             socketURL: socketURL,
             connectionTimeout: 1
         )
-        let result = await Task.detached { Result { try client.fetchCommandMenuConfig() } }.value
+        let result = await Task.detached { Result { try client.fetchCommandMenuSettings() } }.value
         if case .success = result { XCTFail("A failed listener returned a configuration") }
         await fulfillment(of: [failed], timeout: 1)
     }
@@ -550,7 +550,7 @@ final class ContextCommandTransportTests: XCTestCase {
             socketURL: server.socketURL,
             connectionTimeout: 0.1
         )
-        let result = await Task.detached { Result { try client.fetchCommandMenuConfig() } }.value
+        let result = await Task.detached { Result { try client.fetchCommandMenuSettings() } }.value
         guard case let .failure(error) = result else { return XCTFail("Silent peer returned data") }
         XCTAssertEqual(error as? ApplicationIPCError, .deadlineExceeded)
         await fulfillment(of: [server.finished], timeout: 1)
@@ -562,7 +562,7 @@ final class ContextCommandTransportTests: XCTestCase {
             expectedClientSigningIdentifier: ApplicationIPC.applicationSigningIdentifier,
             socketURL: socketURL,
             contextCommandSink: { _ in XCTFail("Configuration became a command") },
-            commandMenuConfigProvider: { _ in },
+            commandMenuSettingsProvider: { _ in },
             connectionTimeout: 0.1
         )
         defer { server.stop() }
@@ -571,7 +571,7 @@ final class ContextCommandTransportTests: XCTestCase {
             socketURL: socketURL,
             connectionTimeout: 1
         )
-        let result = await Task.detached { Result { try client.fetchCommandMenuConfig() } }.value
+        let result = await Task.detached { Result { try client.fetchCommandMenuSettings() } }.value
         guard case let .failure(error) = result else { return XCTFail("Missing provider returned data") }
         XCTAssertEqual(error as? ApplicationIPCError, .connectionClosed)
     }

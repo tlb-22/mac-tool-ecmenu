@@ -9,7 +9,7 @@ import Foundation
 /// 使用与 Finder Extension 相同的真实代码签名身份验证生产 IPC。
 @main
 enum ContextCommandSender {
-    private enum CommandMenuConfigOperation: String {
+    private enum CommandMenuSettingsOperation: String {
         case readOnce = "--menu-configuration"
         case waitForHost = "--wait-for-menu-configuration"
     }
@@ -20,8 +20,8 @@ enum ContextCommandSender {
 
         if arguments.count == 1,
            let argument = arguments.first,
-           let operation = CommandMenuConfigOperation(rawValue: argument) {
-            try fetchCommandMenuConfig(operation)
+           let operation = CommandMenuSettingsOperation(rawValue: argument) {
+            try fetchCommandMenuSettings(operation)
             return
         }
 
@@ -78,15 +78,15 @@ enum ContextCommandSender {
     }
 
     /// 通过已验证 IPC 端点拉取菜单配置快照。
-    private static func fetchCommandMenuConfig(_ operation: CommandMenuConfigOperation) throws {
-        let configuration: CommandMenuConfigSnapshot
+    private static func fetchCommandMenuSettings(_ operation: CommandMenuSettingsOperation) throws {
+        let configuration: CommandMenuSettingsSnapshot
         switch operation {
         case .readOnce:
-            configuration = try makeClient().fetchCommandMenuConfig()
+            configuration = try makeClient().fetchCommandMenuSettings()
         case .waitForHost:
             configuration = try waitForHostConfiguration()
         }
-        let schemaVersion = CommandMenuConfigSnapshot.currentSchemaVersion
+        let schemaVersion = CommandMenuSettingsSnapshot.currentSchemaVersion
         print(
             "menu-configuration schema=\(schemaVersion) enabled=\(configuration.isEnabled)"
         )
@@ -96,12 +96,12 @@ enum ContextCommandSender {
     }
 
     /// 只读启动探测共用一个传输预算；只在端点尚不存在或尚无监听者时重试。
-    private static func waitForHostConfiguration() throws -> CommandMenuConfigSnapshot {
+    private static func waitForHostConfiguration() throws -> CommandMenuSettingsSnapshot {
         let deadline = LocalSocketDeadline(timeout: LocalSocketDeadline.defaultTimeout)
         while true {
             let remaining = try remainingInterval(until: deadline)
             do {
-                return try makeClient(connectionTimeout: remaining).fetchCommandMenuConfig()
+                return try makeClient(connectionTimeout: remaining).fetchCommandMenuSettings()
             } catch let error as ApplicationIPCError {
                 guard case let .posix(operation, code) = error,
                       operation == "connect",

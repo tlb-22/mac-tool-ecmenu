@@ -8,7 +8,7 @@ import Foundation
 /// 每次操作建立一条定向连接，并在发送正文前验证主应用身份。
 nonisolated final class AuthenticatedLocalSocketClient:
     ContextCommandSending,
-    CommandMenuConfigRequesting,
+    CommandMenuSettingsRequesting,
     @unchecked Sendable
 {
     private let socketURL: URL
@@ -44,13 +44,13 @@ nonisolated final class AuthenticatedLocalSocketClient:
         }
     }
 
-    func fetchCommandMenuConfig(
+    func fetchCommandMenuSettings(
         completion: @escaping @Sendable (
-            Result<CommandMenuConfigSnapshot, Error>
+            Result<CommandMenuSettingsSnapshot, Error>
         ) -> Void
     ) {
         queue.async { [self] in
-            completion(Result { try fetchCommandMenuConfig() })
+            completion(Result { try fetchCommandMenuSettings() })
         }
     }
 
@@ -62,12 +62,12 @@ nonisolated final class AuthenticatedLocalSocketClient:
     }
 
     /// 集成测试和异步包装共享的同步菜单配置查询。
-    func fetchCommandMenuConfig() throws -> CommandMenuConfigSnapshot {
+    func fetchCommandMenuSettings() throws -> CommandMenuSettingsSnapshot {
         try withVerifiedConnection { descriptor, deadline in
-            try write(.commandMenuConfig, to: descriptor, deadline: deadline)
+            try write(.commandMenuSettings, to: descriptor, deadline: deadline)
             let responseData = try LocalSocketIO.readFrame(from: descriptor, deadline: deadline)
             return try JSONDecoder().decode(
-                CommandMenuConfigSnapshot.self,
+                CommandMenuSettingsSnapshot.self,
                 from: responseData
             )
         }

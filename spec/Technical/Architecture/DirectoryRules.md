@@ -6,7 +6,7 @@
 
 按“进程 → 业务能力 → 必要的职责分层”组织代码。同一能力的界面、交互会话、业务规则、操作协调与存储一起定位；顶层使用能够说明产品组成的名称。
 
-- `NewFileTemplates`、`CommandMenuConfig`、`ApplicationSettings` 是主应用独立能力。
+- `NewFileTemplates`、`CommandMenuSettings`、`GeneralSettings` 是主应用独立能力。
 - `Commands` 聚合从 Finder 发起的文件操作。共享请求、Extension 菜单规则和主应用用例采用相同能力名，具体执行职责各自保留。
 - `Settings` 负责设置窗口、导航和页面装配。页面内容归其业务能力，例如模板页面归 `NewFileTemplates/Presentation`。
 - `App`、`CommandRuntime`、`IPC`、`Feedback` 表达进程装配、命令运行、通信和通用反馈等跨能力职责。共享代码按实际使用者与所有权归位。
@@ -75,8 +75,8 @@ SwiftUI / AppKit 的控件、窗口和文件选择交互属于呈现责任。SDK
 | 界面内容 | 查找位置 |
 |---|---|
 | 设置窗口、侧边栏、页面切换 | `ECMenu/Settings/` |
-| 登录项与系统状态页面 | `ECMenu/ApplicationSettings/Presentation/` |
-| 菜单开关页面 | `ECMenu/CommandMenuConfig/Presentation/` |
+| 登录项与系统状态页面 | `ECMenu/GeneralSettings/Presentation/` |
+| 菜单开关页面 | `ECMenu/CommandMenuSettings/Presentation/` |
 | 模板列表、名称输入框、模板操作按钮 | `ECMenu/NewFileTemplates/Presentation/` |
 | 图片压缩参数窗口 | `ECMenu/Commands/ImageCompression/Presentation/` |
 | 通用警告窗口、进度窗口 | `ECMenu/Feedback/` |

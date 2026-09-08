@@ -9,8 +9,8 @@ import Foundation
 /// 在 App Group socket 上接收连接，并在解码前验证 Finder Extension 身份。
 nonisolated final class AuthenticatedLocalSocketServer: @unchecked Sendable {
     typealias ContextCommandSink = @Sendable (ContextCommandRequest) -> Void
-    typealias CommandMenuConfigProvider = @Sendable (
-        @escaping @Sendable (Result<CommandMenuConfigSnapshot, Error>) -> Void
+    typealias CommandMenuSettingsProvider = @Sendable (
+        @escaping @Sendable (Result<CommandMenuSettingsSnapshot, Error>) -> Void
     ) -> Void
     typealias AcceptConnection = @Sendable (Int32) -> Result<Int32, ApplicationIPCError>
 
@@ -42,7 +42,7 @@ nonisolated final class AuthenticatedLocalSocketServer: @unchecked Sendable {
         expectedClientSigningIdentifier: String,
         socketURL: URL? = nil,
         contextCommandSink: @escaping ContextCommandSink,
-        commandMenuConfigProvider: @escaping CommandMenuConfigProvider,
+        commandMenuSettingsProvider: @escaping CommandMenuSettingsProvider,
         connectionTimeout: TimeInterval = LocalSocketDeadline.defaultTimeout,
         acceptConnection: @escaping AcceptConnection = { LocalSocketIO.acceptConnection($0) },
         didFail: @escaping @Sendable (ApplicationIPCError) -> Void = { _ in }
@@ -51,7 +51,7 @@ nonisolated final class AuthenticatedLocalSocketServer: @unchecked Sendable {
         connectionHandler = try AuthenticatedLocalSocketConnectionHandler(
             expectedClientSigningIdentifier: expectedClientSigningIdentifier,
             contextCommandSink: contextCommandSink,
-            commandMenuConfigProvider: commandMenuConfigProvider,
+            commandMenuSettingsProvider: commandMenuSettingsProvider,
             connectionTimeout: connectionTimeout
         )
         self.acceptConnection = acceptConnection

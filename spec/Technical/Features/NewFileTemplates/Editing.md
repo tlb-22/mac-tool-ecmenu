@@ -63,7 +63,7 @@ sequenceDiagram
 | [NameField / FileTemplate](../../../../ECMenu/NewFileTemplates/Domain/FileTemplateNameField.swift) | 当前模板、待修改字段和值 → 有效模板或验证错误 | 纯规则，无外部 I/O |
 | [Library.updateName](../../../../ECMenu/NewFileTemplates/Persistence/FileTemplateLibrary.swift) | ID、字段和值 → 已提交清单或提交前失败 | 通过 Storage 使用 [P04 索引提交](Persistence.md#文件-api-与完成点) |
 | [PageActions](../../../../ECMenu/NewFileTemplates/Presentation/FileTemplatePageActions.swift) | 文件操作意图、编辑会话 → 先完成名称再执行 | 无直接 I/O；phase 在等待名称、执行文件操作之间转移，切页不释放占用 |
-| 设置外壳与 [NewFileTemplatesPage](../../../../ECMenu/NewFileTemplates/Presentation/NewFileTemplatesPage.swift) | 页面切换、后台通知、视图消失 → 请求完成编辑或更新导航 | E04；窗口会话持有编辑和文件操作对象，页面内容接收注入回调 |
+| 设置外壳与 [NewFileTemplateSettingsPage](../../../../ECMenu/NewFileTemplates/Presentation/NewFileTemplateSettingsPage.swift) | 页面切换、后台通知、视图消失 → 请求完成编辑或更新导航 | E04；窗口会话持有编辑和文件操作对象，页面内容接收注入回调 |
 
 草稿只拥有一个字段，不能保存整行旧副本覆盖其他最近提交的值。控件身份由模板 ID + 字段标识；同名模板不能共享一次编辑。名称输入和操作占用根据当前会话读取，不仅依赖下一轮 SwiftUI 属性更新。
 
@@ -96,7 +96,7 @@ sequenceDiagram
 
 项目观察（2026-09-08，macOS 26.6.2、Xcode 26.6）：对已经编辑的 `NSTextField` 调用 `selectText` 恢复选择时，可能同步产生结束编辑通知。因此程序化恢复期间仍属于当前交接，不能将该通知再次解释为用户离开字段。这是特定系统上的项目验证结果，不是所有 macOS 版本的通知顺序保证。
 
-[会话测试](../../../../Tests/ECMenuTests/NewFileTemplates/Presentation/FileTemplateNameEditingSessionTests.swift)覆盖最后目标、同步重入、准备提交时的最新文字、失败恢复与取消；[草稿测试](../../../../Tests/ECMenuTests/NewFileTemplates/Presentation/FileTemplateNameDraftTests.swift)覆盖未变值不写和重复提交一次；[单字段更新测试](../../../../Tests/ECMenuTests/NewFileTemplates/Presentation/FileTemplateNameUpdateTests.swift)覆盖另一字段最新值和按 ID 更新；[隐藏窗口中的原生页面测试](../../../../Tests/ECMenuTests/NewFileTemplates/Presentation/NewFileTemplatesPageTests.swift)覆盖控件身份、鼠标/键盘焦点、跨页面操作占用、背景点击和失败阻止文件操作。测试宿主的能力限制见[界面预览目标](../../PreviewTarget.md)。
+[会话测试](../../../../Tests/ECMenuTests/NewFileTemplates/Presentation/FileTemplateNameEditingSessionTests.swift)覆盖最后目标、同步重入、准备提交时的最新文字、失败恢复与取消；[草稿测试](../../../../Tests/ECMenuTests/NewFileTemplates/Presentation/FileTemplateNameDraftTests.swift)覆盖未变值不写和重复提交一次；[单字段更新测试](../../../../Tests/ECMenuTests/NewFileTemplates/Presentation/FileTemplateNameUpdateTests.swift)覆盖另一字段最新值和按 ID 更新；[隐藏窗口中的原生页面测试](../../../../Tests/ECMenuTests/NewFileTemplates/Presentation/NewFileTemplateSettingsPageTests.swift)覆盖控件身份、鼠标/键盘焦点、跨页面操作占用、背景点击和失败阻止文件操作。测试宿主的能力限制见[界面预览目标](../../PreviewTarget.md)。
 
 2026-09-08 当前结构完整 231 项测试通过，包含上述原生控件、异步交接、提交结果与页面会话测试，详见[验证记录](../../Architecture/Verification.md)。隐藏窗口自动化不等于真实输入法与所有窗口场景的实机验收。
 

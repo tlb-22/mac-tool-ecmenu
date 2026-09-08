@@ -8,7 +8,7 @@ import Foundation
 /// 显式构造并持有主应用进程的唯一依赖图。
 @MainActor
 final class ApplicationComposition {
-    let commandMenuConfig: CommandMenuConfigController
+    let commandMenuSettings: CommandMenuSettingsController
     let fileTemplateLibrary: FileTemplateLibrary
     let fileTemplateOperations: FileTemplateOperations
     let newFileTemplates: FileTemplateController
@@ -21,9 +21,9 @@ final class ApplicationComposition {
     private let imageSettingsPrompt: ImageCompressionSettingsPrompt
 
     init(didCloseConfiguration: @escaping () -> Void) {
-        let publisher = MenuChangePublisher(notify: CommandMenuConfigChannel.signalConfigurationChange)
-        let commandMenuConfig = CommandMenuConfigController(
-            store: CommandMenuConfigStore(defaults: .standard), publisher: publisher
+        let publisher = MenuChangePublisher(notify: CommandMenuSettingsChannel.signalConfigurationChange)
+        let commandMenuSettings = CommandMenuSettingsController(
+            store: CommandMenuSettingsStore(defaults: .standard), publisher: publisher
         )
         let library = FileTemplateLibrary()
         let templateOperations = FileTemplateOperations(
@@ -47,11 +47,11 @@ final class ApplicationComposition {
         ))
         let router = ContextCommandRouter(handlers: handlers, progressCenter: progressCenter)
         let snapshots = MenuSnapshotProvider(
-            configuration: { commandMenuConfig.configuration },
+            configuration: { commandMenuSettings.configuration },
             templates: { try await templateOperations.load() }
         )
 
-        self.commandMenuConfig = commandMenuConfig
+        self.commandMenuSettings = commandMenuSettings
         fileTemplateLibrary = library
         fileTemplateOperations = templateOperations
         self.newFileTemplates = newFileTemplates
@@ -64,7 +64,7 @@ final class ApplicationComposition {
             router: router, menuSnapshot: { await snapshots.currentSnapshot() }, didStart: publisher.signal
         )
         statusPageWindowController = StatusPageWindowController(
-            commandMenuConfig: commandMenuConfig,
+            commandMenuSettings: commandMenuSettings,
             loginItemController: loginItemController,
             newFileTemplates: newFileTemplates,
             descriptors: handlers.descriptors,

@@ -81,7 +81,7 @@ struct StatusPageContent: View {
     let descriptors: [ContextCommandDescriptor]
 
     /// 当前产品总开关与菜单可见性快照。
-    let configuration: CommandMenuConfig
+    let configuration: CommandMenuSettings
 
     /// 模板库的读取结果与正在执行的持久化操作。
     let fileTemplateState: FileTemplatePageState
@@ -198,7 +198,7 @@ struct StatusPageContent: View {
     private var detail: some View {
         switch selectedPane {
         case .general:
-            ApplicationSettingsPage(
+            GeneralSettingsPage(
                 displayName: displayName,
                 configuration: configuration,
                 systemState: systemState,
@@ -209,14 +209,14 @@ struct StatusPageContent: View {
                 openFullDiskAccessSettings: openFullDiskAccessSettings
             )
         case .contextMenu:
-            CommandMenuConfigPage(
+            CommandMenuSettingsPage(
                 descriptors: descriptors,
                 configuration: configuration,
                 systemState: systemState,
                 setVisibility: setVisibility
             )
         case .newFileTemplates:
-            NewFileTemplatesPage(
+            NewFileTemplateSettingsPage(
                 state: fileTemplateState,
                 isUpdating: isUpdatingNewFileTemplates,
                 nameEditing: templateNameEditing,

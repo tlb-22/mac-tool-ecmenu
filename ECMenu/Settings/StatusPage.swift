@@ -9,7 +9,7 @@ import SwiftUI
 /// 读取系统与应用状态，并把确定的呈现值交给状态页内容。
 struct StatusPage: View {
     /// 主应用注入的菜单配置真相源。
-    @EnvironmentObject private var commandMenuConfig: CommandMenuConfigController
+    @EnvironmentObject private var commandMenuSettings: CommandMenuSettingsController
 
     /// 主应用注入的登录项系统状态真相源。
     @EnvironmentObject private var loginItemController: LoginItemController
@@ -54,11 +54,11 @@ struct StatusPage: View {
             systemState: systemState,
             loginItemState: loginItemController.state,
             descriptors: descriptors,
-            configuration: commandMenuConfig.configuration,
+            configuration: commandMenuSettings.configuration,
             fileTemplateState: newFileTemplates.state,
             isUpdatingNewFileTemplates: newFileTemplates.isUpdating,
             setEnabled: { isEnabled in
-                commandMenuConfig.setEnabled(isEnabled)
+                commandMenuSettings.setEnabled(isEnabled)
             },
             setLoginItemRequested: { isRequested in
                 if !loginItemController.setRequested(isRequested) {
@@ -69,7 +69,7 @@ struct StatusPage: View {
                 systemServices.manageExtension()
             },
             setVisibility: { isVisible, featureID in
-                commandMenuConfig.setVisible(isVisible, for: featureID)
+                commandMenuSettings.setVisible(isVisible, for: featureID)
             },
             openFullDiskAccessSettings: {
                 if !systemServices.openFullDiskAccessSettings() {

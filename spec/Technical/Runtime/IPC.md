@@ -30,7 +30,7 @@ sequenceDiagram
 
 命令完整写入后 Client 关闭连接，不等待接管或执行回执。协议不提供自动重试、去重、业务结果回传、提交状态查询或业务执行超时；每次点击都是独立请求。完整写入只证明本次点对点发送完成，不证明主应用已经解码、恢复或执行命令。
 
-菜单配置查询使用自己的独立连接和同一认证、framing，发送查询后读取一份包含开关配置和模板菜单状态的[完整菜单快照](CommandMenuConfig.md#状态模型)。模板库读取失败由快照中的不可用状态表达，当前开关配置仍可正常传输。命令与配置查询不会共享响应，每个操作独占一条连接，因此都不需要请求编号。主应用收到命令后生成的本地任务 ID 只用于进程内生命周期和反馈，不进入 IPC。
+菜单配置查询使用自己的独立连接和同一认证、framing，发送查询后读取一份包含开关配置和模板菜单状态的[完整菜单快照](CommandMenuSettings.md#状态模型)。模板库读取失败由快照中的不可用状态表达，当前开关配置仍可正常传输。命令与配置查询不会共享响应，每个操作独占一条连接，因此都不需要请求编号。主应用收到命令后生成的本地任务 ID 只用于进程内生命周期和反馈，不进入 IPC。
 
 Client 在连接、身份验证、认证就绪 ACK 或完整写入失败时记录错误并播放一次系统默认错误提示音。Server 对认证失败、无效 frame、无法解码的负载或未知命令只记录并关闭连接，不发送应用层错误响应。
 
@@ -46,7 +46,7 @@ Client 在连接、身份验证、认证就绪 ACK 或完整写入失败时记�
 
 **平台契约与项目观察：** Apple 的 [accept(2)](https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man2/accept.2.html) 列出连接中止、描述符耗尽和内存不足等独立失败。项目于 2026-09-05 在 macOS 26.6.1（25G76）的隔离 Unix socket 探针中观察到，静默对端使阻塞读取持续等待，而 readiness 等待可按期限返回；对监听 socket 调用 `shutdown` 返回 `ENOTCONN`，没有唤醒阻塞的 `accept`。因此监听关闭采用 Dispatch source 取消完成边界，连接读写使用有期限的 readiness 等待。这些探针只验证系统调用行为，不替代 Finder 进程身份和真实菜单验收。
 
-命令请求不持久化。主应用与 Extension 成对构建和交付，因此命令信封不携带独立协议版本，也不保留旧负载兼容分支；菜单配置使用自身的当前 schema 版本，升级规则见[菜单配置](CommandMenuConfig.md#状态模型)。
+命令请求不持久化。主应用与 Extension 成对构建和交付，因此命令信封不携带独立协议版本，也不保留旧负载兼容分支；菜单配置使用自身的当前 schema 版本，升级规则见[菜单配置](CommandMenuSettings.md#状态模型)。
 
 ## 对端身份验证
 
@@ -92,8 +92,8 @@ App Group 只让沙箱 Extension 到达组容器；权限为当前用户读写�
 | [认证客户端](../../../ECMenuShared/Platform/IPC/AuthenticatedLocalSocketClient.swift) | send / fetch 请求 → 异步 completion，或测试用同步结果 | 并发 `DispatchQueue` 为每次操作建立独立连接；认证后等待空 ACK，再写请求；配置查询另外读取响应。`defer` 关闭该连接，不等待业务完成 |
 | [监听器](../../../ECMenuShared/Platform/IPC/AuthenticatedLocalSocketServer.swift) | 生产身份、sink/provider 回调、创建/停止意图 → 正在监听或失败回调 | `DispatchSource.makeReadSource`、串行 accept queue、并发 connection queue、`NSLock` 与延迟 `DispatchWorkItem`。唯一持有监听 descriptor 与 source；只在取消回调关闭 descriptor，再报告失败；暂停状态下停止会先取消重试并平衡 source 的 suspend/resume |
 | [单连接处理器](../../../ECMenuShared/Platform/IPC/AuthenticatedLocalSocketConnectionHandler.swift) | accepted descriptor → 一条已解码请求的 sink 调用或一份查询响应 | 上述认证/frame API、`JSONDecoder/JSONEncoder`、OSLog。handler 在 `defer` 唯一关闭传入连接；配置等待器使用 `NSLock`、`DispatchSemaphore.wait(timeout:)` 接受一次异步结果，重复 fulfill 是实现错误，等待期限失败释放连接 |
-| [应用请求适配](../../../ECMenu/IPC/ApplicationIPCServer.swift) | 已认证请求、注入的命令/快照边界 → 主应用调用或查询回复 | 以 `Task @MainActor` 适配应用依赖；监听 `state` 唯一保存在此。业务快照由[菜单配置能力](CommandMenuConfig.md)投影；命令调用不向传输层返回业务完成状态 |
-| [变化提示适配](../../../ECMenuShared/Platform/IPC/CommandMenuConfigSignal.swift) | 状态可能已变化 → 无正文系统通知 | `DistributedNotificationCenter.postNotificationName`；无到达回执。Extension 持有自己的 observer 与缓存，具体状态机见[副本同步](MenuExecution.md#配置副本同步) |
+| [应用请求适配](../../../ECMenu/IPC/ApplicationIPCServer.swift) | 已认证请求、注入的命令/快照边界 → 主应用调用或查询回复 | 以 `Task @MainActor` 适配应用依赖；监听 `state` 唯一保存在此。业务快照由[菜单配置能力](CommandMenuSettings.md)投影；命令调用不向传输层返回业务完成状态 |
+| [变化提示适配](../../../ECMenuShared/Platform/IPC/CommandMenuSettingsSignal.swift) | 状态可能已变化 → 无正文系统通知 | `DistributedNotificationCenter.postNotificationName`；无到达回执。Extension 持有自己的 observer 与缓存，具体状态机见[副本同步](MenuExecution.md#配置副本同步) |
 
 传输预期失败由 [ApplicationIPCError](../../../ECMenuShared/Platform/IPC/ApplicationIPCError.swift) 表达，包括容器/路径不可用、身份验证失败、POSIX 错误、连接提前关闭、期限、长度溢出和无效 ACK。持久化数据升级、业务失败和界面交互状态不通过这个类型表达。
 

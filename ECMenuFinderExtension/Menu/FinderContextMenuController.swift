@@ -89,7 +89,7 @@ final class FinderContextMenuController {
     ///   - configuration: Extension 持有的可见性配置副本。
     convenience init(
         makeMenu: @escaping () -> FinderContextMenuDefinition,
-        configuration: CommandMenuConfigReplica
+        configuration: CommandMenuSettingsReplica
     ) {
         self.init(
             makeMenu: makeMenu,

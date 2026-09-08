@@ -9,7 +9,7 @@ import FinderSync
 /// Finder Sync Extension 的主对象，负责注册目录范围、构建菜单并接收菜单 action。
 final class FinderSync: FIFinderSync {
     /// Extension 侧的菜单配置只读副本。
-    private let commandMenuConfig = CommandMenuConfigReplica()
+    private let commandMenuSettings = CommandMenuSettingsReplica()
 
     /// 将类型化右键命令投递给主应用的通用客户端。
     private let commandClient = ContextCommandClient()
@@ -19,13 +19,13 @@ final class FinderSync: FIFinderSync {
 
     /// 解释产品菜单声明，并通过菜单项绑定的上下文路由 action。
     private lazy var contextMenuController = FinderContextMenuController(
-        makeMenu: { [commandClient, commandMenuConfig] in
+        makeMenu: { [commandClient, commandMenuSettings] in
             ContextMenuComposition.menu(
                 commandClient: commandClient,
-                newFileTemplates: commandMenuConfig.newFileTemplates
+                newFileTemplates: commandMenuSettings.newFileTemplates
             )
         },
-        configuration: commandMenuConfig
+        configuration: commandMenuSettings
     )
 
     /// Finder 框架初始化完成后创建范围登记会话。

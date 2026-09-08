@@ -10,7 +10,7 @@ flowchart TB
         finder[App · Finder 回调与管理范围]
         menu[Menu · 上下文 / 菜单渲染 / 冻结动作]
         rules[Commands · 各能力菜单规则]
-        replica[CommandMenuConfig · 只读副本]
+        replica[CommandMenuSettings · 只读副本]
         client[IPC · 命令与快照客户端]
         finder --> menu
         menu --> rules
@@ -28,7 +28,7 @@ flowchart TB
         domain[能力 Domain · 类型与纯规则]
         adapters[能力 Persistence / Platform · 存储与系统副作用]
         feedback[Feedback · 通用警告与进度窗口]
-        snapshot[CommandMenuConfig · 快照投影与失效发布]
+        snapshot[CommandMenuSettings · 快照投影与失效发布]
         composition -.->|构造并持有| shell & server & runtime & operations & feedback
         shell --> pages --> operations
         server -->|命令| runtime --> operations
@@ -65,12 +65,12 @@ flowchart TB
 | 状态 | 唯一所有者与生命周期 | 相关入口 |
 |---|---|---|
 | 主应用依赖图 | AppDelegate 持有一个 ApplicationComposition，随进程存活；生产适配器在此连接 | [ApplicationComposition](../../../ECMenu/App/ApplicationComposition.swift) |
-| 菜单配置 | Controller 持有进程内当前值，Store 负责偏好恢复/保存；Provider 只组装快照 | [菜单配置](../Runtime/CommandMenuConfig.md) |
+| 菜单配置 | Controller 持有进程内当前值，Store 负责偏好恢复/保存；Provider 只组装快照 | [菜单配置](../Runtime/CommandMenuSettings.md) |
 | 模板索引与内部副本 | Library actor 持有已提交记录，Storage 负责文件布局与 I/O；界面草稿由编辑会话持有 | [模板管理](../Features/NewFileTemplates/Main.md) |
 | 在途命令 | Router 持有 Task；每个 Invocation 持有本次输入和结果 | [命令执行](../Runtime/CommandExecution.md) |
 | 进度与用户取消意图 | ProgressCenter 持有事实、显示延迟与隐藏集合；Presenter 持有窗口 | [命令进度](../Runtime/CommandProgress.md) |
 | 参数编辑与上次确认值 | 每个压缩窗口持有草稿；Store 保存实际确认值；Coordinator 连接两者 | [图片压缩](../Features/ImageCompression.md) |
-| Extension 配置副本 | Replica 持有当前只读快照和拉取任务；Cache 负责副本恢复，非配置真相源 | [配置同步](../Runtime/CommandMenuConfig.md) |
+| Extension 配置副本 | Replica 持有当前只读快照和拉取任务；Cache 负责副本恢复，非配置真相源 | [配置同步](../Runtime/CommandMenuSettings.md) |
 | 菜单动作 | 菜单控制器按 tag 保存本次已冻结输入，以有界保留策略管理有效期 | [菜单执行](../Runtime/MenuExecution.md) |
 
 ## 三个完成边界

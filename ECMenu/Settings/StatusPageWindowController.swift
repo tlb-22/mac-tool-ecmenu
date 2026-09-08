@@ -21,12 +21,12 @@ final class StatusPageWindowController: NSObject, NSWindowDelegate {
 
     /// 创建并配置不可缩放的 SwiftUI 状态页窗口。
     /// - Parameters:
-    ///   - commandMenuConfig: 状态页使用的菜单配置真相源。
+    ///   - commandMenuSettings: 状态页使用的菜单配置真相源。
     ///   - loginItemController: 状态页使用的登录项系统状态真相源。
     ///   - newFileTemplates: 状态页使用的模板库控制器。
     ///   - didClose: 用户或应用关闭该窗口后的生命周期回调。
     init(
-        commandMenuConfig: CommandMenuConfigController,
+        commandMenuSettings: CommandMenuSettingsController,
         loginItemController: LoginItemController,
         newFileTemplates: FileTemplateController,
         descriptors: [ContextCommandDescriptor],
@@ -38,7 +38,7 @@ final class StatusPageWindowController: NSObject, NSWindowDelegate {
         makeContent = {
             let hostingController = NSHostingController(
                 rootView: StatusPage(descriptors: descriptors, systemServices: systemServices)
-                    .environmentObject(commandMenuConfig)
+                    .environmentObject(commandMenuSettings)
                     .environmentObject(loginItemController)
                     .environmentObject(newFileTemplates)
             )
