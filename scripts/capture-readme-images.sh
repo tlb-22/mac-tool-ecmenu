@@ -1,7 +1,7 @@
 #!/bin/zsh
 
 # 协调生产界面预览和真实 Finder 菜单截图，生成并同步中英文 README 总览图。
-# 复用截图入口与固定图片布局，校验来源尺寸并保留本轮日志和中间产物。
+# 从预览产物读取版本，更新带版本的图片及 README 引用，保留本轮日志和中间产物。
 
 set -euo pipefail
 
@@ -51,8 +51,6 @@ readonly finder_capture_stdout="$log_directory/finder-capture.stdout.log"
 readonly preview_capture_stdout="$log_directory/preview-capture.stdout.log"
 readonly generated_english_image="$composition_directory/overview-en.png"
 readonly generated_chinese_image="$composition_directory/overview-zh-Hans.png"
-readonly english_image="$documentation_image_directory/overview-en.png"
-readonly chinese_image="$documentation_image_directory/overview-zh-Hans.png"
 readonly temporary_english_image="$documentation_image_directory/.overview-en.$$.png"
 readonly temporary_chinese_image="$documentation_image_directory/.overview-zh-Hans.$$.png"
 readonly developer_directory="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
@@ -182,6 +180,15 @@ preview_output_directory="$(
         "Localized previews: "
 )" || fail "Could not resolve the Preview screenshot directory."
 
+readonly preview_version="$(
+    /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' \
+        "$project_root/.derivedData/Build/Products/Debug/ECMenuPreviews.app/Contents/Info.plist"
+)"
+[[ "$preview_version" =~ '^[0-9]+(\.[0-9]+){0,2}$' ]] \
+    || fail "Preview has an invalid version: $preview_version"
+readonly english_image="$documentation_image_directory/overview-v$preview_version-en.png"
+readonly chinese_image="$documentation_image_directory/overview-v$preview_version-zh-Hans.png"
+
 if "$script_directory/capture-finder-menus.sh" \
     --language en \
     --language zh-Hans \
@@ -251,6 +258,29 @@ synchronize_image \
     "$generated_chinese_image" \
     "$chinese_image" \
     "$temporary_chinese_image"
+
+python3 - "$project_root" "$preview_version" <<'PY'
+from pathlib import Path
+import re
+import sys
+
+root = Path(sys.argv[1])
+version = sys.argv[2]
+updates = []
+for readme_name, language in [("README.md", "en"), ("README.zh-Hans.md", "zh-Hans")]:
+    readme = root / readme_name
+    content = readme.read_text(encoding="utf-8")
+    references = re.findall(r"\.docs/images/overview-[^\s\"')/]+\.png", content)
+    if len(references) != 1:
+        raise SystemExit(f"Expected one overview image in {readme_name}, found: {references}")
+    current = f".docs/images/overview-v{version}-{language}.png"
+    updates.append((readme, content.replace(references[0], current), references[0], current))
+for readme, content, previous, current in updates:
+    readme.write_text(content, encoding="utf-8")
+    if previous != current:
+        (root / previous).unlink()
+PY
+python3 "$script_directory/check-readme-images.py"
 
 print "README images updated ($english_dimensions):"
 print "  $english_image"

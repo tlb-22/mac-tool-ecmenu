@@ -66,9 +66,10 @@ Finder Extension 源码变化、菜单消失或扩展没有加载时使用：
 
 ## Release 构建
 
-发布前依次执行图标一致性检查、完整测试和跨进程集成测试：
+发布前依次执行 README 图片版本检查、图标一致性检查、完整测试和跨进程集成测试：
 
 ```bash
+python3 scripts/check-readme-images.py
 ./scripts/generate-app-icon.sh --check
 ./scripts/test.sh
 ./scripts/test-integration.sh
@@ -187,7 +188,9 @@ Archive 和打包不改变本机的 Extension 启用状态。Debug 与 Release �
 ./scripts/capture-readme-images.sh
 ```
 
-该脚本复用上述两个截图入口，分别捕获英文与简体中文截图，合成同尺寸、宽高比为 `5:4` 的透明图片：左侧从上到下排列通用、右键菜单和文件模板三个设置页，右侧展示展开“新建文件”的 Finder 主菜单及一级模板子菜单，整组内容在画布内居中。设置页中所有开关均开启，外部应用使用本机安装的真实图标；缺少 Visual Studio Code 或 iTerm2 时会在刷新 Finder 前失败。合成过程不裁切来源截图；三个设置页保持原尺寸，Finder 菜单放大至 `1.8×` 并在右侧垂直居中。全部捕获和校验成功后才更新 `.docs/images/overview-en.png` 与 `.docs/images/overview-zh-Hans.png`。纯图片排版由 `Tests/READMEImageCapture/Support/READMEOverviewComposer.swift` 负责，编译产物、来源截图和日志均位于对应的 `.artifacts/scratch/` 运行目录。
+该脚本复用上述两个截图入口，分别捕获英文与简体中文截图，合成同尺寸、宽高比为 `5:4` 的透明图片：左侧从上到下排列通用、右键菜单和文件模板三个设置页，右侧展示展开“新建文件”的 Finder 主菜单及一级模板子菜单，整组内容在画布内居中。设置页中所有开关均开启，外部应用使用本机安装的真实图标；缺少 Visual Studio Code 或 iTerm2 时会在刷新 Finder 前失败。合成过程不裁切来源截图；三个设置页保持原尺寸，Finder 菜单放大至 `1.8×` 并在右侧垂直居中。全部捕获和校验成功后，从本轮 Preview 产物读取版本，写入 `.docs/images/overview-v<version>-en.png` 与 `.docs/images/overview-v<version>-zh-Hans.png`，同步两个 README 的引用并移除被替换的图片。纯图片排版由 `Tests/READMEImageCapture/Support/READMEOverviewComposer.swift` 负责，编译产物、来源截图和日志均位于对应的 `.artifacts/scratch/` 运行目录。
+
+`python3 scripts/check-readme-images.py` 核对两份 README 是否各自引用与工程 `MARKETING_VERSION` 一致的图片，并确认文件存在且非空。该检查同时在截图结束时和 CI 中执行；升级工程版本后需要重新截图。图内显示的版本由实际 Preview 产物提供，视觉内容由截图后的人工检查确认。
 
 README 文件模板预览固定为 TXT 与 MD；真实菜单读取当前 Debug 模板库，拍摄前需准备相同清单，拍摄后恢复原库。替换前先停止 Debug 主应用，并保留整个模板库及内容副本；恢复后重新启动主应用，使内存缓存与磁盘一致。
 

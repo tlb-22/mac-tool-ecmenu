@@ -1,5 +1,5 @@
 # 在 macOS CI 环境中准备 Apple Development 签名身份并执行项目验证。
-# 检查图标资源、运行统一测试入口，并在失败时上传诊断产物。
+# 检查图标资源和 README 图片版本、运行统一测试入口，并在失败时上传诊断产物。
 
 name: CI
 
@@ -62,6 +62,9 @@ jobs:
 
       - name: Check AppIcon resources
         run: ./scripts/generate-app-icon.sh --check
+
+      - name: Check README image versions
+        run: python3 scripts/check-readme-images.py
 
       - name: Run tests
         run: ./scripts/test.sh
