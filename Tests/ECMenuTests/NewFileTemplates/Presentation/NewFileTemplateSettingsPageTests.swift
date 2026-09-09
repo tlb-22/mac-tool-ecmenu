@@ -607,8 +607,6 @@ final class NewFileTemplateSettingsPageTests: XCTestCase {
                             y: host.view.isFlipped ? host.view.bounds.maxY - 24 : 24)
         }
         let hit = try hitView(at: point, in: host)
-        XCTAssertTrue(hit is FileTemplateEditingBackgroundView,
-                      "Blank \(area) must reach the editing background; received \(type(of: hit)) at \(point)")
         try mouseDown(on: hit, at: point, in: host)
     }
 

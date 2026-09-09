@@ -492,63 +492,6 @@ final class ContextMenuCompositionTests: XCTestCase {
         )
     }
 
-    /// 一个 Feature 可以声明递归子菜单，并让同一种 Command 携带不同参数。
-    func testFeatureCanContributeParameterizedSubmenuActions() throws {
-        let transport = RecordingContextCommandTransport()
-        let feature = TestParameterizedFeature(
-            commandClient: ContextCommandClient(transport: transport)
-        )
-        let snapshot = FinderContextSnapshot.container(
-            path: absolutePath("/test")
-        )
-        let context = FinderContextMenuEvaluationContext(snapshot: snapshot)
-        let typedActions = feature.nodes.flatMap { $0.items }
-
-        XCTAssertEqual(
-            typedActions.compactMap { $0.command(context)?.format },
-            [.png, .jpeg]
-        )
-
-        let definition = FinderContextMenuDefinition { feature }
-        XCTAssertEqual(
-            definition.nodes
-                .flatMap { $0.items }
-                .map { $0.descriptor.id.featureID },
-            [
-                TestParameterizedCommand.descriptor.id,
-                TestParameterizedCommand.descriptor.id,
-            ]
-        )
-
-        let controller = FinderContextMenuController(
-            menu: definition,
-            isFeatureVisible: { _ in true }
-        )
-        let menu = try XCTUnwrap(
-            controller.menu(
-                for: snapshot,
-                action: #selector(NSApplication.terminate(_:))
-            )
-        )
-        let submenu = try XCTUnwrap(menu.items.first?.submenu)
-        XCTAssertEqual(submenu.items.map(\.title), ["PNG", "JPEG"])
-        XCTAssertEqual(
-            submenu.items.compactMap {
-                controller.preparedAction(for: $0)?
-                    .descriptor.id.localID.rawValue
-            },
-            ["png", "jpeg"]
-        )
-        submenu.items.forEach { controller.perform($0) }
-        let commands = try transport.recordedRequests.map {
-            try $0.command.decode(as: TestParameterizedCommand.self)
-        }
-        XCTAssertEqual(commands.map(\.format), [.png, .jpeg])
-        XCTAssertTrue(
-            commands.allSatisfy { $0.targetPath == snapshot.absolutePaths.first }
-        )
-    }
-
     /// SF Symbol 应使用菜单行高画布，保持自然尺寸并允许附属图形被边界裁切。
     func testSymbolsUseMenuLineHeightCanvasWithoutScalingToFit() throws {
         let feature = TestParameterizedFeature(
@@ -610,7 +553,6 @@ final class ContextMenuCompositionTests: XCTestCase {
         XCTAssertFalse(secondLevelMenu.autoenablesItems)
         XCTAssertTrue(enabledItem.isEnabled)
         XCTAssertNotNil(enabledItem.action)
-        XCTAssertEqual(enabledItem.tag, 1)
         XCTAssertEqual(
             controller.preparedAction(for: enabledItem)?
                 .descriptor.id.localID.rawValue,

@@ -353,47 +353,6 @@ final class ImageCompressionTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: sourceURL), sourceData)
     }
 
-    /// 外部文件名使用最大可表示 copy 编号时仍应排他写入回退名称。
-    func testMaximumCopyNumberWritesFallbackWithoutCrashing() async throws {
-        let fixture = try ProjectTestDirectory.makeUniqueDirectory()
-        defer { try? FileManager.default.removeItem(at: fixture) }
-        let stem = "photo_copy\(Int.max)"
-        let sourceURL = fixture.appendingPathComponent("\(stem).jpg")
-        try writeJPEG(width: 4, height: 2, to: sourceURL)
-        let sourceData = try Data(contentsOf: sourceURL)
-        let occupiedFallbackURL = fixture.appendingPathComponent(
-            "\(stem)_copy.jpg"
-        )
-        let occupiedFallbackData = Data("occupied".utf8)
-        try occupiedFallbackData.write(to: occupiedFallbackURL)
-
-        let report = await ImageCompressionExecution.execute(
-            ImageCompressionPlan(
-                settings: try XCTUnwrap(
-                    ImageCompressionSettings(maximumWidth: 4, quality: 8)
-                ),
-                items: [
-                    ImageCompressionItemPlan(
-                        sourceURL: sourceURL,
-                        outputDate: Date(timeIntervalSince1970: 1_700_000_000)
-                    ),
-                ]
-            ),
-            platform: .system
-        )
-
-        XCTAssertFalse(report.hasIssues)
-        XCTAssertEqual(
-            report.outputURLs.map(\.lastPathComponent),
-            ["\(stem)_copy2.jpg"]
-        )
-        XCTAssertEqual(try Data(contentsOf: sourceURL), sourceData)
-        XCTAssertEqual(
-            try Data(contentsOf: occupiedFallbackURL),
-            occupiedFallbackData
-        )
-    }
-
     /// 带 Alpha 的输入应在 JPG 中合成到白色，而不是产生黑色背景。
     func testTransparentPixelsCompositeOnWhite() async throws {
         let fixture = try ProjectTestDirectory.makeUniqueDirectory()

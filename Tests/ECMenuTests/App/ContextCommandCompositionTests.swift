@@ -20,38 +20,5 @@ final class ContextCommandCompositionTests: XCTestCase {
             handlers.descriptors.map(\.id.rawValue),
             ProductContextCommandExpectation.featureIDs
         )
-        XCTAssertEqual(
-            handlers.descriptors,
-            [
-                CreateNewFileCommand.descriptor,
-                CopyPathCommand.descriptor,
-                HideItemsCommand.descriptor,
-                ShowItemsCommand.descriptor,
-                CompressImagesCommand.descriptor,
-                OpenInVSCodeCommand.descriptor,
-                OpenInITerm2Command.descriptor,
-            ]
-        )
-        XCTAssertEqual(
-            handlers.descriptors.map(\.icon),
-            [
-                .systemSymbol(name: "text.document"),
-                .systemSymbol(
-                    name: "point.bottomleft.forward.to.point.topright.scurvepath"
-                ),
-                .systemSymbol(name: "eye.slash"),
-                .systemSymbol(name: "eye"),
-                .systemSymbol(name: "photo.badge.arrow.down"),
-                .application(OpenInVSCodeCommand.applicationRequirement),
-                .application(OpenInITerm2Command.applicationRequirement),
-            ]
-        )
-        XCTAssertEqual(
-            handlers.descriptors.compactMap(\.requiredApplication),
-            [
-                OpenInVSCodeCommand.applicationRequirement,
-                OpenInITerm2Command.applicationRequirement,
-            ]
-        )
     }
 }

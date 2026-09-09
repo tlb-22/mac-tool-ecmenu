@@ -76,14 +76,19 @@ final class FileTemplateNameEditingSessionTests: XCTestCase {
                 throw FileTemplateValidationError.emptyDisplayName
             }
         }.value
+        // 控件已更新文字但 change 通知尚未到达，提交必须读取实际显示值。
         first.displayedValue = "  "
-        session.valueDidChange("  ", from: first)
+        // 恢复原字段焦点时，AppKit 可能同步重入结束编辑通知。
+        first.didBegin = { [weak first] in
+            if let first { session.editingDidEnd(first) }
+        }
         let failed = await session.requestEditing(second) { _ in }.value
         XCTAssertFalse(failed)
         XCTAssertTrue(session.isEditing(first))
         XCTAssertFalse(session.isTransitioning)
         XCTAssertEqual(session.draft?.value, "  ")
         XCTAssertNotNil(session.draft?.errorMessage)
+        XCTAssertEqual(saved, ["  "])
         XCTAssertEqual(first.begunValues, ["TXT", "  "])
         XCTAssertTrue(second.begunValues.isEmpty)
 
@@ -94,28 +99,6 @@ final class FileTemplateNameEditingSessionTests: XCTestCase {
         XCTAssertTrue(session.isEditing(second))
         XCTAssertEqual(saved, ["  ", "Corrected"])
         XCTAssertEqual(first.finishedValues, ["Corrected"])
-    }
-
-    func testFailedSaveRestorationIgnoresTheNativeEndNotificationDuringReentry() async {
-        let session = FileTemplateNameEditingSession()
-        let first = NameControlSpy(value: "TXT")
-        let second = NameControlSpy(value: "untitled.txt")
-        var attempts: [String] = []
-        _ = await session.requestEditing(first) { value in
-            attempts.append(value)
-            throw FileTemplateValidationError.emptyDisplayName
-        }.value
-        first.displayedValue = "  "
-        first.didBegin = { [weak first] in
-            if let first { session.editingDidEnd(first) }
-        }
-        let result = await session.requestEditing(second) { _ in }.value
-        XCTAssertFalse(result)
-        XCTAssertTrue(session.isEditing(first))
-        XCTAssertFalse(session.isTransitioning)
-        XCTAssertEqual(attempts, ["  "])
-        XCTAssertEqual(first.begunValues, ["TXT", "  "])
-        XCTAssertTrue(second.begunValues.isEmpty)
     }
 
     func testLatestFieldEditorValueIsCommittedEvenBeforeChangeNotificationArrives() async {

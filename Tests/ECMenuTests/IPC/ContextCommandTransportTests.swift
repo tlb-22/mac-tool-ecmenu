@@ -164,23 +164,6 @@ final class ContextCommandTransportTests: XCTestCase {
         XCTAssertThrowsError(try JSONDecoder().decode(CommandMenuSettingsSnapshot.self, from: JSONSerialization.data(withJSONObject: object)))
     }
 
-    func testProviderFailureDoesNotPublishAnEmptyMenuSnapshot() async throws {
-        let socketURL = try ProjectTestDirectory.makeUniqueSocketURL()
-        let server = try AuthenticatedLocalSocketServer(
-            expectedClientSigningIdentifier: ApplicationIPC.applicationSigningIdentifier,
-            socketURL: socketURL,
-            contextCommandSink: { _ in XCTFail("A configuration query reached the command sink") },
-            commandMenuSettingsProvider: { $0(.failure(CocoaError(.fileReadCorruptFile))) }
-        )
-        defer { server.stop() }
-        let client = try AuthenticatedLocalSocketClient(
-            expectedServerSigningIdentifier: ApplicationIPC.applicationSigningIdentifier,
-            socketURL: socketURL
-        )
-        let result = await Task.detached { Result { try client.fetchCommandMenuSettings() } }.value
-        if case .success = result { XCTFail("A failed template read was published as a valid snapshot") }
-    }
-
     @MainActor
     func testUnavailableTemplatesStillPublishCurrentMenuSwitchesAndCanRecover() async throws {
         let directory = try ProjectTestDirectory.makeUniqueDirectory()

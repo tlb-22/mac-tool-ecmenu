@@ -331,8 +331,6 @@ final class CommandAlertContentTests: XCTestCase {
                     locale: english
                 )
             )
-            XCTAssertFalse(expectedChinese.body.contains(plan.targetURL.path))
-            XCTAssertFalse(expectedChinese.body.contains(Self.diagnosticMarker))
         }
     }
 

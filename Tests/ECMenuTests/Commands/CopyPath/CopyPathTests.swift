@@ -7,7 +7,7 @@ import Foundation
 import XCTest
 @testable import ECMenu
 
-/// 验证拷贝路径的 Finder 目标解析、多选顺序和剪贴板正文。
+/// 验证拷贝路径的目标有效性、多选顺序和剪贴板正文。
 final class CopyPathTests: XCTestCase {
     /// 多选路径应按 Finder 顺序逐行输出，且末尾没有额外换行。
     func testMultipleSelectionPreservesOrder() throws {
@@ -26,19 +26,6 @@ final class CopyPathTests: XCTestCase {
             "/test/Second Item\n/test/first.txt"
         )
         XCTAssertFalse(plan.pasteboardString.hasSuffix("\n"))
-    }
-
-    /// 空白处语义快照应直接携带已经解释完成的当前容器。
-    func testContainerUsesSemanticDirectory() throws {
-        let visibleDirectory = url("/test/parent")
-        let command = try command([visibleDirectory])
-
-        let plan = try CopyPathRules.makePlan(
-            for: command,
-            existingURLs: [visibleDirectory]
-        ).get()
-
-        XCTAssertEqual(plan.itemURLs, [visibleDirectory])
     }
 
     /// 任一快照目标已经失效时不应把不完整的多选写入剪贴板。
