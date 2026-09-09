@@ -5,7 +5,7 @@
 
 finder_menu_capture_copy_path_required_command_keys() {
     case "$1" in
-        container|plain-file|directory|multiple-images)
+        container|plain-file|directory|multiple-images|new-file-submenu)
             print -r -- command.copyPath
             ;;
     esac

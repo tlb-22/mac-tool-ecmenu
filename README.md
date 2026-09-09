@@ -16,21 +16,19 @@ ECMenu is intentionally small and focused. It provides a concise set of frequent
 The codebase prioritizes clear structure and type safety, so developers can add, change, or remove menu commands for their own needs.
 
 <p align="center">
-  <img src=".docs/images/overview-en.png" width="100%" alt="ECMenu General settings, Context Menu settings, and Finder context menu">
+  <img src=".docs/images/overview-en.png" width="100%" alt="ECMenu General, Context Menu, and File Templates settings beside Finder’s context menu with New File expanded">
 </p>
 
 ## Features
 
 | Command | Behavior |
 |---|---|
-| `New File` | Choose a saved template from a submenu and create a copy at the clicked location |
+| `New File` | Create files at the clicked location, with support for custom templates |
 | `Copy Path` | Copy the full path to the clipboard |
 | `Hide Items` / `Show Items` | Hide selected items in Finder, or make them visible again |
 | `Compress Images` | Convert selected images to JPG with a configurable target width and quality |
 | `Open in Visual Studio Code` | Open a file or directory in Visual Studio Code |
 | `Open in iTerm2` | Open a directory in iTerm2 |
-
-Manage templates on the File Templates page: import ordinary files, edit their menu display names and default file names, or delete templates. ECMenu saves its own copies and includes an empty TXT template initially. New files preserve the template contents and use `_copy`, `_copy2`, and subsequent suffixes when a name is already taken.
 
 Commands may create new files, but never delete or overwrite the contents of an original file.
 

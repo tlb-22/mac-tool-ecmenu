@@ -50,7 +50,21 @@ struct FinderMenuAutomationMain {
         do {
             let rootMenu = try session.prepare()
             let capturedMenu: MenuSnapshot
-            if let templateAction = request.templateAction {
+            switch request.content {
+            case .menu:
+                capturedMenu = rootMenu
+                try await MenuScreenshot.capture(capturedMenu, to: request.outputURL)
+                try session.verifyAfterCapture()
+            case let .submenu(parentTitle):
+                let submenu = try session.prepareTemplateSubmenu(parentTitle: parentTitle)
+                capturedMenu = rootMenu
+                try await MenuScreenshot.capture(
+                    root: rootMenu,
+                    submenu: submenu.snapshot,
+                    to: request.outputURL
+                )
+                try session.verifyTemplateSubmenu(submenu)
+            case let .createFile(templateAction):
                 let submenu = try session.prepareTemplateSubmenu(
                     parentTitle: templateAction.parentTitle
                 )
@@ -65,10 +79,6 @@ struct FinderMenuAutomationMain {
                 ProtocolOutput.line(
                     "CREATED\t\(Data(templateAction.expectedFileURL.path.utf8).base64EncodedString())"
                 )
-            } else {
-                capturedMenu = rootMenu
-                try await MenuScreenshot.capture(capturedMenu, to: request.outputURL)
-                try session.verifyAfterCapture()
             }
             try session.closeOwnedUI()
             ProtocolOutput.captured(capturedMenu)

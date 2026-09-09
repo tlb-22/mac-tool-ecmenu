@@ -620,6 +620,7 @@ capture_scenario() {
     local helper_status=0
     local helper_error
     local selected_basenames_text
+    local submenu_title
     local -a selected_paths=()
 
     context_kind="$(finder_menu_capture_context_kind "$scenario_id")"
@@ -638,7 +639,11 @@ capture_scenario() {
 
     print -r -- "Capturing $scenario_id [$language_id]" \
         | tee -a "$capture_log"
-    if [[ "$context_kind" == container ]]; then
+    if [[ "$scenario_id" == new-file-submenu ]]; then
+        submenu_title="$(localized_command_title command.newFile "$language_id")"
+        "$helper_executable" submenu "$image_path" "$fixture_directory" "$submenu_title" \
+            >"$stdout_log" 2>"$stderr_log" || helper_status=$?
+    elif [[ "$context_kind" == container ]]; then
         "$helper_executable" container "$image_path" "$fixture_directory" \
             >"$stdout_log" 2>"$stderr_log" || helper_status=$?
     else

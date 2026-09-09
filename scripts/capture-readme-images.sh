@@ -169,6 +169,7 @@ fi
 if "$script_directory/capture-previews.sh" \
     readme-status-page-general \
     readme-status-page-context-menu \
+    readme-status-page-file-templates \
     | /usr/bin/tee "$preview_capture_stdout"; then
     :
 else
@@ -184,7 +185,7 @@ preview_output_directory="$(
 if "$script_directory/capture-finder-menus.sh" \
     --language en \
     --language zh-Hans \
-    container \
+    new-file-submenu \
     | /usr/bin/tee "$finder_capture_stdout"; then
     :
 else
@@ -199,17 +200,21 @@ finder_output_directory="$(
 
 english_general="$preview_output_directory/readme-status-page-general-en.png"
 english_context_menu="$preview_output_directory/readme-status-page-context-menu-en.png"
-english_finder_menu="$finder_output_directory/en/container.png"
+english_templates="$preview_output_directory/readme-status-page-file-templates-en.png"
+english_finder_menu="$finder_output_directory/en/new-file-submenu.png"
 chinese_general="$preview_output_directory/readme-status-page-general-zh-Hans.png"
 chinese_context_menu="$preview_output_directory/readme-status-page-context-menu-zh-Hans.png"
-chinese_finder_menu="$finder_output_directory/zh-Hans/container.png"
+chinese_templates="$preview_output_directory/readme-status-page-file-templates-zh-Hans.png"
+chinese_finder_menu="$finder_output_directory/zh-Hans/new-file-submenu.png"
 
 for source_image in \
     "$english_general" \
     "$english_context_menu" \
+    "$english_templates" \
     "$english_finder_menu" \
     "$chinese_general" \
     "$chinese_context_menu" \
+    "$chinese_templates" \
     "$chinese_finder_menu"; do
     require_source_image "$source_image"
 done
@@ -218,9 +223,11 @@ if "$composer_executable" \
     "$composition_directory" \
     "$english_general" \
     "$english_context_menu" \
+    "$english_templates" \
     "$english_finder_menu" \
     "$chinese_general" \
     "$chinese_context_menu" \
+    "$chinese_templates" \
     "$chinese_finder_menu" \
     >"$composer_log" 2>&1; then
     :

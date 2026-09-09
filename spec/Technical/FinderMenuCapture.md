@@ -35,6 +35,7 @@ Xcode 26.6 附带的 macOS 26.5 SDK 声明：
 - `AXUIElementPerformAction` 返回 `cannotComplete` 时，动作可能已进入目标应用的模态处理，并不证明动作失败（`AXUIElement.h:315–331`）。
 - `SCContentFilter.initWithDesktopIndependentWindow` 只捕获传入的独立窗口（`SCStream.h:142–146`）。`SCScreenshotConfiguration` 默认按被捕获内容的像素尺寸输出，`ignoreShadows` 控制是否忽略窗口阴影，子窗口默认包含（`SCScreenshotManager.h:45–89`）。
 - `SCScreenshotManager.captureScreenshot` 从 macOS 26.0 起按 filter 和 configuration 返回 `SCScreenshotOutput`，其中包含所请求的 SDR 或 HDR `CGImage`（`SCScreenshotManager.h:102–124, 163–178`）。
+- `SCContentFilter(display:including:)` 捕获指定窗口集合，并排除桌面与程序坞。`SCStreamConfiguration.sourceRect` 使用显示器逻辑点坐标，输出宽高使用像素；`ignoreShadowsDisplay` 可排除阴影。`SCScreenshotManager.captureImage` 接收 filter 和 configuration，返回 `CGImage`（`SCStream.h:157–162, 262–274, 312–315`；`SCScreenshotManager.h:145–152`）。
 
 ## 项目观察
 
@@ -52,6 +53,10 @@ Xcode 26.6 附带的 macOS 26.5 SDK 声明：
 2026-09-08 在 macOS 26.6.2（25G83）、Xcode 26.6（17F113）下，简体中文 TXT 子菜单完成独立窗口截图、叶子点击及零字节 `untitled.txt` 创建；helper 的 AX Finder 普通窗口计数在验收前后均为零。这是该环境中的实测结果。
 
 AX 子节点已有 frame 不能独立证明子菜单已经显示。模板子菜单在悬停前订阅通知，只接受本次 `AXMenuOpened` 携带的对应子菜单，再等待其 frame 与标题稳定。AX 菜单状态和 ScreenCaptureKit 窗口公布按异步边界处理：初次枚举未命中时，在两秒预算内重新枚举，始终要求屏幕可见、Finder PID 和精确 frame 唯一匹配；超时报告 AX frame 与候选窗口信息。这是项目的等待策略，不是 Apple 对两个 API 同步时序的保证。
+
+`new-file-submenu` 场景通过 `FinderMenuAutomation submenu` 只展开和拍摄，不点击模板。输入为目录、父菜单标题与 PNG 输出路径；输出同时保留主菜单和一级模板子菜单。截图边界接收两个已验证的菜单快照，分别匹配 `SCWindow`，在同一显示器上只捕获这两个窗口，以二者包围矩形作为输出范围，背景透明，保持实际相对位置。截图后同时复核父子菜单，再关闭本轮 UI。
+
+2026-09-09 在 macOS 26.6.2（25G83）、Xcode 26.6（17F113）下，英文和简体中文均完成父子菜单联合截图；图片保留透明背景，没有包含后方 Finder 窗口或桌面，语言恢复后 Finder 普通窗口计数为零。证据限于同一显示器上的一级子菜单。
 
 macOS 或 Xcode 升级后，至少重新验证 Finder 的 AX 树、激活时的窗口行为、菜单 `SCWindow` 匹配、透明度与截图边界，以及“前往文件夹”sheet 的交互路径。
 

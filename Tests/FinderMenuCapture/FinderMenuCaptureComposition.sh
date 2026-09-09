@@ -18,6 +18,7 @@ source \
 
 typeset -gra _finder_menu_capture_scenario_providers=(
     finder_menu_capture_basic_context
+    finder_menu_capture_new_file
     finder_menu_capture_image_compression
 )
 

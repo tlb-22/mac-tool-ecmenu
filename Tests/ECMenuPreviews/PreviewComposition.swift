@@ -17,6 +17,7 @@ enum PreviewComposition {
         ApplicationPreviewDefinition(
             READMEStatusPageContextMenuPreview.self
         ),
+        ApplicationPreviewDefinition(READMEStatusPageNewFileTemplatesPreview.self),
         ApplicationPreviewDefinition(ImageCompressionSettingsPreview.self),
         ApplicationPreviewDefinition(
             ImageCompressionSettingsValidationErrorPreview.self

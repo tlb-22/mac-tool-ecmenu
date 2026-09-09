@@ -1,6 +1,6 @@
 /**
- 将已验证的菜单快照匹配到 ScreenCaptureKit 中的唯一菜单窗口并保存 PNG。
- 校验窗口归属和几何范围，限制捕获对象为本次目标菜单。
+ 将已验证的菜单快照匹配到 ScreenCaptureKit 窗口并保存透明 PNG。
+ 单菜单定向捕获；父子菜单按屏幕原位一起捕获，排除桌面与其他窗口。
  */
 
 import CoreGraphics
@@ -37,6 +37,55 @@ enum MenuScreenshot {
             throw AutomationFailure.screenshotFailed(error.localizedDescription)
         }
 
+        try write(image, to: outputURL)
+    }
+
+    static func capture(
+        root: MenuSnapshot,
+        submenu: MenuSnapshot,
+        to outputURL: URL
+    ) async throws {
+        let rootWindow = try await menuWindow(matching: root)
+        let submenuWindow = try await menuWindow(matching: submenu)
+        let frame = rootWindow.frame.union(submenuWindow.frame).integral
+        let content = try await SCShareableContent.current
+        guard let display = content.displays.first(where: { $0.frame.contains(frame) }) else {
+            throw AutomationFailure.screenshotFailed(
+                "The parent menu and submenu must fit on one display."
+            )
+        }
+        let filter = SCContentFilter(
+            display: display,
+            including: [rootWindow, submenuWindow]
+        )
+        let configuration = SCStreamConfiguration()
+        configuration.sourceRect = frame.offsetBy(
+            dx: -display.frame.minX,
+            dy: -display.frame.minY
+        )
+        let scale = CGFloat(filter.pointPixelScale)
+        configuration.width = Int(frame.width * scale)
+        configuration.height = Int(frame.height * scale)
+        configuration.showsCursor = false
+        configuration.ignoreShadowsDisplay = true
+        configuration.includeChildWindows = false
+        // backgroundColor 是 assign 属性，调用方持有颜色直到异步截图结束。
+        let backgroundColor = CGColor(gray: 0, alpha: 0)
+        configuration.backgroundColor = backgroundColor
+        defer { withExtendedLifetime(backgroundColor) {} }
+        let image: CGImage
+        do {
+            image = try await SCScreenshotManager.captureImage(
+                contentFilter: filter,
+                configuration: configuration
+            )
+        } catch {
+            throw AutomationFailure.screenshotFailed(error.localizedDescription)
+        }
+        try write(image, to: outputURL)
+    }
+
+    private static func write(_ image: CGImage, to outputURL: URL) throws {
         guard let destination = CGImageDestinationCreateWithURL(
             outputURL as CFURL,
             UTType.png.identifier as CFString,

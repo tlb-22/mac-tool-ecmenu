@@ -1,6 +1,6 @@
 /**
  把两种语言的设置页和 Finder 菜单截图组合为 README 总览 PNG。
- 按统一列权重和像素尺寸布局，检查来源透明通道与图片读写结果。
+ 左侧纵向排列三个设置页，右侧展示展开的 Finder 菜单；两种语言共用 5:4 透明画布。
  */
 
 import CoreGraphics
@@ -22,8 +22,8 @@ private enum CompositionFailure: Error, CustomStringConvertible {
         switch self {
         case .usage:
             "Usage: READMEOverviewComposer <output-directory> "
-                + "<en-general> <en-context-menu> <en-finder-menu> "
-                + "<zh-general> <zh-context-menu> <zh-finder-menu>"
+                + "<en-general> <en-context-menu> <en-templates> <en-finder-menu> "
+                + "<zh-general> <zh-context-menu> <zh-templates> <zh-finder-menu>"
         case let .outputDirectoryUnavailable(path):
             "Output directory is unavailable: \(path)"
         case let .imageUnreadable(path):
@@ -62,19 +62,20 @@ private struct SourceImage {
     }
 }
 
-/// README 总览图中具有固定顺序和显示权重的三列。
-private enum OverviewColumn: CaseIterable {
+/// 来源图按三个设置页、Finder 菜单的顺序输入，并采用固定显示比例。
+private enum OverviewPanel: CaseIterable {
     case generalSettings
     case contextMenuSettings
+    case newFileTemplateSettings
     case finderMenu
 
     /// Finder 菜单是产品主体，在总览图中使用更大的显示比例。
     var scale: CGFloat {
         switch self {
-        case .generalSettings, .contextMenuSettings:
+        case .generalSettings, .contextMenuSettings, .newFileTemplateSettings:
             1
         case .finderMenu:
-            1.5
+            1.8
         }
     }
 }
@@ -95,13 +96,14 @@ private struct RenderedImage {
 private struct OverviewComposition {
     static let edgePadding = 64
     static let columnSpacing = 128
+    static let rowSpacing = 64
 
     let english: [SourceImage]
     let simplifiedChinese: [SourceImage]
 
     init(englishURLs: [URL], simplifiedChineseURLs: [URL]) throws {
         precondition(englishURLs.count == simplifiedChineseURLs.count)
-        precondition(englishURLs.count == OverviewColumn.allCases.count)
+        precondition(englishURLs.count == OverviewPanel.allCases.count)
 
         english = try englishURLs.map(SourceImage.init(url:))
         simplifiedChinese = try simplifiedChineseURLs.map(
@@ -110,32 +112,46 @@ private struct OverviewComposition {
     }
 
     func write(to outputDirectory: URL) throws {
-        let english = renderedRow(from: english)
-        let simplifiedChinese = renderedRow(from: simplifiedChinese)
-        let rows = [english, simplifiedChinese]
-        let columnWidths = english.indices.map { index in
-            rows.map { $0[index].width }.max()!
-        }
-        let contentHeight = rows
-            .flatMap { $0 }
-            .map(\.height)
+        let english = renderedPanels(from: english)
+        let simplifiedChinese = renderedPanels(from: simplifiedChinese)
+        let overviews = [english, simplifiedChinese]
+        let settingsWidth = overviews
+            .flatMap { $0.dropLast() }
+            .map(\.width)
             .max()!
-        let canvasWidth = Self.edgePadding * 2
-            + columnWidths.reduce(0, +)
-            + Self.columnSpacing * (columnWidths.count - 1)
-        let canvasHeight = Self.edgePadding * 2 + contentHeight
+        let settingsRowHeights = english.dropLast().indices.map { index in
+            overviews.map { $0[index].height }.max()!
+        }
+        let settingsHeight = settingsRowHeights.reduce(0, +)
+            + Self.rowSpacing * (settingsRowHeights.count - 1)
+        let menuWidth = overviews.map { $0.last!.width }.max()!
+        let menuHeight = overviews.map { $0.last!.height }.max()!
+        let contentHeight = max(settingsHeight, menuHeight)
+        let minimumWidth = Self.edgePadding * 2
+            + settingsWidth + Self.columnSpacing + menuWidth
+        let minimumHeight = Self.edgePadding * 2 + contentHeight
+        // 用整数像素补足画布，保证宽高严格为 5:4，并完整保留来源截图。
+        let canvasUnit = max((minimumWidth + 4) / 5, (minimumHeight + 3) / 4)
+        let canvasWidth = canvasUnit * 5
+        let canvasHeight = canvasUnit * 4
 
         try write(
-            row: english,
-            columnWidths: columnWidths,
+            panels: english,
+            settingsWidth: settingsWidth,
+            settingsRowHeights: settingsRowHeights,
+            settingsHeight: settingsHeight,
+            menuWidth: menuWidth,
             canvasWidth: canvasWidth,
             canvasHeight: canvasHeight,
             contentHeight: contentHeight,
             to: outputDirectory.appendingPathComponent("overview-en.png")
         )
         try write(
-            row: simplifiedChinese,
-            columnWidths: columnWidths,
+            panels: simplifiedChinese,
+            settingsWidth: settingsWidth,
+            settingsRowHeights: settingsRowHeights,
+            settingsHeight: settingsHeight,
+            menuWidth: menuWidth,
             canvasWidth: canvasWidth,
             canvasHeight: canvasHeight,
             contentHeight: contentHeight,
@@ -145,18 +161,21 @@ private struct OverviewComposition {
         )
     }
 
-    /// 将语义列声明转换为每种语言共用的显示比例。
-    private func renderedRow(
+    /// 将页面声明转换为每种语言共用的显示比例。
+    private func renderedPanels(
         from sources: [SourceImage]
     ) -> [RenderedImage] {
-        zip(OverviewColumn.allCases, sources).map { pair in
+        zip(OverviewPanel.allCases, sources).map { pair in
             RenderedImage(source: pair.1, scale: pair.0.scale)
         }
     }
 
     private func write(
-        row: [RenderedImage],
-        columnWidths: [Int],
+        panels: [RenderedImage],
+        settingsWidth: Int,
+        settingsRowHeights: [Int],
+        settingsHeight: Int,
+        menuWidth: Int,
         canvasWidth: Int,
         canvasHeight: Int,
         contentHeight: Int,
@@ -182,14 +201,17 @@ private struct OverviewComposition {
             CGRect(x: 0, y: 0, width: canvasWidth, height: canvasHeight)
         )
         context.interpolationQuality = .high
-        var columnX = Self.edgePadding
-        for (index, source) in row.enumerated() {
-            let image = source.image
-            let imageX = columnX + (columnWidths[index] - source.width) / 2
-            let imageY = Self.edgePadding
-                + (contentHeight - source.height) / 2
+        let contentX = (canvasWidth - settingsWidth - Self.columnSpacing - menuWidth) / 2
+        let contentY = (canvasHeight - contentHeight) / 2
+        var rowTop = contentY + (contentHeight + settingsHeight) / 2
+        for (index, source) in panels.dropLast().enumerated() {
+            let rowHeight = settingsRowHeights[index]
+            let imageX = contentX
+                + (settingsWidth - source.width) / 2
+            let imageY = rowTop - rowHeight
+                + (rowHeight - source.height) / 2
             context.draw(
-                image,
+                source.image,
                 in: CGRect(
                     x: imageX,
                     y: imageY,
@@ -197,8 +219,19 @@ private struct OverviewComposition {
                     height: source.height
                 )
             )
-            columnX += columnWidths[index] + Self.columnSpacing
+            rowTop -= rowHeight + Self.rowSpacing
         }
+        let menu = panels.last!
+        context.draw(
+            menu.image,
+            in: CGRect(
+                x: contentX + settingsWidth + Self.columnSpacing
+                    + (menuWidth - menu.width) / 2,
+                y: contentY + (contentHeight - menu.height) / 2,
+                width: menu.width,
+                height: menu.height
+            )
+        )
 
         guard let outputImage = context.makeImage() else {
             throw CompositionFailure.canvasUnavailable
@@ -220,7 +253,7 @@ private struct OverviewComposition {
 
 do {
     let arguments = Array(CommandLine.arguments.dropFirst())
-    guard arguments.count == 7 else {
+    guard arguments.count == 9 else {
         throw CompositionFailure.usage
     }
 
@@ -236,8 +269,8 @@ do {
     }
 
     let composition = try OverviewComposition(
-        englishURLs: arguments[1...3].map(URL.init(fileURLWithPath:)),
-        simplifiedChineseURLs: arguments[4...6].map(
+        englishURLs: arguments[1...4].map(URL.init(fileURLWithPath:)),
+        simplifiedChineseURLs: arguments[5...8].map(
             URL.init(fileURLWithPath:)
         )
     )

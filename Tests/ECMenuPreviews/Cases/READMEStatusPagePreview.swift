@@ -1,5 +1,5 @@
 /**
- 提供 README 截图使用的通用设置和右键菜单设置场景。
+ 提供 README 截图使用的通用设置、右键菜单设置和文件模板场景。
  组合固定正常状态与当前已安装外部应用的真实图标，呈现生产设置页。
  */
 
@@ -36,7 +36,11 @@ private enum READMEStatusPagePreviewState {
                 isEnabled: true,
                 hiddenFeatureIDs: []
             ),
-            applicationIcons: applicationIcons
+            applicationIcons: applicationIcons,
+            fileTemplateState: .ready([
+                try! FileTemplate(displayName: "TXT", defaultFileName: "untitled.txt"),
+                try! FileTemplate(displayName: "MD", defaultFileName: "untitled.md"),
+            ])
         )
     }
 }
@@ -66,6 +70,20 @@ enum READMEStatusPageContextMenuPreview: ApplicationPreview {
     static func present() -> AnyObject {
         StatusPagePreviewSession(
             selectedPane: .contextMenu,
+            state: READMEStatusPagePreviewState.make()
+        )
+    }
+}
+
+/// 以正常运行状态呈现 README 中的文件模板设置页。
+@MainActor
+enum READMEStatusPageNewFileTemplatesPreview: ApplicationPreview {
+    static let id = "readme-status-page-file-templates"
+
+    /// 模板列表来自预览内存样例，系统状态沿用 README 的正常设置场景。
+    static func present() -> AnyObject {
+        StatusPagePreviewSession(
+            selectedPane: .newFileTemplates,
             state: READMEStatusPagePreviewState.make()
         )
     }

@@ -31,7 +31,7 @@
 
 - 项目相关的构建、测试和运行产物必须留在仓库内，不使用系统临时目录保存它们。
 - `.derivedData/` 只作为 Xcode Derived Data 根目录；脚本可以读取其中的构建产品，但不得在其中创建自定义日志、测试 fixture、探针、截图或发布物。
-- `.artifacts/scratch/` 只保存一次运行或调查产生的可重建内容，按 `logs/`、`tests/`、`probes/`、`previews/` 分类。单次运行产物的顶层文件或目录使用 `YYYYMMDD-HHMMSS-<purpose>-<pid>` 命名；没有相关任务运行时，整个 `scratch/` 均可删除。
+- `.artifacts/scratch/` 只保存一次运行或调查产生的可重建内容，按 `logs/`、`tests/`、`probes/`、`previews/` 分类。单次运行产物的顶层文件或目录使用 `YYYYMMDD-HHMMSS-<purpose>-<pid>` 命名；没有相关任务运行时，整个 `scratch/` 均可删除。每次 release 时清理。
 - 可重复执行的测试与预览定义维护在 `Tests/`（预览宿主位于 `Tests/ECMenuPreviews/`），诊断入口维护在 `scripts/`；源码、正式配置和持久文档不得依赖 `scratch/`，需要保留的结论写入相应文档。
 - 正式交付物位于 `.artifacts/releases/<version>+<build>/`；已有的非空版本目录不得静默覆盖。
 - 日常 Debug 构建与运行使用 `./scripts/run-debug.sh`，完整测试使用 `./scripts/test.sh`；共享 `.derivedData/` 或 Finder 登记状态的脚本顺序执行。删除 `.derivedData/` 前，先停止并注销从其中运行的应用和 Finder Extension。

@@ -60,7 +60,13 @@ enum CLICommand {
     struct CaptureRequest {
         let context: FinderMenuContext
         let outputURL: URL
-        let templateAction: TemplateAction?
+        let content: CaptureContent
+    }
+
+    enum CaptureContent {
+        case menu
+        case submenu(parentTitle: String)
+        case createFile(TemplateAction)
     }
 
     struct TemplateAction {
@@ -101,7 +107,7 @@ enum CLICommand {
                     openingItem: openingItem
                 ),
                 outputURL: outputURL,
-                templateAction: nil
+                content: .menu
             ))
         case "items":
             guard arguments.count >= 3 else { throw AutomationFailure.usage }
@@ -116,7 +122,21 @@ enum CLICommand {
                     remaining: Array(urls.dropFirst())
                 )),
                 outputURL: outputURL,
-                templateAction: nil
+                content: .menu
+            ))
+        case "submenu":
+            guard arguments.count == 4, !arguments[3].isEmpty else {
+                throw AutomationFailure.usage
+            }
+            guard case .capture(let containerRequest) = try parse([
+                "container", arguments[1], arguments[2],
+            ]) else {
+                preconditionFailure("Container parsing must return a capture request")
+            }
+            return .capture(CaptureRequest(
+                context: containerRequest.context,
+                outputURL: containerRequest.outputURL,
+                content: .submenu(parentTitle: arguments[3])
             ))
         case "create-file":
             guard arguments.count == 6,
@@ -140,11 +160,11 @@ enum CLICommand {
             return .capture(CaptureRequest(
                 context: containerRequest.context,
                 outputURL: containerRequest.outputURL,
-                templateAction: TemplateAction(
+                content: .createFile(TemplateAction(
                     parentTitle: arguments[3],
                     templateTitle: arguments[4],
                     expectedFileURL: expectedFileURL
-                )
+                ))
             ))
         default:
             throw AutomationFailure.usage
@@ -323,7 +343,7 @@ enum AutomationFailure: Error {
     var message: String {
         switch self {
         case .usage:
-            "Usage: FinderMenuAutomation preflight | finder-windows | container <output.png> <directory> | items <output.png> <item> [item ...] | create-file <submenu.png> <directory> <parent-title> <template-title> <expected-file-name>"
+            "Usage: FinderMenuAutomation preflight | finder-windows | container <output.png> <directory> | items <output.png> <item> [item ...] | submenu <output.png> <directory> <parent-title> | create-file <submenu.png> <directory> <parent-title> <template-title> <expected-file-name>"
         case let .pathMustBeAbsolute(path): "Path must be absolute: \(path)"
         case let .directoryDoesNotExist(path): "Directory does not exist: \(path)"
         case let .containerIsEmpty(path):

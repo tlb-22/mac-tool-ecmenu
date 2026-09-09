@@ -177,7 +177,7 @@ final class FinderMenuSession {
         guard actual == expected else { throw AutomationFailure.menuChanged }
     }
 
-    /// 已打开的模板子菜单，只用于同一次截图与随后显式点击。
+    /// 已打开的模板子菜单，用于同一次截图，以及显式验收请求中的模板点击。
     struct TemplateSubmenu {
         fileprivate let element: AXUIElement
         let snapshot: MenuSnapshot

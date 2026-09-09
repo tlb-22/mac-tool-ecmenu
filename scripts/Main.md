@@ -122,6 +122,7 @@ Archive 和打包不改变本机的 Extension 启用状态。Debug 与 Release �
 ./scripts/preview-ui.sh status-page-file-templates-failure
 ./scripts/preview-ui.sh readme-status-page-general
 ./scripts/preview-ui.sh readme-status-page-context-menu
+./scripts/preview-ui.sh readme-status-page-file-templates
 ./scripts/preview-ui.sh image-compression-settings
 ./scripts/preview-ui.sh image-compression-settings-validation-error
 ./scripts/preview-ui.sh context-command-progress-single
@@ -153,17 +154,18 @@ Archive 和打包不改变本机的 Extension 启用状态。Debug 与 Release �
 ```bash
 ./scripts/capture-finder-menus.sh
 ./scripts/capture-finder-menus.sh multiple-images
+./scripts/capture-finder-menus.sh new-file-submenu
 ./scripts/capture-finder-menus.sh --language en plain-file
 ./scripts/capture-finder-menus.sh --language zh-Hans plain-file
 ./scripts/capture-finder-menus.sh --list
 ./scripts/capture-finder-menus.sh --list-languages
 ```
 
-该脚本构建并运行当前 Debug 版本，再为目录背景、普通文件、目录和多张图片建立固定 fixture，打开 Finder 的真实右键菜单并分别截图。默认依次截取英文与简体中文的全部场景；`--language` 可重复传入，也可与场景 ID 组合用于单语言调试。图片和逐场景日志按 `<run>/<language>/<scenario>` 分组。
+该脚本构建并运行当前 Debug 版本，再为目录背景、普通文件、目录和多张图片建立固定 fixture，打开 Finder 的真实右键菜单并分别截图。`new-file-submenu` 展开目录背景菜单的“新建文件”，同时捕获主菜单和一级模板子菜单，不执行模板命令。默认依次截取英文与简体中文的全部场景；`--language` 可重复传入，也可与场景 ID 组合用于单语言调试。图片和逐场景日志按 `<run>/<language>/<scenario>` 分组。
 
 真实菜单同时包含 Finder 原生项目与 Finder Extension 项目。脚本只临时修改 Finder 和当前 Debug 主应用各自的 `AppleLanguages`；主应用在准备阶段启动一次，此后保持同一 PID，每种语言及最终恢复都只重启 Finder 和 Extension。系统全局语言、地区格式、Release 身份和 Extension 自身偏好均不改变。运行前必须关闭所有 Finder 窗口，脚本在修改偏好前、每个场景后和最终恢复后都会验证没有窗口遗留。
 
-每张图片仍捕获菜单的独立透明窗口，不包含窗口阴影、后方 Finder 窗口或桌面；脚本会分别核对当前语言下的 Finder 原生标志项和该场景必须出现的 ECMenu 命令，并在截图后重新确认 Finder、来源窗口、菜单位置和菜单项均未变化。当前配置中关闭了必需命令时，本次截图会失败，不改写用户配置。
+每张图片只包含菜单的透明窗口，展开场景保留主菜单和子菜单的实际相对位置，不包含窗口阴影、后方 Finder 窗口或桌面；脚本会分别核对当前语言下的 Finder 原生标志项和该场景必须出现的 ECMenu 命令，并在截图后重新确认 Finder、来源窗口、菜单位置和菜单项均未变化。当前配置中关闭了必需命令时，本次截图会失败，不改写用户配置。
 
 场景定义位于 `Tests/FinderMenuCapture/`：基础上下文集中在 `Contexts/`，各命令的菜单期望位于对应的 `Features/`，图片 fixture 与多图场景由 `Features/ImageCompression/` 持有。Finder 打开、Accessibility 读取和菜单生命周期统一封装在 `Support/`，不向 Finder Extension 加入截图分支。`--check` 验证注册表、fixture、本地化键、辅助程序编译及其静态 TCC 身份配置，已包含在 `test.sh` 与 CI 中；真实 Finder 截图不在无人值守的 CI 中运行。
 
@@ -185,7 +187,9 @@ Archive 和打包不改变本机的 Extension 启用状态。Debug 与 Release �
 ./scripts/capture-readme-images.sh
 ```
 
-该脚本复用上述两个截图入口，分别捕获英文与简体中文的 README 正常设置场景和 Finder 目录背景菜单，再按通用设置、右键菜单设置、Finder 菜单的顺序以固定间距合成同尺寸透明图片。设置页中所有开关均开启，外部应用使用本机安装的真实图标；缺少 Visual Studio Code 或 iTerm2 时会在刷新 Finder 前失败。合成过程不裁切来源截图；两个设置页保持原尺寸，作为产品主体的 Finder 菜单放大至 `1.5×`。全部捕获和校验成功后才更新 `.docs/images/overview-en.png` 与 `.docs/images/overview-zh-Hans.png`。纯图片排版由 `Tests/READMEImageCapture/Support/READMEOverviewComposer.swift` 负责，编译产物、来源截图和日志均位于对应的 `.artifacts/scratch/` 运行目录。
+该脚本复用上述两个截图入口，分别捕获英文与简体中文截图，合成同尺寸、宽高比为 `5:4` 的透明图片：左侧从上到下排列通用、右键菜单和文件模板三个设置页，右侧展示展开“新建文件”的 Finder 主菜单及一级模板子菜单，整组内容在画布内居中。设置页中所有开关均开启，外部应用使用本机安装的真实图标；缺少 Visual Studio Code 或 iTerm2 时会在刷新 Finder 前失败。合成过程不裁切来源截图；三个设置页保持原尺寸，Finder 菜单放大至 `1.8×` 并在右侧垂直居中。全部捕获和校验成功后才更新 `.docs/images/overview-en.png` 与 `.docs/images/overview-zh-Hans.png`。纯图片排版由 `Tests/READMEImageCapture/Support/READMEOverviewComposer.swift` 负责，编译产物、来源截图和日志均位于对应的 `.artifacts/scratch/` 运行目录。
+
+README 文件模板预览固定为 TXT 与 MD；真实菜单读取当前 Debug 模板库，拍摄前需准备相同清单，拍摄后恢复原库。替换前先停止 Debug 主应用，并保留整个模板库及内容副本；恢复后重新启动主应用，使内存缓存与磁盘一致。
 
 该入口持有完整截图过程的互斥锁，并沿用 Finder 菜单截图的零窗口前置条件、语言恢复和权限要求。运行时保持桌面已解锁且不要操作 Finder。
 
