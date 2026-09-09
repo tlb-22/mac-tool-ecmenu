@@ -10,6 +10,16 @@
 
 普通应用已经退出时跳过恢复，不重新启动应用；没有前台应用的 CI 或无界面会话也正常执行原命令，只是不建立恢复目标。恢复失败会使原本成功的脚本失败；原命令已经失败时保留其退出状态，并在独立日志中报告恢复错误。
 
+## 职责与源码映射
+
+| 职责模块 | 核心类型或脚本与源码入口 | 输入、输出与状态所有权 |
+|---|---|---|
+| 自动化恢复会话 | [user-focus.sh](../../scripts/lib/user-focus.sh) 接入，[with-user-focus-restored.sh](../../scripts/lib/with-user-focus-restored.sh) 执行包装 | 自动化命令 → 捕获原焦点、运行子进程组、等待清理后恢复；包装器持有本轮身份快照、子进程、会话标记和原退出码，通过 `trap` / `kill` / `wait` 转发信号并等待退出 |
+| 运行进程与系统激活 | `UserFocusRestorer` · [UserFocusRestorer.swift](../../Tests/UserFocusRestoration/Support/UserFocusRestorer.swift) | `capture` / `restore` / `launch` 参数 → 编码身份、恢复状态或新命令进程；`NSWorkspace` 读取运行事实，`NSRunningApplication.activate` 请求激活并在主 RunLoop 核实结果，`setsid` / `execvp` 建立子命令会话 |
+| 恢复目标规则 | `UserFocusApplicationIdentity` / `UserFocusRestorationResolver` · [UserFocusRestorationModel.swift](../../Tests/UserFocusRestoration/Support/UserFocusRestorationModel.swift) | 原身份与当前候选身份 → 可恢复目标或不可用；纯值计算，无外部 I/O，由系统边界读取事实后调用 |
+
+身份匹配、PID 复用与 Finder 替换规则由 [UserFocusRestorationTests.swift](../../Tests/UserFocusRestoration/Tests/UserFocusRestorationTests.swift) 验证，并纳入 [test.sh](../../scripts/test.sh)。测试期间与窗口检查的外层关系见 [Finder 窗口保持](FinderWindowPreservation.md)。
+
 ## 平台契约与证据边界
 
 Apple 将 `NSWorkspace.frontmostApplication` 定义为当前接收键盘事件的应用；`NSRunningApplication.activate(options:)` 用于请求激活运行中的应用。实现使用空选项，不请求同时展开该应用的所有窗口，并在主 RunLoop 上等待后同时核对 `isActive` 与当前前台 PID，而不把 API 的同步返回值当成已经完成切换。[NSWorkspace.frontmostApplication](https://developer.apple.com/documentation/appkit/nsworkspace/frontmostapplication) · [NSRunningApplication.activate(options:)](https://developer.apple.com/documentation/appkit/nsrunningapplication/activate(options:)) · [NSApplication.ActivationOptions](https://developer.apple.com/documentation/appkit/nsapplication/activationoptions)

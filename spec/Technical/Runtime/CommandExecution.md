@@ -9,14 +9,16 @@ sequenceDiagram
     participant E as Finder Extension 进程
     box ECMenu 主应用进程
         participant I as IPC 请求入口
-        participant R as Router / Handler 注册表
-        participant V as Invocation
+        participant R as 命令任务路由 Router
+        participant G as Handler 注册表
+        participant V as 单次命令调用 Invocation
         participant H as 业务 Handler
-        participant P as ProgressCenter / 反馈
+        participant P as 进度协调 ProgressCenter
     end
     E->>I: 已认证连接上的 CommandEnvelope
     I->>R: prepare(envelope)
-    R->>R: 查找 ID，恢复专用 Command
+    R->>G: 查找 ID，恢复专用 Command
+    G-->>R: Invocation? / 解码错误
     alt 未知 ID 或无效负载
         R-->>I: nil；仅日志
     else 完整调用
@@ -30,7 +32,7 @@ sequenceDiagram
         V->>P: progress.finish
         alt Task 未取消
             V->>H: MainActor present(outcome, UUID)
-            H->>P: 注入的能力反馈出口
+            H->>H: 调用注入的能力反馈出口
         else Task 已取消
             Note over V,P: 不呈现结果
         end
@@ -42,14 +44,17 @@ Extension 不等待图中的 Outcome；服务端认证 ready 帧和客户端写�
 
 ## 模块、输入输出与所有权
 
-| 模块 / 源码入口 | 输入 → 输出 | 责任、状态与 API |
-|---|---|---|
-| [ContextCommandHandlers](../../../ECMenu/CommandRuntime/ContextCommandHandlers.swift) | 具体 Handler → 注册表；Envelope → Invocation? | 不可变注册表按 ID 保留唯一类型；JSONDecoder 解码，无业务 I/O |
-| [ContextCommandRouter](../../../ECMenu/CommandRuntime/ContextCommandRouter.swift) | Envelope / Invocation → 已准备调用 / 在途 Task | 唯一拥有 inFlightTasks；`UUID`、Swift `Task`、`Logger`；释放时取消在途任务 |
-| [ContextCommandInvocation](../../../ECMenu/CommandRuntime/ContextCommandInvocation.swift) | 绑定命令与 Handler、执行上下文 → 一次完整执行 | 类型擦除后的编排；始终先结束进度，再依据 Task 状态决定反馈 |
-| [ContextCommandHandling](../../../ECMenu/CommandRuntime/ContextCommandHandling.swift) | 专用 Command → Sendable Outcome → MainActor 反馈 | 框架契约；具体业务平台、参数请求与反馈均由装配层注入 |
-| [ProgressReporter / Center](../../../ECMenu/CommandRuntime/Progress/ContextCommandProgressReporter.swift) | 业务进度事件 → 当前事实 / 取消意图 | Reporter 只绑定本地身份并转发；Center 是唯一可变源，见[进度说明](CommandProgress.md) |
-| [CommandAlert](../../../ECMenu/Feedback/CommandAlert.swift)及各能力反馈 | 业务 Outcome / 纯文案 → 用户反馈 | `NSAlert`、`NSApp.activate`、`runModal`、`NSSound`、`Logger`；Finder 选择仍由对应能力解释 |
+| 职责模块 | 核心类型 | 源码入口 | 输入 → 输出 | 责任、状态与 API |
+|---|---|---|---|---|
+| 产品命令注册 | `ContextCommandComposition`、`ContextCommandDependencies`、`ContextCommandRegistration` | [ContextCommandComposition.swift](../../../ECMenu/App/ContextCommandComposition.swift) | 能力依赖 → 有序 descriptor 与 Handler 工厂 → 运行时注册表 | 唯一声明主应用产品清单；连接各能力的平台和反馈实现，无业务执行 I/O |
+| Handler 注册表 | `ContextCommandHandlers`、`AnyContextCommandHandler`、`ContextCommandHandlerBuilder` | [ContextCommandHandlers.swift](../../../ECMenu/CommandRuntime/ContextCommandHandlers.swift) | 具体 Handler → 注册表；Envelope → Invocation? | 不可变注册表按 ID 保留唯一类型；JSONDecoder 解码，无业务 I/O |
+| 命令任务路由 | `ContextCommandRouter` | [ContextCommandRouter.swift](../../../ECMenu/CommandRuntime/ContextCommandRouter.swift) | Envelope / Invocation → 已准备调用 / 在途 Task | 唯一拥有 inFlightTasks；`UUID`、Swift `Task`、`Logger`；释放时取消在途任务 |
+| 单次命令调用 | `ContextCommandInvocation` | [ContextCommandInvocation.swift](../../../ECMenu/CommandRuntime/ContextCommandInvocation.swift) | 绑定命令与 Handler、执行上下文 → 一次完整执行 | 类型擦除后的编排；始终先结束进度，再依据 Task 状态决定反馈 |
+| 业务处理器契约 | `ContextCommandHandling` | [ContextCommandHandling.swift](../../../ECMenu/CommandRuntime/ContextCommandHandling.swift) | 专用 Command → Sendable Outcome → MainActor 反馈 | 框架契约；具体业务平台、参数请求与反馈均由装配层注入 |
+| 进度协作入口（组合） | `ContextCommandProgressReporter`、`ContextCommandProgressCenter` | [ContextCommandProgressReporter.swift](../../../ECMenu/CommandRuntime/Progress/ContextCommandProgressReporter.swift)、[ContextCommandProgressCenter.swift](../../../ECMenu/CommandRuntime/Progress/ContextCommandProgressCenter.swift) | 业务进度事件 → 当前事实 / 取消意图 | Reporter 只绑定本地身份并转发；Center 是唯一可变源，见[进度说明](CommandProgress.md) |
+| 通用告警 | `CommandAlertContent`、`CommandAlertSubject`、`CommandAlertText`、`CommandAlertPresenter` | [CommandAlert.swift](../../../ECMenu/Feedback/CommandAlert.swift) | 失败目标、已构造的正文 → 告警内容与原生弹窗 | `NSAlert`、`NSApp.activate`、`runModal`；纯内容构造与原生警告显示共同服务通用告警，各能力反馈另行决定日志、提示音和 Finder 选择 |
+
+注册声明与运行时注册表分别位于 `App/ContextCommandComposition.swift` 和 `CommandRuntime/ContextCommandHandlers.swift`。后者把类型擦除、builder 和按 ID 索引紧密组织在同一文件；各业务 Handler 与反馈的入口见[能力说明](../Features/Main.md)，进度组合的内部模块见[命令进度](CommandProgress.md)。
 
 ## 类型对齐
 

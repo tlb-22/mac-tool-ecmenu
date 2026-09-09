@@ -1,6 +1,6 @@
 /**
- 定义 Finder 菜单截图的命令行请求、选择上下文、菜单快照和有限失败类型。
- 统一自动化各模块的输入输出、权限事实及等待时限，保留请求参数的有效约束。
+ 定义通用 Finder 菜单自动化的选择上下文、菜单快照、有限失败与等待时限。
+ 值模型表达各模块共享的事实，权限查询、输入解析和命令验收由各自入口负责。
  */
 
 @preconcurrency import ApplicationServices
@@ -50,178 +50,6 @@ struct ItemSelection {
         self.first = first
         self.remaining = remaining
     }
-}
-
-enum CLICommand {
-    case preflight
-    case finderWindows
-    case capture(CaptureRequest)
-
-    struct CaptureRequest {
-        let context: FinderMenuContext
-        let outputURL: URL
-        let content: CaptureContent
-    }
-
-    enum CaptureContent {
-        case menu
-        case submenu(parentTitle: String)
-        case createFile(TemplateAction)
-    }
-
-    struct TemplateAction {
-        let parentTitle: String
-        let templateTitle: String
-        let expectedFileURL: URL
-    }
-
-    static func parse(_ arguments: [String]) throws -> CLICommand {
-        guard let command = arguments.first else { throw AutomationFailure.usage }
-
-        switch command {
-        case "preflight":
-            guard arguments.count == 1 else { throw AutomationFailure.usage }
-            return .preflight
-        case "finder-windows":
-            guard arguments.count == 1 else { throw AutomationFailure.usage }
-            return .finderWindows
-        case "container":
-            guard arguments.count == 3 else { throw AutomationFailure.usage }
-            let outputURL = try outputURL(arguments[1])
-            let directory = try fileURL(arguments[2])
-            var isDirectory = ObjCBool(false)
-            guard FileManager.default.fileExists(atPath: directory.path, isDirectory: &isDirectory),
-                  isDirectory.boolValue else {
-                throw AutomationFailure.directoryDoesNotExist(directory.path)
-            }
-            let openingItems = try FileManager.default.contentsOfDirectory(
-                at: directory,
-                includingPropertiesForKeys: nil
-            ).sorted { $0.lastPathComponent < $1.lastPathComponent }
-            guard let openingItem = openingItems.first else {
-                throw AutomationFailure.containerIsEmpty(directory.path)
-            }
-            return .capture(CaptureRequest(
-                context: .container(
-                    directory: directory,
-                    openingItem: openingItem
-                ),
-                outputURL: outputURL,
-                content: .menu
-            ))
-        case "items":
-            guard arguments.count >= 3 else { throw AutomationFailure.usage }
-            let outputURL = try outputURL(arguments[1])
-            let urls = try arguments.dropFirst(2).map(fileURL)
-            for url in urls where !FileManager.default.fileExists(atPath: url.path) {
-                throw AutomationFailure.itemDoesNotExist(url.path)
-            }
-            return .capture(CaptureRequest(
-                context: .items(try ItemSelection(
-                    first: urls[0],
-                    remaining: Array(urls.dropFirst())
-                )),
-                outputURL: outputURL,
-                content: .menu
-            ))
-        case "submenu":
-            guard arguments.count == 4, !arguments[3].isEmpty else {
-                throw AutomationFailure.usage
-            }
-            guard case .capture(let containerRequest) = try parse([
-                "container", arguments[1], arguments[2],
-            ]) else {
-                preconditionFailure("Container parsing must return a capture request")
-            }
-            return .capture(CaptureRequest(
-                context: containerRequest.context,
-                outputURL: containerRequest.outputURL,
-                content: .submenu(parentTitle: arguments[3])
-            ))
-        case "create-file":
-            guard arguments.count == 6,
-                  !arguments[3].isEmpty,
-                  !arguments[4].isEmpty,
-                  !arguments[5].isEmpty,
-                  !arguments[5].contains("/"),
-                  arguments[5] != ".", arguments[5] != ".." else {
-                throw AutomationFailure.usage
-            }
-            guard case .capture(let containerRequest) = try parse([
-                "container", arguments[1], arguments[2],
-            ]) else {
-                preconditionFailure("Container parsing must return a capture request")
-            }
-            let expectedFileURL = containerRequest.context.directory
-                .appendingPathComponent(arguments[5])
-            guard !FileManager.default.fileExists(atPath: expectedFileURL.path) else {
-                throw AutomationFailure.createdFileAlreadyExists(expectedFileURL.path)
-            }
-            return .capture(CaptureRequest(
-                context: containerRequest.context,
-                outputURL: containerRequest.outputURL,
-                content: .createFile(TemplateAction(
-                    parentTitle: arguments[3],
-                    templateTitle: arguments[4],
-                    expectedFileURL: expectedFileURL
-                ))
-            ))
-        default:
-            throw AutomationFailure.usage
-        }
-    }
-
-    private static func fileURL(_ path: String) throws -> URL {
-        guard path.hasPrefix("/") else {
-            throw AutomationFailure.pathMustBeAbsolute(path)
-        }
-        return URL(fileURLWithPath: path).standardizedFileURL
-    }
-
-    private static func outputURL(_ path: String) throws -> URL {
-        let outputURL = try fileURL(path)
-        guard outputURL.pathExtension.lowercased() == "png" else {
-            throw AutomationFailure.outputMustBePNG(path)
-        }
-        var isDirectory = ObjCBool(false)
-        let parent = outputURL.deletingLastPathComponent()
-        guard FileManager.default.fileExists(
-            atPath: parent.path,
-            isDirectory: &isDirectory
-        ), isDirectory.boolValue else {
-            throw AutomationFailure.outputDirectoryDoesNotExist(parent.path)
-        }
-        guard !FileManager.default.fileExists(atPath: outputURL.path) else {
-            throw AutomationFailure.outputAlreadyExists(outputURL.path)
-        }
-        return outputURL
-    }
-}
-
-struct PermissionReport {
-    let accessibility: Bool
-    let screenCapture: Bool
-
-    static func current(requestIfNeeded: Bool = false) -> PermissionReport {
-        let accessibility: Bool
-        if requestIfNeeded {
-            let options = [
-                kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true,
-            ] as CFDictionary
-            accessibility = AXIsProcessTrustedWithOptions(options)
-        } else {
-            accessibility = AXIsProcessTrusted()
-        }
-
-        let screenCapture = CGPreflightScreenCaptureAccess()
-            || (requestIfNeeded && CGRequestScreenCaptureAccess())
-        return PermissionReport(
-            accessibility: accessibility,
-            screenCapture: screenCapture
-        )
-    }
-
-    var isReady: Bool { accessibility && screenCapture }
 }
 
 struct MenuRect: Equatable {
@@ -288,9 +116,7 @@ enum AutomationFailure: Error {
     case windowCloseTimeout
     case focusLost(String)
     case menuChanged
-    case templateMenuUnavailable(String)
-    case createdFileAlreadyExists(String)
-    case createdFileTimeout(String)
+    case menuItemUnavailable(String)
     case screenshotFailed(String)
     case accessibility(AXOperation, AXError)
     case invalidAccessibilityValue(String)
@@ -330,9 +156,7 @@ enum AutomationFailure: Error {
         case .windowCloseTimeout: "window-close-timeout"
         case .focusLost: "focus-lost"
         case .menuChanged: "menu-changed"
-        case .templateMenuUnavailable: "template-menu-unavailable"
-        case .createdFileAlreadyExists: "created-file-already-exists"
-        case .createdFileTimeout: "created-file-timeout"
+        case .menuItemUnavailable: "menu-item-unavailable"
         case .screenshotFailed: "screenshot-failed"
         case .accessibility: "accessibility-error"
         case .invalidAccessibilityValue: "invalid-accessibility-value"
@@ -343,7 +167,7 @@ enum AutomationFailure: Error {
     var message: String {
         switch self {
         case .usage:
-            "Usage: FinderMenuAutomation preflight | finder-windows | container <output.png> <directory> | items <output.png> <item> [item ...] | submenu <output.png> <directory> <parent-title> | create-file <submenu.png> <directory> <parent-title> <template-title> <expected-file-name>"
+            "Invalid command arguments."
         case let .pathMustBeAbsolute(path): "Path must be absolute: \(path)"
         case let .directoryDoesNotExist(path): "Directory does not exist: \(path)"
         case let .containerIsEmpty(path):
@@ -388,12 +212,8 @@ enum AutomationFailure: Error {
         case .windowCloseTimeout: "The owned Finder window did not close."
         case let .focusLost(reason): reason
         case .menuChanged: "The Finder menu rect or titles changed during capture."
-        case let .templateMenuUnavailable(title):
-            "Expected one enabled template menu item or submenu: \(title)"
-        case let .createdFileAlreadyExists(path):
-            "The expected created file already exists: \(path)"
-        case let .createdFileTimeout(path):
-            "The template command did not create the expected ordinary file: \(path)"
+        case let .menuItemUnavailable(title):
+            "Expected one enabled menu item or submenu: \(title)"
         case let .screenshotFailed(message): "Screenshot failed: \(message)"
         case let .accessibility(operation, error):
             "\(operation.rawValue) failed with AXError \(error.rawValue)."

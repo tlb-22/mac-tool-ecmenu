@@ -8,11 +8,11 @@
 sequenceDiagram
     autonumber
     box ECMenu 主应用进程
-        participant F as 原生字段与 field editor
+        participant F as 原生输入
         participant E as 编辑会话与草稿
-        participant C as Controller 与 Operations
-        participant L as Library 与名称规则
-        participant S as 文件存储 Storage
+        participant C as 页面状态控制 / 模板应用操作
+        participant L as 模板库与名称规则
+        participant S as 模板文件存储
     end
     F->>E: E01 输入、Return、失焦或另一个字段请求
     E->>F: E02 结束输入法标记，取得最新文字
@@ -49,21 +49,22 @@ sequenceDiagram
     end
 ```
 
-图中的 `Controller 与 Operations` 是呈现提交入口和应用操作的连续交接，详细职责见[模块映射](Flows.md#导入更换与删除)。只有 Library 的 `updateName` 从权威记录读取另一个字段；读取、构造有效模板和提交之间没有 actor 异步挂起点。名称修改保持模板 ID、文件引用、内部文件名和顺序，规则允许重名。
+图中的“页面状态控制 / 模板应用操作”是呈现提交入口和应用操作的连续交接，详细职责见[模块映射](Flows.md#导入更换与删除)。只有 Library 的 `updateName` 从权威记录读取另一个字段；读取、构造有效模板和提交之间没有 actor 异步挂起点。名称修改保持模板 ID、文件引用、内部文件名和顺序，规则允许重名。
 
 编辑会话接收保存期间的新目标，最后一次请求覆盖此前目标；这些请求共享当前草稿的同一次提交，过期请求不再交接焦点。成功时先修改唯一 active 状态，再结束旧控件，避免旧控件同步产生的失焦通知误清除新目标。失败时原控件继续接收输入，Controller 不切换 loading、不重新读取或重复发布原快照。
 
 ## 模块与状态所有权
 
-| 模块 / 入口 | 输入 → 输出；所有权 | 外部边界 |
-|---|---|---|
-| [NameTextField / NativeField](../../../../ECMenu/NewFileTemplates/Presentation/FileTemplateNameTextField.swift) | 模板 ID + 字段、会话授权与 AppKit 事件 → 控件文字/可编辑性、提交/交接意图 | E01–E03；控件适配不访问模板存储 |
-| [NameEditingSession](../../../../ECMenu/NewFileTemplates/Presentation/FileTemplateNameEditingSession.swift) | 原生控件协议、保存闭包和目标请求 → Bool 交接结果 | 无直接 AppKit/文件 I/O；唯一 active 持有草稿和控件，transition 持有最后请求与 Task |
-| [NameDraft](../../../../ECMenu/NewFileTemplates/Presentation/FileTemplateNameDraft.swift) | 原始值、输入和保存闭包 → 保存结果、错误文字 | 无外部 I/O；拥有输入值和 idle/saving/saved 状态，重复提交共享 Task |
-| [NameField / FileTemplate](../../../../ECMenu/NewFileTemplates/Domain/FileTemplateNameField.swift) | 当前模板、待修改字段和值 → 有效模板或验证错误 | 纯规则，无外部 I/O |
-| [Library.updateName](../../../../ECMenu/NewFileTemplates/Persistence/FileTemplateLibrary.swift) | ID、字段和值 → 已提交清单或提交前失败 | 通过 Storage 使用 [P04 索引提交](Persistence.md#文件-api-与完成点) |
-| [PageActions](../../../../ECMenu/NewFileTemplates/Presentation/FileTemplatePageActions.swift) | 文件操作意图、编辑会话 → 先完成名称再执行 | 无直接 I/O；phase 在等待名称、执行文件操作之间转移，切页不释放占用 |
-| 设置外壳与 [NewFileTemplateSettingsPage](../../../../ECMenu/NewFileTemplates/Presentation/NewFileTemplateSettingsPage.swift) | 页面切换、后台通知、视图消失 → 请求完成编辑或更新导航 | E04；窗口会话持有编辑和文件操作对象，页面内容接收注入回调 |
+| 职责模块 | 核心类型 | 源码入口 | 输入 → 输出；所有权 | 外部边界 |
+|---|---|---|---|---|
+| 原生输入：字段适配 | `FileTemplateNameTextField`、其 `Coordinator`、`FileTemplateNameNativeField` | [FileTemplateNameTextField.swift](../../../../ECMenu/NewFileTemplates/Presentation/FileTemplateNameTextField.swift) | 模板 ID + 字段、会话授权与 AppKit 事件 → 控件文字/可编辑性、提交/交接意图 | E01–E03；控件适配不访问模板存储 |
+| 原生输入：背景点击 | `FileTemplateEditingBackground`、`FileTemplateEditingBackgroundView` | [背景视图与 SwiftUI 适配](../../../../ECMenu/NewFileTemplates/Presentation/FileTemplateEditingBackground.swift) | 未命中前景控件的鼠标点击 → `requestFinishing()`；不持有草稿 | E01；通过原生 `mouseDown` 收集点击 |
+| 编辑会话与草稿：焦点交接 | `FileTemplateNameEditingSession`、`FileTemplateNameControl` | [FileTemplateNameEditingSession.swift](../../../../ECMenu/NewFileTemplates/Presentation/FileTemplateNameEditingSession.swift) | 原生控件协议、保存闭包和目标请求 → Bool 交接结果 | 无直接 AppKit/文件 I/O；唯一 active 持有草稿和控件，transition 持有最后请求与 Task |
+| 编辑会话与草稿：字段草稿 | `FileTemplateNameDraft`、`FileTemplateNameTarget` | [FileTemplateNameDraft.swift](../../../../ECMenu/NewFileTemplates/Presentation/FileTemplateNameDraft.swift) | 原始值、输入和保存闭包 → 保存结果、错误文字 | 无外部 I/O；拥有输入值和 idle/saving/saved 状态，重复提交共享 Task |
+| 模板库与名称规则：有效名称 | `FileTemplateNameField`、`FileTemplate` | [单字段更新](../../../../ECMenu/NewFileTemplates/Domain/FileTemplateNameField.swift)、[有效模型](../../../../ECMenu/NewFileTemplates/Domain/FileTemplate.swift) | 当前模板、待修改字段和值 → 有效模板或验证错误 | 纯规则，无外部 I/O |
+| 模板库与名称规则：提交 | `FileTemplateLibrary` | [FileTemplateLibrary.swift](../../../../ECMenu/NewFileTemplates/Persistence/FileTemplateLibrary.swift)的 `updateName` | ID、字段和值 → 已提交清单或提交前失败 | 通过 Storage 使用 [P04 索引提交](Persistence.md#文件-api-与完成点) |
+| 文件操作会话 | `FileTemplatePageActions` | [FileTemplatePageActions.swift](../../../../ECMenu/NewFileTemplates/Presentation/FileTemplatePageActions.swift) | 文件操作意图、编辑会话 → 先完成名称再执行 | 无直接 I/O；phase 在等待名称、执行文件操作之间转移，切页不释放占用 |
+| 页面与导航 | `StatusPageContent`、`NewFileTemplateSettingsPage` | [设置外壳](../../../../ECMenu/Settings/StatusPageContent.swift)、[模板页面](../../../../ECMenu/NewFileTemplates/Presentation/NewFileTemplateSettingsPage.swift) | 页面切换、后台通知、视图消失 → 请求完成编辑或更新导航 | E04；窗口会话持有编辑和文件操作对象，页面内容接收注入回调 |
 
 草稿只拥有一个字段，不能保存整行旧副本覆盖其他最近提交的值。控件身份由模板 ID + 字段标识；同名模板不能共享一次编辑。名称输入和操作占用根据当前会话读取，不仅依赖下一轮 SwiftUI 属性更新。
 

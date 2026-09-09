@@ -47,24 +47,30 @@ flowchart TB
 
 图中的安装 handler 与处理事件应分别理解：`willFinishLaunching` 先接管相关事件，首次 Open Application 的具体内容由随后到达的事件决定。监听启动与首次打开事件是独立入口，不要求二者严格先后。首次普通打开只呈现状态页；首次登录项打开只请求后台形态；后续打开统一进入带监听恢复的路径。
 
+图中启动、打开和关闭分支是 `AppDelegate` 生命周期协调的内部步骤；启动来源由 `ApplicationInitialOpenSource` 解释，系统动作通过 `ApplicationLifecycleEffects` 调用，窗口显示交给 `StatusPageWindowController`。
+
 `Command-Q` 的应用菜单动作是关闭配置会话，不终止进程。`Command-W` 调用当前 key window 的标准关闭；只有状态页的 delegate 通知才改变配置形态。最后一个窗口关闭仍返回不终止应用，最小化不关闭配置会话。
 
 ## 模块、API 与所有权
 
-| 模块与源码入口 | 输入 → 输出 | 外部 API、状态与失败边界 |
-|---|---|---|
-| [ECMenuApp](../../../ECMenu/App/ECMenuApp.swift) | SwiftUI 进程入口、设置/关闭/退出菜单动作 → AppDelegate 调用 | `@NSApplicationDelegateAdaptor` 持有唯一 delegate；空 `Settings` Scene 保留应用菜单，`CommandGroup` 将设置、Command-W、Command-Q 路由到明确入口，不创建第二个设置窗口 |
-| [ApplicationComposition](../../../ECMenu/App/ApplicationComposition.swift) | 第一次需要生产依赖 → 已连接的进程级对象图 | MainActor 构造并持有配置、模板 actor/Operations/Controller、登录项、Router、进度中心、业务窗口协调器、IPC 和设置窗口控制器；注入系统适配，不另存能力状态或产品注册表 |
-| [AppDelegate](../../../ECMenu/App/AppDelegate.swift) | AppKit 生命周期、Apple Event、菜单动作、状态页关闭 → 监听或呈现操作 | `NSAppleEventManager.setEventHandler` 接管 `kAEOpenApplication` 与 `kAEShowPreferences`；唯一保存“首次 Open Application 是否已处理”。当前窗口事实由 AppKit 提供，不复制可见/最小化状态 |
-| [ApplicationInitialOpenSource](../../../ECMenu/App/ApplicationLifecycleEffects.swift) | 首次 Open Application descriptor → user / loginItem | `NSAppleEventDescriptor.paramDescriptor(forKeyword: keyAEPropData)?.enumCodeValue` 与 `keyAELaunchedAsLogInItem` 比较；不使用延时、进程参数或激活状态猜测启动来源 |
-| [ApplicationLifecycleEffects](../../../ECMenu/App/ApplicationLifecycleEffects.swift)及生产装配 | 打开、关闭、激活或监听意图 → 系统动作结果 | `NSApplication.activationPolicy()`、`setActivationPolicy` Bool、`activate(ignoringOtherApps:)`、`NSApp.keyWindow?.performClose(nil)`。目标 policy 已成立视为成功；regular 切换拒绝后不显示窗口，accessory 切换拒绝则记录错误，不伪造平台已改变 |
-| [StatusPageWindowController](../../../ECMenu/Settings/StatusPageWindowController.swift) | show/close 意图 → 唯一窗口显示、关闭及 didClose | `NSHostingController`、`NSWindow`、delegate；首次显示才创建设置控件。窗口状态和 frame 仍归 AppKit；关闭后保留实例供重开复用 |
-| [ApplicationIPCServer](../../../ECMenu/IPC/ApplicationIPCServer.swift) | 启动/恢复意图 → stopped / listening / failed | 唯一持有应用侧监听状态；`startIfNeeded` 已在监听时无操作。成功调用发布者，失败记录；底层清理完成后才上报监听失败，完整系统 API 见[IPC](IPC.md#实现边界与源码入口) |
-| [ContextCommandRouter](../../../ECMenu/CommandRuntime/ContextCommandRouter.swift)与业务窗口所有者 | 已恢复 Invocation → 独立任务及反馈 | Router 持有在途 Task；生命周期菜单不取消这些任务。参数、警告和进度窗口按各自输入/关闭规则处理，不改变配置会话的 activation policy，见[命令执行](CommandExecution.md)和[进度](CommandProgress.md) |
+| 职责模块 | 核心类型 | 源码入口 | 输入 → 输出 | 外部 API、状态与失败边界 |
+|---|---|---|---|---|
+| SwiftUI 进程入口 | `ECMenuApp` | [ECMenuApp.swift](../../../ECMenu/App/ECMenuApp.swift) | SwiftUI 进程入口、设置/关闭/退出菜单动作 → AppDelegate 调用 | `@NSApplicationDelegateAdaptor` 持有唯一 delegate；空 `Settings` Scene 保留应用菜单，`CommandGroup` 将设置、Command-W、Command-Q 路由到明确入口，不创建第二个设置窗口 |
+| 进程依赖装配 | `ApplicationComposition` | [ApplicationComposition.swift](../../../ECMenu/App/ApplicationComposition.swift) | 第一次需要生产依赖 → 已连接的进程级对象图 | MainActor 构造并持有配置、模板 actor/Operations/Controller、登录项、Router、进度中心、业务窗口协调器、IPC 和设置窗口控制器；注入系统适配，不另存能力状态或产品注册表 |
+| 应用生命周期协调 | `AppDelegate` | [AppDelegate.swift](../../../ECMenu/App/AppDelegate.swift) | AppKit 生命周期、Apple Event、菜单动作、状态页关闭 → 监听或呈现操作 | `NSAppleEventManager.setEventHandler` 接管 `kAEOpenApplication` 与 `kAEShowPreferences`；唯一保存“首次 Open Application 是否已处理”。当前窗口事实由 AppKit 提供，不复制可见/最小化状态 |
+| 生命周期边界：启动来源解释 | `ApplicationInitialOpenSource` | [ApplicationLifecycleEffects.swift](../../../ECMenu/App/ApplicationLifecycleEffects.swift) | 首次 Open Application descriptor → user / loginItem | `NSAppleEventDescriptor.paramDescriptor(forKeyword: keyAEPropData)?.enumCodeValue` 与 `keyAELaunchedAsLogInItem` 比较；不使用延时、进程参数或激活状态猜测启动来源 |
+| 生命周期边界：系统效果适配 | `ApplicationLifecycleEffects`、`AppDelegate.effects` | [ApplicationLifecycleEffects.swift](../../../ECMenu/App/ApplicationLifecycleEffects.swift)、[AppDelegate.swift](../../../ECMenu/App/AppDelegate.swift) | 打开、关闭、激活或监听意图 → 系统动作结果 | `NSApplication.activationPolicy()`、`setActivationPolicy` Bool、`activate(ignoringOtherApps:)`、`NSApp.keyWindow?.performClose(nil)`。目标 policy 已成立视为成功；regular 切换拒绝后不显示窗口，accessory 切换拒绝则记录错误，不伪造平台已改变 |
+| 设置窗口宿主 | `StatusPageWindowController` | [StatusPageWindowController.swift](../../../ECMenu/Settings/StatusPageWindowController.swift) | show/close 意图 → 唯一窗口显示、关闭及 didClose | `NSHostingController`、`NSWindow`、delegate；首次显示才创建设置控件。窗口状态和 frame 仍归 AppKit；关闭后保留实例供重开复用 |
+| 主应用 IPC 入口 | `ApplicationIPCServer` | [ApplicationIPCServer.swift](../../../ECMenu/IPC/ApplicationIPCServer.swift) | 启动/恢复意图 → stopped / listening / failed | 唯一持有应用侧监听状态；`startIfNeeded` 已在监听时无操作。成功调用发布者，失败记录；底层清理完成后才上报监听失败，完整系统 API 见[IPC](IPC.md#实现边界与源码入口) |
+| 命令任务运行 | `ContextCommandRouter` | [ContextCommandRouter.swift](../../../ECMenu/CommandRuntime/ContextCommandRouter.swift) | 已恢复 Invocation → 独立任务及反馈 | Router 持有在途 Task；生命周期菜单不取消这些任务。参数、警告和进度窗口按各自输入/关闭规则处理，不改变配置会话的 activation policy，见[命令执行](CommandExecution.md)和[进度](CommandProgress.md) |
 
 `ApplicationComposition` 是依赖与生命周期所有者，不是服务查找器。能力通过初始化参数取得窄边界，业务调用不回到 composition 查找对象；测试可直接注入 `ApplicationLifecycleEffects`，执行相同事件处理逻辑。
 
+生命周期边界的启动来源值与效果接口共处 `ApplicationLifecycleEffects.swift`；生产效果闭包在 [AppDelegate.swift](../../../ECMenu/App/AppDelegate.swift) 中连接 AppKit 和窗口宿主。命令产品清单及 Handler 工厂由 [ContextCommandComposition.swift](../../../ECMenu/App/ContextCommandComposition.swift) 声明，见[命令执行模块映射](CommandExecution.md#模块输入输出与所有权)。
+
 ## 窗口与呈现状态
+
+下图展开 `StatusPageWindowController` 的内部显示、关闭和位置恢复步骤；窗口状态仍由 AppKit 提供。
 
 ```mermaid
 flowchart TB

@@ -100,6 +100,19 @@
 			);
 			target = I10000000000000000000006 /* ContextCommandSender */;
 		};
+		Q1000000000000000000000A /* Exceptions for "Tests/FinderMenuCapture" folder in "FinderMenuAutomation" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Contexts/BasicContextScenarios.sh,
+				Features/CopyPath/CopyPathCaptureExpectations.sh,
+				Features/ImageCompression/ImageCompressionCaptureScenario.sh,
+				Features/NewFile/NewFileCaptureExpectations.sh,
+				Features/Visibility/VisibilityCaptureExpectations.sh,
+				FinderMenuCaptureComposition.sh,
+				Languages/CaptureLanguages.sh,
+			);
+			target = Q10000000000000000000006 /* FinderMenuAutomation */;
+		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -151,9 +164,12 @@
 			path = Tests/ECMenuPreviews;
 			sourceTree = "<group>";
 		};
-		Q10000000000000000000002 /* Tests/FinderMenuCapture/Support */ = {
+		Q10000000000000000000002 /* Tests/FinderMenuCapture */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = Tests/FinderMenuCapture/Support;
+			exceptions = (
+				Q1000000000000000000000A /* Exceptions for "Tests/FinderMenuCapture" folder in "FinderMenuAutomation" target */,
+			);
+			path = Tests/FinderMenuCapture;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -221,7 +237,7 @@
 				E10000000000000000000003 /* Tests/ECMenuTests */,
 				H10000000000000000000007 /* Tests/ECMenuFinderExtensionTests */,
 				I10000000000000000000002 /* Tests/Integration */,
-				Q10000000000000000000002 /* Tests/FinderMenuCapture/Support */,
+				Q10000000000000000000002 /* Tests/FinderMenuCapture */,
 				H1000000000000000000000F /* Tests/Support */,
 				2863D49030273A440090DB7A /* Products */,
 			);
@@ -407,7 +423,7 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				Q10000000000000000000002 /* Tests/FinderMenuCapture/Support */,
+				Q10000000000000000000002 /* Tests/FinderMenuCapture */,
 			);
 			name = FinderMenuAutomation;
 			packageProductDependencies = (

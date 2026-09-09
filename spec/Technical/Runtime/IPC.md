@@ -8,9 +8,9 @@ Finder Extension 在菜单构建时冻结上下文并准备类型化命令；用
 
 ```mermaid
 sequenceDiagram
-    participant C as Finder Extension 客户端
+    participant C as Finder Extension 认证客户端
     participant K as macOS 内核与运行态身份 API
-    participant S as 主应用连接处理器
+    participant S as 主应用监听与单连接处理（组合）
     C->>K: connect(App Group Unix socket)
     K->>S: accept 返回独立连接
     par 客户端验证主应用
@@ -79,21 +79,23 @@ App Group 只让沙箱 Extension 到达组容器；权限为当前用户读写�
 
 共享请求类型在 `ECMenuShared/Contracts/IPC`，操作所需的系统实现位于 `ECMenuShared/Platform/IPC`。这些文件由两个产品共同编译；它们不持有主应用配置或模板库。Finder 菜单到命令的完整调用关系见[菜单执行流](MenuExecution.md)。
 
-| 模块与源码入口 | 输入 → 输出 | 实際外部 API、完成点与所有权 |
-|---|---|---|
-| [请求契约](../../../ECMenuShared/Contracts/IPC/ApplicationIPCRequest.swift)与[调用接口](../../../ECMenuShared/Contracts/IPC/ApplicationIPCTransport.swift) | 命令信封或配置查询 → `ApplicationIPCRequest`；发送/查询 → completion | `JSONEncoder/JSONDecoder` 是内存编解码，不执行文件 I/O。请求使用显式 kind 和字段；发送完成只代表完整写出，查询成功交付解码后的快照 |
-| [端点与构建身份](../../../ECMenuShared/Platform/IPC/ApplicationIPC.swift) | 产品 Bundle 的身份值 → App Group 内 socket URL | `Bundle.object(forInfoDictionaryKey:)` 读取构建注入的值；`FileManager.containerURL(forSecurityApplicationGroupIdentifier:)` 返回容器或 nil。容器缺失是可报告错误，构建身份缺失/未展开是实现不变量失败 |
-| [运行态认证](../../../ECMenuShared/Platform/IPC/LocalSocketPeerValidator.swift) | connected descriptor、预期 signing identifier → 验证成功或错误 | `getsockopt(SOL_LOCAL, LOCAL_PEERTOKEN)` 读取 `audit_token_t` 并核对长度；`SecTaskCreateWithAuditToken` 返回运行态任务或 nil；`ProcessCodeRequirement.allOf` 构造要求，`SecTaskValidateForRequirement` 返回 Bool 或抛错。两端在业务正文前各自执行，不读取正文声明来授予权限 |
-| [认证就绪 ACK](../../../ECMenuShared/Platform/IPC/LocalSocketAuthenticationReadyAcknowledgment.swift) | 服务端身份验证成功 → 空 Data；客户端收到 frame → 确认空正文 | 纯协议规则，无额外系统调用；非空 ACK 被拒绝。这个消息不携带命令接管状态 |
-| [连接期限](../../../ECMenuShared/Platform/IPC/LocalSocketDeadline.swift) | 有限正秒数 → 同一个单调截止时间及剩余毫秒 | `DispatchTime.now()`；期限到达抛错。剩余时间用于 `poll` 与配置响应等待，短读短写不会延长期限 |
-| [连接与字节 I/O](../../../ECMenuShared/Platform/IPC/LocalSocketIO.swift) | 端点路径、descriptor、Data 或字节数、期限 → 已连接 descriptor / 完整字节 / Error | `socket(AF_UNIX, SOCK_STREAM)`、`setsockopt(SO_NOSIGPIPE)`、`fcntl(O_NONBLOCK)`、`connect`、`getsockopt(SO_ERROR)`；`poll`、`send/recv(MSG_DONTWAIT)`、`close`。连接失败时关闭新 descriptor；连接成功后由调用者唯一拥有。`EINTR/EAGAIN` 继续，EOF、系统错误或超时结束 |
-| [frame 编解码](../../../ECMenuShared/Platform/IPC/ApplicationIPCFrame.swift) | 正文 Data ↔ 八字节 UInt64 大端长度加正文 | 通过上行精确读写完成 frame，使用 `Data` 与内存字节转换；长度不能表示为 `Int` 时拒绝。只增加协议边界，不创建或持有第二个 descriptor |
-| [端点绑定与清理](../../../ECMenuShared/Platform/IPC/LocalSocketEndpoint.swift) | socket URL → descriptor 与 device/inode 身份；停止请求 → 关闭并清理自己的路径 | `FileManager.createDirectory`、`open/lockf` 路径锁、`bind/chmod/listen`、`accept`、`lstat/unlink`。锁序列化 stale 清理、bind 与 stop；只在连接明确报告 `ECONNREFUSED` 时认定 stale，路径消失可重试。非 socket 或其他占用失败不删除。退出检查 device/inode，避免删除新监听者端点 |
-| [认证客户端](../../../ECMenuShared/Platform/IPC/AuthenticatedLocalSocketClient.swift) | send / fetch 请求 → 异步 completion，或测试用同步结果 | 并发 `DispatchQueue` 为每次操作建立独立连接；认证后等待空 ACK，再写请求；配置查询另外读取响应。`defer` 关闭该连接，不等待业务完成 |
-| [监听器](../../../ECMenuShared/Platform/IPC/AuthenticatedLocalSocketServer.swift) | 生产身份、sink/provider 回调、创建/停止意图 → 正在监听或失败回调 | `DispatchSource.makeReadSource`、串行 accept queue、并发 connection queue、`NSLock` 与延迟 `DispatchWorkItem`。唯一持有监听 descriptor 与 source；只在取消回调关闭 descriptor，再报告失败；暂停状态下停止会先取消重试并平衡 source 的 suspend/resume |
-| [单连接处理器](../../../ECMenuShared/Platform/IPC/AuthenticatedLocalSocketConnectionHandler.swift) | accepted descriptor → 一条已解码请求的 sink 调用或一份查询响应 | 上述认证/frame API、`JSONDecoder/JSONEncoder`、OSLog。handler 在 `defer` 唯一关闭传入连接；配置等待器使用 `NSLock`、`DispatchSemaphore.wait(timeout:)` 接受一次异步结果，重复 fulfill 是实现错误，等待期限失败释放连接 |
-| [应用请求适配](../../../ECMenu/IPC/ApplicationIPCServer.swift) | 已认证请求、注入的命令/快照边界 → 主应用调用或查询回复 | 以 `Task @MainActor` 适配应用依赖；监听 `state` 唯一保存在此。业务快照由[菜单配置能力](CommandMenuSettings.md)投影；命令调用不向传输层返回业务完成状态 |
-| [变化提示适配](../../../ECMenuShared/Platform/IPC/CommandMenuSettingsSignal.swift) | 状态可能已变化 → 无正文系统通知 | `DistributedNotificationCenter.postNotificationName`；无到达回执。Extension 持有自己的 observer 与缓存，具体状态机见[副本同步](MenuExecution.md#配置副本同步) |
+| 职责模块 | 核心类型 | 源码入口 | 输入 → 输出 | 实際外部 API、完成点与所有权 |
+|---|---|---|---|---|
+| 请求与调用契约 | `ApplicationIPCRequest`、`ContextCommandSending`、`CommandMenuSettingsRequesting` | [ApplicationIPCRequest.swift](../../../ECMenuShared/Contracts/IPC/ApplicationIPCRequest.swift)、[ApplicationIPCTransport.swift](../../../ECMenuShared/Contracts/IPC/ApplicationIPCTransport.swift) | 命令信封或配置查询 → `ApplicationIPCRequest`；发送/查询 → completion | `JSONEncoder/JSONDecoder` 是内存编解码，不执行文件 I/O。请求使用显式 kind 和字段；发送完成只代表完整写出，查询成功交付解码后的快照 |
+| 端点定位与构建身份 | `ApplicationIPC` | [ApplicationIPC.swift](../../../ECMenuShared/Platform/IPC/ApplicationIPC.swift) | 产品 Bundle 的身份值 → App Group 内 socket URL | `Bundle.object(forInfoDictionaryKey:)` 读取构建注入的值；`FileManager.containerURL(forSecurityApplicationGroupIdentifier:)` 返回容器或 nil。容器缺失是可报告错误，构建身份缺失/未展开是实现不变量失败 |
+| 运行态认证 | `LocalSocketPeerValidator` | [LocalSocketPeerValidator.swift](../../../ECMenuShared/Platform/IPC/LocalSocketPeerValidator.swift) | connected descriptor、预期 signing identifier → 验证成功或错误 | `getsockopt(SOL_LOCAL, LOCAL_PEERTOKEN)` 读取 `audit_token_t` 并核对长度；`SecTaskCreateWithAuditToken` 返回运行态任务或 nil；`ProcessCodeRequirement.allOf` 构造要求，`SecTaskValidateForRequirement` 返回 Bool 或抛错。两端在业务正文前各自执行，不读取正文声明来授予权限 |
+| 认证就绪协议 | `LocalSocketAuthenticationReadyAcknowledgment` | [LocalSocketAuthenticationReadyAcknowledgment.swift](../../../ECMenuShared/Platform/IPC/LocalSocketAuthenticationReadyAcknowledgment.swift) | 服务端身份验证成功 → 空 Data；客户端收到 frame → 确认空正文 | 纯协议规则，无额外系统调用；非空 ACK 被拒绝。这个消息不携带命令接管状态 |
+| 连接期限 | `LocalSocketDeadline` | [LocalSocketDeadline.swift](../../../ECMenuShared/Platform/IPC/LocalSocketDeadline.swift) | 有限正秒数 → 同一个单调截止时间及剩余毫秒 | `DispatchTime.now()`；期限到达抛错。剩余时间用于 `poll` 与配置响应等待，短读短写不会延长期限 |
+| 连接与字节 I/O | `LocalSocketIO` | [LocalSocketIO.swift](../../../ECMenuShared/Platform/IPC/LocalSocketIO.swift) | 端点路径、descriptor、Data 或字节数、期限 → 已连接 descriptor / 完整字节 / Error | `socket(AF_UNIX, SOCK_STREAM)`、`setsockopt(SO_NOSIGPIPE)`、`fcntl(O_NONBLOCK)`、`connect`、`getsockopt(SO_ERROR)`；`poll`、`send/recv(MSG_DONTWAIT)`、`close`。连接失败时关闭新 descriptor；连接成功后由调用者唯一拥有。`EINTR/EAGAIN` 继续，EOF、系统错误或超时结束 |
+| frame 编解码 | `ApplicationIPCFrame`、`LocalSocketIO` 的 frame 方法 | [ApplicationIPCFrame.swift](../../../ECMenuShared/Platform/IPC/ApplicationIPCFrame.swift) | 正文 Data ↔ 八字节 UInt64 大端长度加正文 | 通过上行精确读写完成 frame，使用 `Data` 与内存字节转换；长度不能表示为 `Int` 时拒绝。只增加协议边界，不创建或持有第二个 descriptor |
+| 端点绑定与清理 | `LocalSocketIO` 的监听/清理方法、`BoundSocket`、`SocketFileIdentity` | [LocalSocketEndpoint.swift](../../../ECMenuShared/Platform/IPC/LocalSocketEndpoint.swift) | socket URL → descriptor 与 device/inode 身份；停止请求 → 关闭并清理自己的路径 | `FileManager.createDirectory`、`open/lockf` 路径锁、`bind/chmod/listen`、`accept`、`lstat/unlink`。锁序列化 stale 清理、bind 与 stop；只在连接明确报告 `ECONNREFUSED` 时认定 stale，路径消失可重试。非 socket 或其他占用失败不删除。退出检查 device/inode，避免删除新监听者端点 |
+| 认证客户端 | `AuthenticatedLocalSocketClient` | [AuthenticatedLocalSocketClient.swift](../../../ECMenuShared/Platform/IPC/AuthenticatedLocalSocketClient.swift) | send / fetch 请求 → 异步 completion，或测试用同步结果 | 并发 `DispatchQueue` 为每次操作建立独立连接；认证后等待空 ACK，再写请求；配置查询另外读取响应。`defer` 关闭该连接，不等待业务完成 |
+| 监听会话 | `AuthenticatedLocalSocketServer` | [AuthenticatedLocalSocketServer.swift](../../../ECMenuShared/Platform/IPC/AuthenticatedLocalSocketServer.swift) | 生产身份、sink/provider 回调、创建/停止意图 → 正在监听或失败回调 | `DispatchSource.makeReadSource`、串行 accept queue、并发 connection queue、`NSLock` 与延迟 `DispatchWorkItem`。唯一持有监听 descriptor 与 source；只在取消回调关闭 descriptor，再报告失败；暂停状态下停止会先取消重试并平衡 source 的 suspend/resume |
+| 单连接处理 | `AuthenticatedLocalSocketConnectionHandler`、`CommandMenuSettingsResponseWaiter` | [AuthenticatedLocalSocketConnectionHandler.swift](../../../ECMenuShared/Platform/IPC/AuthenticatedLocalSocketConnectionHandler.swift) | accepted descriptor → 一条已解码请求的 sink 调用或一份查询响应 | 上述认证/frame API、`JSONDecoder/JSONEncoder`、OSLog。handler 在 `defer` 唯一关闭传入连接；配置等待器使用 `NSLock`、`DispatchSemaphore.wait(timeout:)` 接受一次异步结果，重复 fulfill 是实现错误，等待期限失败释放连接 |
+| 主应用 IPC 入口 | `ApplicationIPCServer`、`ApplicationIPCListening` | [ApplicationIPCServer.swift](../../../ECMenu/IPC/ApplicationIPCServer.swift) | 已认证请求、注入的命令/快照边界 → 主应用调用或查询回复 | 以 `Task @MainActor` 适配应用依赖；监听 `state` 唯一保存在此。业务快照由[菜单配置能力](CommandMenuSettings.md)投影；命令调用不向传输层返回业务完成状态 |
+| 菜单变化系统信号 | `CommandMenuSettingsChannel` 的通知适配 | [CommandMenuSettingsSignal.swift](../../../ECMenuShared/Platform/IPC/CommandMenuSettingsSignal.swift) | 状态可能已变化 → 无正文系统通知 | `DistributedNotificationCenter.postNotificationName`；无到达回执。Extension 持有自己的 observer 与缓存，具体状态机见[副本同步](MenuExecution.md#配置副本同步) |
+
+`LocalSocketIO` 按字节 I/O、frame 和端点管理分布在三个文件：后两部分通过 Swift extension 实现，职责和源码入口以上表为准。`CommandMenuSettingsChannel` 的键与编解码定义位于共享契约，通知实现位于平台文件；`CommandMenuSettingsResponseWaiter` 仅服务单个连接，作为处理器的私有类型保留在同一文件。
 
 传输预期失败由 [ApplicationIPCError](../../../ECMenuShared/Platform/IPC/ApplicationIPCError.swift) 表达，包括容器/路径不可用、身份验证失败、POSIX 错误、连接提前关闭、期限、长度溢出和无效 ACK。持久化数据升级、业务失败和界面交互状态不通过这个类型表达。
 

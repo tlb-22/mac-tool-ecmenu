@@ -54,7 +54,7 @@ enum ContextCommandHandlerBuilder {
     }
 }
 
-/// 同时为命令执行和主应用状态页提供单一产品注册源。
+/// 保存产品装配生成的运行时注册表，供命令路由和状态页读取。
 @MainActor
 struct ContextCommandHandlers {
     /// 状态页按注册顺序展示的完整命令目录。

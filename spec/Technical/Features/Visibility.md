@@ -7,13 +7,13 @@
 ```mermaid
 sequenceDiagram
     box Finder Extension 进程
-        participant E as VisibilityFeature / 菜单事实
+        participant E as 菜单事实与命令构造
     end
     box ECMenu 主应用进程
-        participant H as VisibilityHandler / Execution
-        participant R as VisibilityRules
-        participant P as VisibilityPlatform
-        participant F as VisibilityFeedback
+        participant H as 可见性用例
+        participant R as 可见性规则与结果
+        participant P as 隐藏属性适配
+        participant F as 结果反馈
     end
     participant S as 文件系统
     E->>S: resourceValues：读取普通名称对象的 isHidden
@@ -37,13 +37,13 @@ sequenceDiagram
 
 ## 模块、输入输出与状态
 
-| 模块 / 源码入口 | 输入 → 输出 | 外部边界与状态 |
-|---|---|---|
-| [VisibilityMenuFactsReader](../../../ECMenuFinderExtension/Commands/Visibility/VisibilityMenuFactsReader.swift)、[VisibilityFeatures](../../../ECMenuFinderExtension/Commands/Visibility/VisibilityFeatures.swift) | items 选择 → 隐藏事实 → 菜单命令 | `URL.resourceValues`；未知/点号不促成叶子出现，混合状态可同时出现两个命令 |
-| [VisibilityRules](../../../ECMenu/Commands/Visibility/Domain/VisibilityRules.swift) | 选择与操作 → 不含点号名称的计划 | 纯规则；计划和结果是本次执行的不可变值 |
-| [VisibilityHandlers](../../../ECMenu/Commands/Visibility/Application/VisibilityHandlers.swift)、[VisibilityExecution](../../../ECMenu/Commands/Visibility/Application/VisibilityExecution.swift) | 命令、注入平台能力 → Report | 命令类型固定 hide/show；执行器拥有本批成功计数与失败集合，逐项检查 Task 取消 |
-| [VisibilitySystem](../../../ECMenu/Commands/Visibility/Platform/VisibilitySystem.swift) | URL + 目标 Bool → 完成 / throws | Foundation 资源属性写入；无独立缓存 |
-| [VisibilityAlertContent](../../../ECMenu/Commands/Visibility/Presentation/VisibilityAlertContent.swift)、[VisibilityFeedback](../../../ECMenu/Commands/Visibility/Presentation/VisibilityFeedback.swift) | Report + 操作 → 文案与反馈 | 纯文案分类；`Logger`、`NSAlert`、`NSSound` 通过[统一反馈](../Runtime/CommandExecution.md)呈现 |
+| 职责模块 | 核心类型 | 源码入口 | 输入 → 输出 | 外部边界与状态 |
+|---|---|---|---|---|
+| 菜单事实与命令构造 | `VisibilityMenuFactsReader`、`VisibilitySelectionMenuFacts`、`HideItemsFeature` / `ShowItemsFeature` | [事实读取](../../../ECMenuFinderExtension/Commands/Visibility/VisibilityMenuFactsReader.swift)、[纯汇总](../../../ECMenuFinderExtension/Commands/Visibility/VisibilityMenuFacts.swift)、[菜单命令](../../../ECMenuFinderExtension/Commands/Visibility/VisibilityFeatures.swift) | items 选择 → 隐藏事实 → 菜单命令 | `URL.resourceValues`；未知/点号不促成叶子出现，混合状态可同时出现两个命令 |
+| 可见性规则与结果 | `VisibilityRules`、`VisibilityPlan`、`VisibilityReport` | [VisibilityRules.swift](../../../ECMenu/Commands/Visibility/Domain/VisibilityRules.swift) | 选择与操作 → 不含点号名称的计划 | 纯规则；计划和结果是本次执行的不可变值 |
+| 可见性用例 | `VisibilityHandler<Command>`、`VisibilityExecution` | [VisibilityHandlers.swift](../../../ECMenu/Commands/Visibility/Application/VisibilityHandlers.swift)、[VisibilityExecution.swift](../../../ECMenu/Commands/Visibility/Application/VisibilityExecution.swift) | 命令、注入平台能力 → Report | 命令类型固定 hide/show；执行器拥有本批成功计数与失败集合，逐项检查 Task 取消 |
+| 隐藏属性适配 | `VisibilityPlatform` | [接口声明](../../../ECMenu/Commands/Visibility/Application/VisibilityExecution.swift)、[系统实现](../../../ECMenu/Commands/Visibility/Platform/VisibilitySystem.swift) | URL + 目标 Bool → 完成 / throws | Foundation 资源属性写入；无独立缓存 |
+| 结果反馈 | `VisibilityAlertContent`、`VisibilityFeedback` | [VisibilityAlertContent.swift](../../../ECMenu/Commands/Visibility/Presentation/VisibilityAlertContent.swift)、[VisibilityFeedback.swift](../../../ECMenu/Commands/Visibility/Presentation/VisibilityFeedback.swift) | Report + 操作 → 文案与反馈 | 纯文案分类；`Logger`、`NSAlert`、`NSSound` 通过[统一反馈](../Runtime/CommandExecution.md)呈现 |
 
 没有持久化配置副本；文件系统拥有最终隐藏属性，任务只保存本次执行事实。`VisibilityIssue` 从底层错误快照推导错误类别，避免重复状态。
 

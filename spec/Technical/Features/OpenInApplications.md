@@ -6,12 +6,14 @@
 
 ```mermaid
 sequenceDiagram
-    participant E as Finder Extension 进程
+    box Finder Extension 进程
+        participant E as 菜单命令构造
+    end
     box ECMenu 主应用进程
-        participant H as Handler / Execution
-        participant R as OpenInApplicationRules
-        participant P as OpenInApplicationPlatform
-        participant F as OpenInApplicationFeedback
+        participant H as 打开用例
+        participant R as 打开规则与结果
+        participant P as 文件与应用适配
+        participant F as 结果反馈
     end
     participant S as 文件系统 / Launch Services
     participant A as VS Code 或 iTerm2 进程
@@ -39,13 +41,13 @@ sequenceDiagram
 
 ## 模块、输入输出与状态
 
-| 模块 / 源码入口 | 输入 → 输出 | 状态 / 外部调用 |
-|---|---|---|
-| [OpenInApplicationFeatures](../../../ECMenuFinderExtension/Commands/OpenInApplication/OpenInApplicationFeatures.swift) | 单个目标事实 → 专用 Command? | 纯条件；上下文读取与应用查询由菜单公共边界提供 |
-| [OpenInApplicationRules](../../../ECMenu/Commands/OpenInApplication/Domain/OpenInApplicationRules.swift) | 命令 + 目标状态 + 应用 URL? → Plan / Failure | 无 I/O；iTerm2 只接受目录，VS Code 接受存在的文件或目录 |
-| [Handlers](../../../ECMenu/Commands/OpenInApplication/Application/OpenInApplicationHandlers.swift)、[Execution](../../../ECMenu/Commands/OpenInApplication/Application/OpenInApplicationExecution.swift) | 命令、注入平台 → Outcome | 单次调用保存不可变事实/计划；等待系统回调，不保存另一份应用状态 |
-| [OpenInApplicationSystem](../../../ECMenu/Commands/OpenInApplication/Platform/OpenInApplicationSystem.swift) | 路径、应用声明、计划 → 事实 / 打开结果 | FileManager、NSWorkspace 和 continuation；实际输入输出见下表 |
-| [AlertContent](../../../ECMenu/Commands/OpenInApplication/Presentation/OpenInApplicationAlertContent.swift)、[Feedback](../../../ECMenu/Commands/OpenInApplication/Presentation/OpenInApplicationFeedback.swift) | Outcome、应用名、UUID → 固定失败说明 / 日志 | 纯文案与 `NSAlert`、`Logger`；成功不增加反馈窗口 |
+| 职责模块 | 核心类型 | 源码入口 | 输入 → 输出 | 状态 / 外部调用 |
+|---|---|---|---|---|
+| 菜单命令构造 | `OpenInApplicationFeature<Command>` | [OpenInApplicationFeatures.swift](../../../ECMenuFinderExtension/Commands/OpenInApplication/OpenInApplicationFeatures.swift) | 单个目标事实 → 专用 Command? | 纯条件；上下文读取与应用查询由菜单公共边界提供 |
+| 打开规则与结果 | `OpenInApplicationRules`、`OpenInApplicationPlan`、`OpenInApplicationOutcome` | [OpenInApplicationRules.swift](../../../ECMenu/Commands/OpenInApplication/Domain/OpenInApplicationRules.swift) | 命令 + 目标状态 + 应用 URL? → Plan / Failure | 无 I/O；iTerm2 只接受目录，VS Code 接受存在的文件或目录 |
+| 打开用例 | `OpenInApplicationHandler<Command>`、`OpenInApplicationExecution` | [OpenInApplicationHandlers.swift](../../../ECMenu/Commands/OpenInApplication/Application/OpenInApplicationHandlers.swift)、[OpenInApplicationExecution.swift](../../../ECMenu/Commands/OpenInApplication/Application/OpenInApplicationExecution.swift) | 命令、注入平台 → Outcome | 单次调用保存不可变事实/计划；等待系统回调，不保存另一份应用状态 |
+| 文件与应用适配 | `OpenInApplicationPlatform` | [接口声明](../../../ECMenu/Commands/OpenInApplication/Application/OpenInApplicationExecution.swift)、[系统实现](../../../ECMenu/Commands/OpenInApplication/Platform/OpenInApplicationSystem.swift) | 路径、应用声明、计划 → 事实 / 打开结果 | FileManager、NSWorkspace 和 continuation；实际输入输出见下表 |
+| 结果反馈 | `OpenInApplicationAlertContent`、`OpenInApplicationFeedback` | [OpenInApplicationAlertContent.swift](../../../ECMenu/Commands/OpenInApplication/Presentation/OpenInApplicationAlertContent.swift)、[OpenInApplicationFeedback.swift](../../../ECMenu/Commands/OpenInApplication/Presentation/OpenInApplicationFeedback.swift) | Outcome、应用名、UUID → 固定失败说明 / 日志 | 纯文案与 `NSAlert`、`Logger`；成功不增加反馈窗口 |
 
 没有业务持久化状态。Extension 与主应用各自查询应用可定位性，应用安装/移动/删除可以发生在菜单和执行之间；执行必须重新查询。
 

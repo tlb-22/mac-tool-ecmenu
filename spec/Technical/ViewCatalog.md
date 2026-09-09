@@ -19,6 +19,7 @@
 | 主设置窗口 | `StatusPageWindowController` · [StatusPageWindowController.swift](../../ECMenu/Settings/StatusPageWindowController.swift) | 普通打开应用；创建并保留承载三个页面的唯一窗口，处理显示、最小化、关闭与位置恢复 |
 | 图片压缩设置弹窗 | `ImageCompressionSettingsWindowController` · [ImageCompressionSettingsWindow.swift](../../ECMenu/Commands/ImageCompression/Presentation/ImageCompressionSettingsWindow.swift) | 执行压缩命令后收集参数；预览为 `image-compression-settings`，验证错误场景追加 `-validation-error` |
 | 模板文件选择面板 | `FileTemplateFileChooser` · [FileTemplateFileChooser.swift](../../ECMenu/NewFileTemplates/Presentation/FileTemplateFileChooser.swift) | 添加或更换模板；配置并显示系统 `NSOpenPanel`，返回选择的文件或取消 |
+| 模板操作错误弹窗 | `NewFileTemplateSettingsPage` 的 `.alert` · [NewFileTemplateSettingsPage.swift](../../ECMenu/NewFileTemplates/Presentation/NewFileTemplateSettingsPage.swift) | 模板操作失败时由 `FileTemplatePageActions.errorMessage` 驱动；确认关闭后清除本次错误 |
 | 命令警告弹窗 | `CommandAlertPresenter` · [CommandAlert.swift](../../ECMenu/Feedback/CommandAlert.swift) | 命令反馈提供标题与正文，共用系统 `NSAlert` 呈现和确认关闭 |
 | 命令进度窗口 | `ContextCommandProgressWindowController` · [ContextCommandProgressWindowController.swift](../../ECMenu/Feedback/Progress/ContextCommandProgressWindowController.swift) | 展示一个或多个耗时任务；预览为 `context-command-progress-single` / `context-command-progress-multiple` |
 

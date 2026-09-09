@@ -6,12 +6,14 @@
 
 ```mermaid
 sequenceDiagram
-    participant E as Finder Extension 进程
+    box Finder Extension 进程
+        participant E as 菜单命令构造
+    end
     box ECMenu 主应用进程
-        participant H as CopyPathHandler
-        participant P as CopyPathPlatform
-        participant R as CopyPathRules
-        participant F as CopyPathFeedback
+        participant H as 复制用例
+        participant P as 文件与剪贴板适配
+        participant R as 复制规则与结果
+        participant F as 结果反馈
     end
     participant S as 文件系统 / 系统剪贴板
     E->>H: 经 IPC 与 Router：CopyPathCommand
@@ -42,13 +44,13 @@ sequenceDiagram
 
 ## 模块、输入输出与状态
 
-| 模块 / 源码入口 | 输入 → 输出 | 状态与系统调用 |
-|---|---|---|
-| [CopyPathFeature](../../../ECMenuFinderExtension/Commands/CopyPath/CopyPathFeature.swift) | 菜单语义快照 → CopyPathCommand? | 纯值转换；发送复用 IPC，目标来源 API 见 Finder 公共说明 |
-| [CopyPathHandler](../../../ECMenu/Commands/CopyPath/CopyPathHandler.swift) | 类型化命令、平台能力 → success / failure / cancelled | 单次执行拥有计划；Swift Task 取消与 MainActor 切换 |
-| [CopyPathRules](../../../ECMenu/Commands/CopyPath/CopyPathRules.swift) | 有序路径 + 存在集合 → 完整计划 / targetUnavailable | 无外部 I/O；全部目标有效才生成正文，保持顺序 |
-| [CopyPathSystem](../../../ECMenu/Commands/CopyPath/CopyPathSystem.swift) | 路径 → 存在集合；String → Bool | `lstat` 与 NSPasteboard；通过 CopyPathPlatform 注入 |
-| [CopyPathFeedback](../../../ECMenu/Commands/CopyPath/CopyPathFeedback.swift) | 已完成结果 + 本地 UUID → 日志或提示音 | `Logger`、`NSSound.beep()`；不保存业务状态 |
+| 职责模块 | 核心类型 | 源码入口 | 输入 → 输出 | 状态与系统调用 |
+|---|---|---|---|---|
+| 菜单命令构造 | `CopyPathFeature` | [CopyPathFeature.swift](../../../ECMenuFinderExtension/Commands/CopyPath/CopyPathFeature.swift) | 菜单语义快照 → CopyPathCommand? | 纯值转换；发送复用 IPC，目标来源 API 见 Finder 公共说明 |
+| 复制用例 | `CopyPathHandler` | [CopyPathHandler.swift](../../../ECMenu/Commands/CopyPath/CopyPathHandler.swift) | 类型化命令、平台能力 → success / failure / cancelled | 单次执行拥有计划；Swift Task 取消与 MainActor 切换 |
+| 复制规则与结果 | `CopyPathRules`、`CopyPathPlan`、`CopyPathOutcome` | [CopyPathRules.swift](../../../ECMenu/Commands/CopyPath/CopyPathRules.swift) | 有序路径 + 存在集合 → 完整计划 / targetUnavailable | 无外部 I/O；全部目标有效才生成正文，保持顺序 |
+| 文件与剪贴板适配 | `CopyPathPlatform` | [接口声明](../../../ECMenu/Commands/CopyPath/CopyPathHandler.swift)、[系统实现](../../../ECMenu/Commands/CopyPath/CopyPathSystem.swift) | 路径 → 存在集合；String → Bool | `lstat` 与 NSPasteboard；通过 CopyPathPlatform 注入 |
+| 结果反馈 | `CopyPathFeedback` | [CopyPathFeedback.swift](../../../ECMenu/Commands/CopyPath/CopyPathFeedback.swift) | 已完成结果 + 本地 UUID → 日志或提示音 | `Logger`、`NSSound.beep()`；不保存业务状态 |
 
 本能力没有持久化设置或跨请求缓存。命令与执行期存在事实属于本次任务；系统剪贴板由 macOS 拥有，其他应用可以随时改写。
 

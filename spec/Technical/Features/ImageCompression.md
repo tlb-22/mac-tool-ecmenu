@@ -6,12 +6,14 @@
 
 ```mermaid
 sequenceDiagram
-    participant E as Finder Extension 进程
+    box Finder Extension 进程
+        participant E as 图片菜单输入与命令构造
+    end
     box ECMenu 主应用进程
-        participant H as CompressImagesHandler
-        participant C as SettingsCoordinator / Store
-        participant V as SettingsPrompt / 参数窗口
-        participant X as Execution / 平台适配
+        participant H as 压缩用例
+        participant C as 参数协调与偏好
+        participant V as 参数交互
+        participant X as 批次执行与系统适配
         participant P as 进度与反馈
     end
     participant S as 图像与文件系统
@@ -53,18 +55,18 @@ ImageIO、CoreGraphics、AppKit 控件和存储适配均在主应用进程内调
 
 ## 模块映射与状态所有权
 
-| 模块 / 源码入口 | 输入 → 输出 | 所有权与外部边界 |
-|---|---|---|
-| [ImageCompressionMenuInput](../../../ECMenuFinderExtension/Commands/ImageCompression/ImageCompressionMenuInput.swift) | 候选 URL → 类型是否受支持 | Extension 持有 ImageIO 类型能力集合；URL 类型/目录查询，见 IC01 |
-| [CompressImagesHandler](../../../ECMenu/Commands/ImageCompression/Application/CompressImagesHandler.swift) | 非空命令、参数请求、平台、时钟 → Outcome | 单次任务拥有冻结选择、设置、计划；使用可选进度能力 |
-| [SettingsCoordinator](../../../ECMenu/Commands/ImageCompression/Application/ImageCompressionSettingsCoordinator.swift)、[SettingsStore](../../../ECMenu/Commands/ImageCompression/Persistence/ImageCompressionSettingsStore.swift) | 参数请求 / 确认值 → 初始设置 / 偏好更新 | Coordinator 协调确认时保存；Store 是注入的 UserDefaults 边界，见 IC02 |
-| [SettingsPrompt](../../../ECMenu/Commands/ImageCompression/Presentation/ImageCompressionSettingsPrompt.swift)、[SettingsWindow](../../../ECMenu/Commands/ImageCompression/Presentation/ImageCompressionSettingsWindow.swift)、[FormView](../../../ECMenu/Commands/ImageCompression/Presentation/ImageCompressionSettingsFormView.swift) | 初始值 + 用户交互 → Settings? | Prompt 实例保活每个活动窗口；窗口拥有草稿和一次性 completion，结束即释放。原生表单见 IC03 |
-| [Settings](../../../ECMenu/Commands/ImageCompression/Domain/ImageCompressionSettings.swift)、[Plan](../../../ECMenu/Commands/ImageCompression/Domain/ImageCompressionPlan.swift)、[Dimensions](../../../ECMenu/Commands/ImageCompression/Domain/ImageCompressionDimensions.swift) | 有效参数、URLs、基准日期、尺寸方向 → 计划与尺寸 | 纯规则，无外部 I/O；排序与尺寸不依赖窗口或 ImageIO 对象 |
-| [ImageCompressionExecution](../../../ECMenu/Commands/ImageCompression/Application/ImageCompressionExecution.swift) | Plan、注入平台、可选 Reporter → Report | 顺序处理并拥有逐项结果；Task/协作取消、autoreleasepool |
-| [Transcoder](../../../ECMenu/Commands/ImageCompression/Platform/ImageCompressionTranscoder.swift) | URL + 设置 → JPEG Data / throws | IC04–IC06；单项图像对象生命周期止于 autoreleasepool |
-| [FileOutput](../../../ECMenu/Commands/ImageCompression/Platform/ImageCompressionFileOutput.swift) | 编码 Data、来源 URL、计划日期 → 输出 / 失败 | IC07–IC08；平台三个闭包可独立注入 |
-| [Results](../../../ECMenu/Commands/ImageCompression/Domain/ImageCompressionResults.swift)、[AlertContent](../../../ECMenu/Commands/ImageCompression/Presentation/ImageCompressionAlertContent.swift)、[Feedback](../../../ECMenu/Commands/ImageCompression/Presentation/ImageCompressionFeedback.swift) | 单项事实 → 派生集合、问题文案、最终反馈 | 结果只保存输入终态，成功 URL 和失败分组按需派生；IC09 |
-| [通用进度](../Runtime/CommandProgress.md) | begin / advance / finish / 用户意图 → 可见快照 | Center 唯一拥有计数与取消状态；Presenter / Window 拥有 AppKit 资源 |
+| 职责模块 | 核心类型 | 源码入口 | 输入 → 输出 | 所有权与外部边界 |
+|---|---|---|---|---|
+| 图片菜单输入与命令构造 | `ImageCompressionMenuInput`、`CompressImagesFeature` | [输入判定](../../../ECMenuFinderExtension/Commands/ImageCompression/ImageCompressionMenuInput.swift)、[菜单命令](../../../ECMenuFinderExtension/Commands/ImageCompression/CompressImagesFeature.swift) | 候选 URL → 类型是否受支持 → CompressImagesCommand? | Extension 持有 ImageIO 类型能力集合；URL 类型/目录查询，见 IC01 |
+| 压缩用例 | `CompressImagesHandler` | [CompressImagesHandler.swift](../../../ECMenu/Commands/ImageCompression/Application/CompressImagesHandler.swift) | 非空命令、参数请求、平台、时钟 → Outcome | 单次任务拥有冻结选择、设置、计划；使用可选进度能力 |
+| 参数协调与偏好 | `ImageCompressionSettingsCoordinator`、`ImageCompressionSettingsStore` | [请求协调](../../../ECMenu/Commands/ImageCompression/Application/ImageCompressionSettingsCoordinator.swift)、[偏好存储](../../../ECMenu/Commands/ImageCompression/Persistence/ImageCompressionSettingsStore.swift) | 参数请求 / 确认值 → 初始设置 / 偏好更新 | Coordinator 协调确认时保存；Store 是注入的 UserDefaults 边界，见 IC02 |
+| 参数交互 | `ImageCompressionSettingsPrompt`、`ImageCompressionSettingsWindowController` | [会话](../../../ECMenu/Commands/ImageCompression/Presentation/ImageCompressionSettingsPrompt.swift)、[窗口](../../../ECMenu/Commands/ImageCompression/Presentation/ImageCompressionSettingsWindow.swift)、[表单](../../../ECMenu/Commands/ImageCompression/Presentation/ImageCompressionSettingsFormView.swift)、[整数输入 Formatter](../../../ECMenu/Commands/ImageCompression/Presentation/PositiveIntegerFormatter.swift) | 初始值 + 用户交互 → Settings? | Prompt 实例保活每个活动窗口；窗口拥有草稿和一次性 completion，结束即释放。原生表单见 IC03 |
+| 参数与计划规则 | `ImageCompressionSettings`、`ImageCompressionPlan`、`ImageCompressionDimensions` | [ImageCompressionSettings.swift](../../../ECMenu/Commands/ImageCompression/Domain/ImageCompressionSettings.swift)、[ImageCompressionPlan.swift](../../../ECMenu/Commands/ImageCompression/Domain/ImageCompressionPlan.swift)、[ImageCompressionDimensions.swift](../../../ECMenu/Commands/ImageCompression/Domain/ImageCompressionDimensions.swift) | 有效参数、URLs、基准日期、尺寸方向 → 计划与尺寸 | 纯规则，无外部 I/O；排序与尺寸不依赖窗口或 ImageIO 对象 |
+| 批次执行与系统适配：执行 | `ImageCompressionExecution`、`ImageCompressionPlatform` | [执行器与平台接口声明](../../../ECMenu/Commands/ImageCompression/Application/ImageCompressionExecution.swift) | Plan、注入平台、可选 Reporter → Report | 顺序处理并拥有逐项结果；Task/协作取消、autoreleasepool |
+| 批次执行与系统适配：图像转换 | `ImageCompressionTranscoder`、`ImageCompressionProcessingError` | [ImageIO 实现](../../../ECMenu/Commands/ImageCompression/Platform/ImageCompressionTranscoder.swift)、[处理阶段错误](../../../ECMenu/Commands/ImageCompression/Domain/ImageCompressionProcessingError.swift) | URL + 设置 → JPEG Data / throws | IC04–IC06；单项图像对象生命周期止于 autoreleasepool |
+| 批次执行与系统适配：文件输出 | `ImageCompressionPlatform` 的系统扩展 | [系统装配、写入与日期设置](../../../ECMenu/Commands/ImageCompression/Platform/ImageCompressionFileOutput.swift) | 编码 Data、来源 URL、计划日期 → 输出 / 失败 | IC07–IC08；平台三个闭包可独立注入 |
+| 进度与反馈：结果呈现 | `ImageCompressionReport`、`ImageCompressionAlertContent`、`ImageCompressionFeedback` | [结果模型](../../../ECMenu/Commands/ImageCompression/Domain/ImageCompressionResults.swift)、[告警文案](../../../ECMenu/Commands/ImageCompression/Presentation/ImageCompressionAlertContent.swift)、[反馈](../../../ECMenu/Commands/ImageCompression/Presentation/ImageCompressionFeedback.swift) | 单项事实 → 派生集合、问题文案、最终反馈 | 结果只保存输入终态，成功 URL 和失败分组按需派生；IC09 |
+| 进度与反馈：进度 | `ContextCommandProgressCenter`、`ContextCommandProgressPresenter` | [进度模块与源码入口](../Runtime/CommandProgress.md) | begin / advance / finish / 用户意图 → 可见快照 | Center 唯一拥有计数与取消状态；Presenter / Window 拥有 AppKit 资源 |
 
 压缩设置两个稳定键分别是 `image-compression.maximum-width`、`image-compression.quality`。窗口不读写 UserDefaults，确认出口在恢复等待前同步保存，多个窗口以实际确认顺序更新偏好。每个批次使用自己的确认快照，不随后追踪偏好变化。
 

@@ -68,9 +68,9 @@ enum FinderContextReader {
 
 // MARK: - ==================== 纯函数：Finder 上下文映射 ====================
 
-/// 定义 Finder 框架菜单类型到共享语义上下文的边界映射。
+/// 定义 Finder 框架菜单类型到 Extension 内部语义上下文的边界映射。
 extension FinderMenuContext {
-    /// 把 Finder 框架菜单类型映射为跨进程共享的上下文类型。
+    /// 把 Finder 框架菜单类型映射为 Extension 菜单求值使用的上下文类型。
     /// - Parameter menuKind: Finder 原始菜单类型。
     init?(_ menuKind: FIMenuKind) {
         switch menuKind {

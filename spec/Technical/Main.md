@@ -35,7 +35,7 @@ scripts/                        构建、运行、测试与交付入口
 spec/                           当前需求与技术知识
 ```
 
-右键功能分别在 `ECMenuShared/Contracts/Commands/<能力>/`、`ECMenuFinderExtension/Commands/<能力>/` 和 `ECMenu/Commands/<能力>/` 保存共享契约、Finder 菜单规则与主应用用例。三端使用相同能力名。`ContextMenuComposition` 和 `ContextCommandComposition` 分别注册调用端与执行端能力；主应用描述和 Handler 工厂来自同一份声明。
+右键功能分别在 `ECMenuShared/Contracts/Commands/<能力>/`、`ECMenuFinderExtension/Commands/<能力>/` 和 `ECMenu/Commands/<能力>/` 保存共享契约、Finder 菜单规则与主应用用例。三端使用相同能力名。[ContextMenuComposition](../../ECMenuFinderExtension/Menu/ContextMenuComposition.swift) 和 [ContextCommandComposition](../../ECMenu/App/ContextCommandComposition.swift) 分别注册调用端与执行端能力；主应用描述和 Handler 工厂来自同一份声明。
 
 能力内部按需区分 Domain、Application、Persistence、Platform、Presentation。具体归属、文件拆分和 View 查找方式见[目录组织规则](Architecture/DirectoryRules.md)。
 

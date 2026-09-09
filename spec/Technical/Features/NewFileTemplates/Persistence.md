@@ -1,6 +1,6 @@
 # 模板存储与内容契约
 
-加载、变更、打开与发布的调用关系见[执行流](Flows.md)。本页维护模板数据身份、存储提交和系统 I/O 的边界。
+加载、变更、打开与发布的调用关系见[执行流](Flows.md)。本页维护模板数据身份、存储提交和系统 I/O 的边界。 [FileTemplateLibraryError](../../../../ECMenu/NewFileTemplates/Domain/FileTemplateLibraryError.swift) 与同文件的 `FileTemplateFileOperation` 定义跨存储调用返回的失败及操作种类。
 
 ## 模板身份与名称
 

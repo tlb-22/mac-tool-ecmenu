@@ -10,6 +10,75 @@
 - 场景按业务所有权拆分：通用上下文在 `Contexts/`，命令特有的场景或期望在各自 `Features/`，Composition 只聚合，通用 `Support/` 不知道具体命令。
 - 完整菜单的语言有两个所有者：Finder 解析原生项目，Finder Extension 解析 ECMenu 项目。双语截图在测试编排边界同时设置 Finder 与 Debug containing app 的按应用语言，重启进程后验证真实菜单；生产 Extension 不接受测试语言参数。
 
+## 执行流与源码映射
+
+```mermaid
+sequenceDiagram
+    participant U as 调用者
+    box FinderMenuAutomation 工具进程
+        participant C as 命令行与进程装配
+        participant S as 通用菜单会话
+        participant A as 新建文件验收
+    end
+    participant F as Finder 进程
+    participant E as Extension 进程
+    participant P as ECMenu 主应用进程
+    participant D as 验收目录
+    U->>C: 参数与 fixture
+    C->>C: 输入校验与权限查询
+    C->>S: 建立捕获上下文
+    S->>F: 认领窗口、定位目录、建立选择、打开菜单
+    F-->>S: AX 状态与菜单
+    S-->>C: 已验证的根菜单快照
+    alt 通用捕获：container / items / submenu
+        C->>S: 按请求展开子菜单
+        S-->>C: 已验证的菜单快照
+        C->>C: MenuScreenshot 捕获 PNG
+        C->>S: 复核菜单与来源选择
+    else 新建文件验收：create-file
+        C->>A: 模板标题、预期文件与捕获输入
+        A->>S: 展开模板子菜单
+        S-->>A: 已验证的子菜单快照
+        A->>A: MenuScreenshot 捕获 PNG
+        A->>S: pressItem：复核菜单并点击唯一叶子
+        S->>F: AXPress
+        F->>E: 菜单 action
+        E->>P: 产品命令经 IPC 投递
+        P->>D: 创建文件
+    P->>F: NSWorkspace 请求选中新文件
+        loop 有界等待文件生成及结果选择
+            A->>D: FileManager 读取文件存在性
+            D-->>A: 普通文件是否存在
+            A->>S: isSoleSelectedItem
+            S->>F: 读取本轮窗口的 AX 选择
+            F-->>S: 当前选择
+            S-->>A: 是否仅选中预期文件
+        end
+        A-->>C: 验收完成
+        C-->>U: CREATED
+    end
+    Note over C,S: 运行失败先输出 ERROR，再清理本轮已认领 UI
+    C->>S: closeOwnedUI
+    S->>F: 关闭本轮菜单、sheet 与窗口
+    S-->>C: 清理完成或错误
+    C-->>U: 成功：ITEM / CAPTURED；清理失败：ERROR；退出码
+```
+
+流程图概括捕获与执行验收的协作；原生窗口和菜单始终由通用会话持有。`CREATED` 表示验收已观察到文件与选择，`CAPTURED` 在会话清理成功后输出；运行中发生的错误和后续清理错误分别输出 `ERROR`。权限预检与窗口枚举是同一工具的独立命令。
+
+| 职责模块 | 核心类型 / 实现 | 源码入口 | 输入、输出与状态 / API |
+|---|---|---|---|
+| 命令行与进程装配 | `CLICommand`、`FinderMenuAutomationMain` | [命令解析](../../Tests/FinderMenuCapture/FinderMenuAutomationCommand.swift)、[程序入口](../../Tests/FinderMenuCapture/FinderMenuAutomation.swift) | 参数 → 类型化操作；连接通用捕获与能力验收，通过 `FileHandle.standardOutput` 输出带 Base64 字段的记录，以退出码表示整次操作结果 |
+| 通用捕获输入 | `FinderMenuCaptureInput` | [输入校验](../../Tests/FinderMenuCapture/Support/FinderMenuCaptureInput.swift) | 路径参数 → 输出 URL 与合法上下文；`FileManager` 检查 fixture、同目录选择和未占用的 PNG 输出路径，失败发生在 UI 操作前 |
+| 权限边界 | `PermissionReport` | [权限查询](../../Tests/FinderMenuCapture/Support/FinderAutomationPermissions.swift) | 查询 / 显式授权请求 → AX 与屏幕录制事实；`AXIsProcessTrusted`、`AXIsProcessTrustedWithOptions`、`CGPreflightScreenCaptureAccess`、`CGRequestScreenCaptureAccess`；仅 preflight 可以请求授权 |
+| 通用菜单会话 | `FinderMenuSession`、`AXClient`、输入与窗口适配 | [会话](../../Tests/FinderMenuCapture/Support/FinderMenuSession.swift)、[AX 操作](../../Tests/FinderMenuCapture/Support/FinderAccessibility.swift)、[键盘](../../Tests/FinderMenuCapture/Support/FinderKeyboard.swift)、[指针](../../Tests/FinderMenuCapture/Support/FinderPointer.swift)、[窗口清点](../../Tests/FinderMenuCapture/Support/FinderWindowInventory.swift) | 上下文 → 已验证菜单快照、点击及选择事实；会话唯一持有 AX 对象和清理状态。AppKit 激活、AX 观察/动作、CGEvent 输入的约束见下方平台契约与稳定协议 |
+| 图像捕获 | `MenuScreenshot` | [截图实现](../../Tests/FinderMenuCapture/Support/MenuScreenshot.swift) | 一个或父子两个菜单快照 → PNG / 错误；ScreenCaptureKit 匹配窗口并捕获、ImageIO 编码，完成后仍由调用者复核菜单 |
+| 新建文件验收 | `NewFileMenuAcceptance` | [验收请求与执行](../../Tests/FinderMenuCapture/Features/NewFile/NewFileMenuAcceptance.swift) | 模板标题、预期文件名与 fixture → 文件生成且被选中 / 明确失败；复用通用截图与会话点击，`FileManager.fileExists` 与 AX 选择观察在有界等待内验证结果 |
+| 通用值与失败 | `FinderMenuContext`、`MenuSnapshot`、`AutomationFailure` | [共享值](../../Tests/FinderMenuCapture/Support/FinderMenuCaptureTypes.swift) | 不可变上下文、菜单几何和标题、失败及等待策略；无权限请求或具体产品命令逻辑 |
+| 场景与语言编排 | shell Composition、各 Context / Feature、语言注册表 | [场景装配](../../Tests/FinderMenuCapture/FinderMenuCaptureComposition.sh)、[新建文件场景](../../Tests/FinderMenuCapture/Features/NewFile/NewFileCaptureExpectations.sh)、[语言定义](../../Tests/FinderMenuCapture/Languages/CaptureLanguages.sh)、[脚本入口](../../scripts/capture-finder-menus.sh) | 场景 / 语言 → fixture、菜单期望与串行捕获；持有进程锁、语言保存与恢复事务，具体能力期望归各自 Feature |
+
+工具 target 的文件系统同步组覆盖 `Tests/FinderMenuCapture/` 中的 Swift 实现，shell 定义由脚本加载并从 target 成员中排除。输入验证、权限与会话属于开发工具，产品实现仍由各业务 spec 描述。
+
 ## 已排除的方案
 
 | 方案 | 失败原因与保留结论 |

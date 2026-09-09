@@ -1,5 +1,5 @@
 /**
- 管理一次 Finder 菜单验收拥有的窗口、选择、菜单和模板子菜单生命周期。
+ 管理一次 Finder 菜单验收拥有的窗口、选择、菜单和子菜单生命周期。
  通过 Accessibility 观察驱动状态推进，校验截图期间的来源稳定性并关闭会话拥有的界面。
  */
 
@@ -177,14 +177,14 @@ final class FinderMenuSession {
         guard actual == expected else { throw AutomationFailure.menuChanged }
     }
 
-    /// 已打开的模板子菜单，用于同一次截图，以及显式验收请求中的模板点击。
-    struct TemplateSubmenu {
+    /// 会话已确认的子菜单，供截图和后续菜单动作使用。
+    struct Submenu {
         fileprivate let element: AXUIElement
         let snapshot: MenuSnapshot
     }
 
     /// 悬停指定父菜单，并等待其直接子菜单完成布局。
-    func prepareTemplateSubmenu(parentTitle: String) throws -> TemplateSubmenu {
+    func prepareSubmenu(parentTitle: String) throws -> Submenu {
         try verifyAfterCapture()
         guard case let .menuReady(application, _, rootMenu, _, _) = state,
               let finder else {
@@ -219,16 +219,16 @@ final class FinderMenuSession {
                 return nil
             }
         ) else {
-            throw AutomationFailure.templateMenuUnavailable(parentTitle)
+            throw AutomationFailure.menuItemUnavailable(parentTitle)
         }
-        return TemplateSubmenu(
+        return Submenu(
             element: submenu,
             snapshot: try waitForStableMenu(submenu)
         )
     }
 
     /// 验证父菜单、来源选择和子菜单在截图期间均未改变。
-    func verifyTemplateSubmenu(_ submenu: TemplateSubmenu) throws {
+    func verifySubmenu(_ submenu: Submenu) throws {
         try verifyAfterCapture()
         guard case .ready(let current) = try observeMenu(submenu.element),
               current == submenu.snapshot else {
@@ -236,61 +236,34 @@ final class FinderMenuSession {
         }
     }
 
-    /// 只在显式模板验收入口调用；同名叶子必须先由验收者改成可唯一辨认的名称。
-    func performTemplate(
-        named title: String,
-        in submenu: TemplateSubmenu,
-        expectedFileURL: URL
-    ) throws {
-        try verifyTemplateSubmenu(submenu)
+    /// 点击已验证子菜单中的唯一启用项，并将清理所有权推进到来源窗口。
+    func pressItem(named title: String, in submenu: Submenu) throws {
+        try verifySubmenu(submenu)
         guard case let .menuReady(application, window, _, _, _) = state else {
             preconditionFailure("A verified capture requires a prepared menu")
         }
         let item = try uniqueMenuItem(named: title, in: submenu.element)
         guard try AXClient.supports(kAXPressAction as CFString, on: item) else {
-            throw AutomationFailure.templateMenuUnavailable(title)
+            throw AutomationFailure.menuItemUnavailable(title)
         }
         try AXClient.perform(kAXPressAction as CFString, on: item)
         state = .window(application, window)
-        try waitForCreatedFileSelection(at: expectedFileURL, in: window)
     }
 
-    /// 等到 Finder 完成结果选择再关窗口，避免晚到的选择请求重新打开窗口。
-    private func waitForCreatedFileSelection(at url: URL, in window: AXUIElement) throws {
-        let deadline = Date().addingTimeInterval(AutomationTiming.target)
-        var fileWasCreated = false
-        repeat {
-            var isDirectory: ObjCBool = false
-            fileWasCreated = FileManager.default.fileExists(
-                atPath: url.path,
-                isDirectory: &isDirectory
-            ) && !isDirectory.boolValue
-            if fileWasCreated {
-                do {
-                    // 新文件加入目录后，Finder 可以替换原有的选择容器。
-                    if let resolved = try resolveContext(in: window) {
-                        let selected = try AXClient.elements(
-                            kAXSelectedChildrenAttribute as CFString,
-                            of: resolved.selectionOwner
-                        )
-                        if selected.count == 1 {
-                            let elements = [selected[0]] + (try AXTree.paths(below: selected[0]))
-                                .map(\.element)
-                            if try elements.contains(where: { try AXClient.url(of: $0) == url }) {
-                                return
-                            }
-                        }
-                    }
-                } catch AutomationFailure.accessibility(.readAttribute, .failure),
-                        AutomationFailure.accessibility(.readAttribute, .invalidUIElement),
-                        AutomationFailure.accessibility(.readAttribute, .cannotComplete) {
-                    // 仅在结果选择的有界等待内重读更新中的 AX 树。
-                }
-            }
-            runLoopSlice(AutomationTiming.poll)
-        } while Date() < deadline
-        if fileWasCreated { throw AutomationFailure.finderSelectionTimeout }
-        throw AutomationFailure.createdFileTimeout(url.path)
+    /// 读取会话拥有的窗口是否仅选中指定 URL；选择容器随 Finder 更新重新解析。
+    func isSoleSelectedItem(_ url: URL) throws -> Bool {
+        guard case let .window(_, window) = state else {
+            preconditionFailure("Result selection requires a completed menu action")
+        }
+        guard let resolved = try resolveContext(in: window) else { return false }
+        let selected = try AXClient.elements(
+            kAXSelectedChildrenAttribute as CFString,
+            of: resolved.selectionOwner
+        )
+        guard selected.count == 1 else { return false }
+        let elements = [selected[0]] + (try AXTree.paths(below: selected[0]))
+            .map(\.element)
+        return try elements.contains(where: { try AXClient.url(of: $0) == url })
     }
 
     private func uniqueMenuItem(named title: String, in menu: AXUIElement) throws -> AXUIElement {
@@ -304,7 +277,7 @@ final class FinderMenuSession {
                 && AXClient.bool(kAXEnabledAttribute as CFString, of: item) == true
         }
         guard matches.count == 1 else {
-            throw AutomationFailure.templateMenuUnavailable(title)
+            throw AutomationFailure.menuItemUnavailable(title)
         }
         return matches[0]
     }

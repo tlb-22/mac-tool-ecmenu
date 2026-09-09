@@ -7,10 +7,10 @@
 ```mermaid
 sequenceDiagram
     box ECMenu 主应用进程
-        participant H as Handler / Reporter
-        participant C as ProgressCenter
-        participant V as ProgressPresenter / NSPanel
-        participant R as Invocation
+        participant H as 业务进度报告（Handler 与 Reporter 组合）
+        participant C as 进度协调 ProgressCenter
+        participant V as 进度面板宿主（Presenter 与窗口组合）
+        participant R as 单次命令调用 Invocation
     end
     participant U as 用户
     H->>C: begin(requestID, descriptor, total)
@@ -43,14 +43,16 @@ Center 不持有 AppKit 窗口。装配层把它的 `render(items, actions)` 连
 
 ## 模块、输入输出与状态
 
-| 模块 / 源码入口 | 输入 → 输出 | 所有权与外部边界 |
-|---|---|---|
-| [ProgressState](../../../ECMenu/CommandRuntime/Progress/ContextCommandProgressState.swift) | begin / reveal / advance / cancel / finish → 进度事实 | 纯内存状态规则；正总量、单次 begin、不超额推进是实现约束 |
-| [ProgressReporter](../../../ECMenu/CommandRuntime/Progress/ContextCommandProgressReporter.swift) | 业务事件 → Center 调用；取消查询 → Bool | 只绑定 requestID 与 descriptor，不复制进度状态 |
-| [ProgressCenter](../../../ECMenu/CommandRuntime/Progress/ContextCommandProgressCenter.swift) | 事件、用户动作 → render(items, actions) | 唯一拥有进度、显示延迟任务、已隐藏 ID、上次渲染快照；MainActor；`Task.sleep` 与取消 |
-| [ProgressActions](../../../ECMenu/CommandRuntime/Progress/ContextCommandProgressActions.swift) | 窗口事件 → 对应 Center 意图 | cancel/dismiss 闭包弱引用 Center，不提供复制状态的第二个所有者 |
-| [ProgressPresenter](../../../ECMenu/Feedback/Progress/ContextCommandProgressPresenter.swift)、[WindowController](../../../ECMenu/Feedback/Progress/ContextCommandProgressWindowController.swift) | 可见快照与动作 → 共享面板 / 回调 | Presenter 保活当前窗口；空快照和关闭时释放，窗口管理行与布局 |
-| [RowView](../../../ECMenu/Feedback/Progress/ContextCommandProgressRowView.swift)、[BarView](../../../ECMenu/Feedback/Progress/ContextCommandProgressBarView.swift)、[IconResolver](../../../ECMenu/Feedback/Progress/ContextCommandProgressIconResolver.swift) | 单项快照、焦点状态、descriptor → 原生呈现 | AppKit 视图、图标与按钮；不拥有业务计数 |
+| 职责模块 | 核心类型 | 源码入口 | 输入 → 输出 | 所有权与外部边界 |
+|---|---|---|---|---|
+| 进度状态规则 | `ContextCommandProgressState`、`ContextCommandProgressItem` | [ContextCommandProgressState.swift](../../../ECMenu/CommandRuntime/Progress/ContextCommandProgressState.swift) | begin / reveal / advance / cancel / finish → 进度事实 | 纯内存状态规则；正总量、单次 begin、不超额推进是实现约束 |
+| 命令进度入口 | `ContextCommandProgressReporter`、`ContextCommandExecutionContext` | [ContextCommandProgressReporter.swift](../../../ECMenu/CommandRuntime/Progress/ContextCommandProgressReporter.swift) | 业务事件 → Center 调用；取消查询 → Bool | 只绑定 requestID 与 descriptor，不复制进度状态 |
+| 进度协调 | `ContextCommandProgressCenter` | [ContextCommandProgressCenter.swift](../../../ECMenu/CommandRuntime/Progress/ContextCommandProgressCenter.swift) | 事件、用户动作 → render(items, actions) | 唯一拥有进度、显示延迟任务、已隐藏 ID、上次渲染快照；MainActor；`Task.sleep` 与取消 |
+| 进度交互契约 | `ContextCommandProgressActions` | [ContextCommandProgressActions.swift](../../../ECMenu/CommandRuntime/Progress/ContextCommandProgressActions.swift) | 窗口事件 → 对应 Center 意图 | cancel/dismiss 闭包弱引用 Center，不提供复制状态的第二个所有者 |
+| 进度面板宿主（组合） | `ContextCommandProgressPresenter`、`ContextCommandProgressWindowController` | [ContextCommandProgressPresenter.swift](../../../ECMenu/Feedback/Progress/ContextCommandProgressPresenter.swift)、[ContextCommandProgressWindowController.swift](../../../ECMenu/Feedback/Progress/ContextCommandProgressWindowController.swift) | 可见快照与动作 → 共享面板 / 回调 | Presenter 保活当前窗口；空快照和关闭时释放，窗口管理行与布局 |
+| 任务行呈现（组合） | `ContextCommandProgressRowView`、`ContextCommandProgressBarView`、`ContextCommandProgressIconResolver` | [ContextCommandProgressRowView.swift](../../../ECMenu/Feedback/Progress/ContextCommandProgressRowView.swift)、[ContextCommandProgressBarView.swift](../../../ECMenu/Feedback/Progress/ContextCommandProgressBarView.swift)、[ContextCommandProgressIconResolver.swift](../../../ECMenu/Feedback/Progress/ContextCommandProgressIconResolver.swift) | 单项快照、焦点状态、descriptor → 原生呈现 | AppKit 视图、图标与按钮；不拥有业务计数 |
+
+任务行呈现使用 [ContextCommandProgressWindowLayout.swift](../../../ECMenu/Feedback/Progress/ContextCommandProgressWindowLayout.swift) 集中提供尺寸和间距。图中业务报告节点合并 Handler 与 Reporter 的调用；面板宿主节点合并 Presenter 的窗口生命周期与 WindowController 的原生窗口操作，行、进度槽和图标仍由各自实现负责。
 
 ## API 契约与取消边界
 

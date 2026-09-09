@@ -168,7 +168,7 @@ Archive 和打包不改变本机的 Extension 启用状态。Debug 与 Release �
 
 每张图片只包含菜单的透明窗口，展开场景保留主菜单和子菜单的实际相对位置，不包含窗口阴影、后方 Finder 窗口或桌面；脚本会分别核对当前语言下的 Finder 原生标志项和该场景必须出现的 ECMenu 命令，并在截图后重新确认 Finder、来源窗口、菜单位置和菜单项均未变化。当前配置中关闭了必需命令时，本次截图会失败，不改写用户配置。
 
-场景定义位于 `Tests/FinderMenuCapture/`：基础上下文集中在 `Contexts/`，各命令的菜单期望位于对应的 `Features/`，图片 fixture 与多图场景由 `Features/ImageCompression/` 持有。Finder 打开、Accessibility 读取和菜单生命周期统一封装在 `Support/`，不向 Finder Extension 加入截图分支。`--check` 验证注册表、fixture、本地化键、辅助程序编译及其静态 TCC 身份配置，已包含在 `test.sh` 与 CI 中；真实 Finder 截图不在无人值守的 CI 中运行。
+场景定义位于 `Tests/FinderMenuCapture/`：基础上下文集中在 `Contexts/`，各命令的菜单期望与执行验收位于对应的 `Features/`，图片 fixture 与多图场景由 `Features/ImageCompression/` 持有。根目录的 `FinderMenuAutomation` 与 `CLICommand` 装配工具操作；通用输入校验、权限查询、Finder 打开、Accessibility 读取和菜单生命周期封装在 `Support/`。职责与源码入口见[捕获工具映射](../spec/Technical/FinderMenuCapture.md#执行流与源码映射)。`--check` 验证注册表、fixture、本地化键、辅助程序编译及其静态 TCC 身份配置，已包含在 `test.sh` 与 CI 中；真实 Finder 截图不在无人值守的 CI 中运行。
 
 真实截图运行时需要保持 macOS 桌面已解锁且不要操作 Finder。运行端需要“辅助功能”和“屏幕与系统音频录制”权限；这些权限只用于开发截图工具，ECMenu 产品本身仍不需要辅助功能权限。截图、fixture 和日志使用同一单次运行名称，分别位于 `.artifacts/scratch/{previews,tests,logs}/`。`--check` 只验证场景、语言定义、本地化键、Finder 资源映射、fixture、辅助程序编译及静态 TCC 身份，不修改偏好或重启进程。
 

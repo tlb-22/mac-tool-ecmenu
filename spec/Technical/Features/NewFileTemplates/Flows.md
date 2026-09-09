@@ -8,10 +8,10 @@
 sequenceDiagram
     autonumber
     box ECMenu 主应用进程
-        participant C as 页面 Controller
-        participant O as 应用操作 Operations
-        participant L as 模板库 Library
-        participant S as 文件存储 Storage
+        participant C as 页面状态控制
+        participant O as 模板应用操作
+        participant L as 模板库
+        participant S as 模板文件存储
         participant P as 菜单变更发布
     end
     participant D as 文件系统
@@ -67,10 +67,10 @@ sequenceDiagram
     autonumber
     box ECMenu 主应用进程
         participant V as 页面与操作会话
-        participant C as 页面 Controller
-        participant O as 应用操作 Operations
-        participant L as 模板库 Library
-        participant S as 文件存储 Storage
+        participant C as 页面状态控制
+        participant O as 模板应用操作
+        participant L as 模板库
+        participant S as 模板文件存储
         participant P as 菜单变更发布
     end
     V->>V: 先完成名称编辑，再取得文件操作占用
@@ -114,16 +114,17 @@ sequenceDiagram
 
 源文件读取或副本准备失败也直接走提交前失败路径，不写索引；准备过程中自身的部分写入由 Storage 尽力清理。已确认的名称提交和后续文件选择是两个完成点，取消选择不撤回名称修改。文件操作开始后没有用户取消入口，视图消失取消的只是进度指示器延迟显示任务。
 
-| 模块与源码入口 | 输入 → 输出；拥有的状态 | 外部 API |
-|---|---|---|
-| [页面与文件操作会话](../../../../ECMenu/NewFileTemplates/Presentation/FileTemplatePageActions.swift) | 用户意图、编辑会话 → 名称提交后执行文件操作；会话拥有 phase 和错误消息，跨页面重建保留 | V02；操作调度使用 Task，无文件 I/O |
-| [文件选择器](../../../../ECMenu/NewFileTemplates/Presentation/FileTemplateFileChooser.swift) | 面板标题 → 一个 URL 或取消 nil | V01 |
-| [页面 Controller](../../../../ECMenu/NewFileTemplates/Presentation/FileTemplateController.swift) | 读取/修改意图 → ready/failed 页面状态；持有初始加载 Task 和更新占用 | Combine `@Published`，无存储/通知 API |
-| [应用操作 Operations](../../../../ECMenu/NewFileTemplates/Application/FileTemplateOperations.swift) | 管理意图/读取请求 → 清单、内容、URL 或 Commit；协调发布，不持有索引副本 | 调用注入边界；仅更换清理日志使用 V03 |
-| [模板库 Library](../../../../ECMenu/NewFileTemplates/Persistence/FileTemplateLibrary.swift) | 管理意图 → 权威提交结果；唯一拥有 records，串行组合名称规则、副本准备、提交与清理 | 调用 Storage，无直接系统调用 |
-| [领域名称与导入规则](../../../../ECMenu/NewFileTemplates/Domain/FileTemplateImportNaming.swift) | 源文件名、现有清单或单字段值 → 有效模板/验证失败 | 纯规则，无外部 I/O |
-| [文件存储 Storage](../../../../ECMenu/NewFileTemplates/Persistence/FileTemplateStorage.swift) | 路径、Data、索引记录 → 已读取字节、已完成写入或类型化失败；拥有每次打开的 handle 生命周期 | [P01–P06](Persistence.md#文件-api-与完成点) |
-| [菜单变更发布](../../../../ECMenu/CommandMenuSettings/Application/MenuChangePublisher.swift) | 已提交清单或可用性重新确认 → 分布式失效提示；不保存清单 | [菜单配置](../../Runtime/CommandMenuSettings.md)的 `DistributedNotificationCenter` 边界 |
+| 职责模块 | 核心类型 | 源码入口 | 输入 → 输出；拥有的状态 | 外部 API |
+|---|---|---|---|---|
+| 页面与操作会话 | `NewFileTemplateSettingsPage`、`FileTemplatePageActions` | [页面](../../../../ECMenu/NewFileTemplates/Presentation/NewFileTemplateSettingsPage.swift)、[文件操作会话](../../../../ECMenu/NewFileTemplates/Presentation/FileTemplatePageActions.swift) | 用户意图、编辑会话 → 名称提交后执行文件操作；会话拥有 phase 和错误消息，跨页面重建保留 | V02；操作调度使用 Task，无文件 I/O |
+| 文件选择器 | `FileTemplateFileChooser` | [FileTemplateFileChooser.swift](../../../../ECMenu/NewFileTemplates/Presentation/FileTemplateFileChooser.swift) | 面板标题 → 一个 URL 或取消 nil | V01 |
+| 页面状态控制 | `FileTemplateController`、`FileTemplatePageState` | [Controller](../../../../ECMenu/NewFileTemplates/Presentation/FileTemplateController.swift)、[状态模型](../../../../ECMenu/NewFileTemplates/Presentation/FileTemplatePageState.swift) | 读取/修改意图 → ready/failed 页面状态；持有初始加载 Task 和更新占用 | Combine `@Published`，无存储/通知 API |
+| 模板应用操作 | `FileTemplateOperations` | [FileTemplateOperations.swift](../../../../ECMenu/NewFileTemplates/Application/FileTemplateOperations.swift) | 管理意图/读取请求 → 清单、内容、URL 或 Commit；协调发布，不持有索引副本 | 调用注入边界；仅更换清理日志使用 V03 |
+| 模板库 | `FileTemplateLibrary` | [FileTemplateLibrary.swift](../../../../ECMenu/NewFileTemplates/Persistence/FileTemplateLibrary.swift) | 管理意图 → 权威提交结果；唯一拥有 records，串行组合名称规则、副本准备、提交与清理 | 调用 Storage，无直接系统调用 |
+| 模板名称规则 | `FileTemplate`、`FileTemplateNameField`、`FileTemplateImportNaming` | [有效模型](../../../../ECMenu/NewFileTemplates/Domain/FileTemplate.swift)、[单字段更新](../../../../ECMenu/NewFileTemplates/Domain/FileTemplateNameField.swift)、[导入命名](../../../../ECMenu/NewFileTemplates/Domain/FileTemplateImportNaming.swift) | 源文件名、现有清单或单字段值 → 有效模板/验证失败 | 纯规则，无外部 I/O |
+| 模板文件存储 | `FileTemplateStorage` | [FileTemplateStorage.swift](../../../../ECMenu/NewFileTemplates/Persistence/FileTemplateStorage.swift) | 路径、Data、索引记录 → 已读取字节、已完成写入或类型化失败；拥有每次打开的 handle 生命周期 | [P01–P06](Persistence.md#文件-api-与完成点) |
+| 默认应用打开适配 | `FileTemplateOpener` | [系统实现](../../../../ECMenu/NewFileTemplates/Platform/FileTemplateOpener.swift) | 内部副本 URL → 打开请求成功或失败；不持有编辑器状态 | V04 |
+| 菜单变更发布 | `MenuChangePublisher` | [MenuChangePublisher.swift](../../../../ECMenu/CommandMenuSettings/Application/MenuChangePublisher.swift) | 已提交清单或可用性重新确认 → 分布式失效提示；不保存清单 | [菜单配置](../../Runtime/CommandMenuSettings.md)的 `DistributedNotificationCenter` 边界 |
 
 ## 打开内部副本与外部编辑
 
@@ -131,9 +132,9 @@ sequenceDiagram
 sequenceDiagram
     autonumber
     box ECMenu 主应用进程
-        participant C as 页面与 Controller
-        participant O as 应用操作 Operations
-        participant L as 模板库与 Storage
+        participant C as 页面与操作会话 / 页面状态控制
+        participant O as 模板应用操作
+        participant L as 模板库 / 模板文件存储
         participant W as 默认应用打开适配
         participant N as 新建文件用例
     end
