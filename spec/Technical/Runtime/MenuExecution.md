@@ -164,7 +164,7 @@ sequenceDiagram
         participant S as 连接处理器
         participant A as 菜单快照提供者
     end
-    P->>D: 初始化：独立迁移并恢复缓存
+    P->>D: 初始化：恢复当前快照缓存
     D-->>P: 有效完整快照，或缺失/无效
     P->>P: 没有有效缓存时使用 standard
     P->>N: 注册无正文变化提示
@@ -200,7 +200,7 @@ sequenceDiagram
 | 模块与源码入口 | 输入 → 输出 | 外部 API、失败和状态归属 |
 |---|---|---|
 | [CommandMenuSettingsReplica](../../../ECMenuFinderExtension/CommandMenuSettings/Application/CommandMenuSettingsReplica.swift) | 初始化、无正文提示、查询结果 → 已应用快照 | 唯一持有内存快照与 `idle / fetching(refreshAgain)`。`DistributedNotificationCenter.addObserver/removeObserver` 管理通知；响应通过 `Task @MainActor` 应用。拉取期间的新提示会淘汰当前成功或失败结果，再查询一次 |
-| [CacheStore](../../../ECMenuFinderExtension/CommandMenuSettings/Persistence/CommandMenuSettingsCacheStore.swift)、[迁移](../../../ECMenuFinderExtension/CommandMenuSettings/Persistence/CommandMenuSettingsCacheMigration.swift)与[缓存格式](../../../ECMenuFinderExtension/CommandMenuSettings/Persistence/CommandMenuSettingsSnapshotCache.swift) | Extension 自身偏好 → 最后有效快照；已接受响应 → 缓存 | `UserDefaults.data/object/set/removeObject`、`JSONEncoder/JSONDecoder`。迁移只处理旧开关缓存；损坏/缺失缓存返回 nil，副本采用 standard。store 不另存一份内存快照；`set` 不提供同步落盘回执 |
+| [CacheStore](../../../ECMenuFinderExtension/CommandMenuSettings/Persistence/CommandMenuSettingsCacheStore.swift)与[缓存格式](../../../ECMenuFinderExtension/CommandMenuSettings/Persistence/CommandMenuSettingsSnapshotCache.swift) | Extension 自身偏好 → 最后有效快照；已接受响应 → 缓存 | `UserDefaults.data/set`、`JSONEncoder/JSONDecoder`。从当前快照键读取；损坏/缺失缓存返回 nil，副本采用 standard。store 不另存一份内存快照；`set` 不提供同步落盘回执 |
 | [MenuChangePublisher](../../../ECMenu/CommandMenuSettings/Application/MenuChangePublisher.swift)与[提示适配](../../../ECMenuShared/Platform/IPC/CommandMenuSettingsSignal.swift) | 主应用已更新状态或恢复监听 → 可能到达的变化提示 | `DistributedNotificationCenter.postNotificationName(..., userInfo: nil, deliverImmediately: true)`；通知无权威数据、无到达回执。任意本机进程伪造提示至多触发一次经过认证的查询 |
 | [查询客户端](../../../ECMenuShared/Platform/IPC/AuthenticatedLocalSocketClient.swift)与[连接处理器](../../../ECMenuShared/Platform/IPC/AuthenticatedLocalSocketConnectionHandler.swift) | `.commandMenuSettings` → 完整快照或 Error | 复用 [IPC API 与期限](IPC.md#实现边界与源码入口)；服务端以 `DispatchSemaphore` 等待异步提供者，响应等待与读写共用该连接期限 |
 | [MenuSnapshotProvider](../../../ECMenu/CommandMenuSettings/Application/MenuSnapshotProvider.swift) | 当前配置读取边界与模板菜单读取边界 → 完整快照 | `currentSnapshot()` 先等待模板读取边界，再读取当前开关；自身无文件 I/O，IPC 只调用注入的查询边界。模板不可用仍返回当前开关与 unavailable，不伪装成传输失败；各所有者没有共同修订号或跨存储事务 |
@@ -222,7 +222,7 @@ sequenceDiagram
 - [范围登记测试](../../../Tests/ECMenuFinderExtensionTests/App/FinderDirectoryRegistrationTests.swift)：根目录回退、标准化和去重。
 - [菜单组合](../../../Tests/ECMenuFinderExtensionTests/Menu/ContextMenuCompositionTests.swift)、[功能条件](../../../Tests/ECMenuFinderExtensionTests/Menu/ContextCommandFeatureTests.swift)、[布局](../../../Tests/ECMenuFinderExtensionTests/Menu/ContextMenuLayoutTests.swift)：字段映射、开关/依赖过滤、共享事实、旧 action 保留路径、模板更新只影响下一次构建、大模板菜单保留所有当前叶子及树规范化。
 - [发送客户端](../../../Tests/ECMenuFinderExtensionTests/IPC/ContextCommandClientTests.swift)：单次发送、失败提示一次且不重试。
-- [配置副本](../../../Tests/ECMenuFinderExtensionTests/CommandMenuSettings/CommandMenuSettingsReplicaTests.swift)：缓存迁移、失败保留、后续刷新、并发提示合并及过时结果淘汰。
+- [配置副本](../../../Tests/ECMenuFinderExtensionTests/CommandMenuSettings/CommandMenuSettingsReplicaTests.swift)：缓存恢复、失败保留、后续刷新、并发提示合并及过时结果淘汰。
 - [IPC 测试](../../../Tests/ECMenuTests/IPC/ContextCommandTransportTests.swift)：wire 验证、对称认证、单向/并发投递、错误 ACK、截断 frame、静默对端期限、提供者期限及监听失败清理。
 
 这些链接是验证定义，不代表任意源码版本均已执行通过。完整自动化入口为 [test.sh](../../../scripts/test.sh)；真实菜单驱动入口与限制见[菜单自动截图](../FinderMenuCapture.md)。

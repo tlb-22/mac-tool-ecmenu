@@ -71,10 +71,6 @@ nonisolated struct FileTemplateStorage {
         }
     }
 
-    func legacyContentURL(for id: FileTemplateID) -> URL {
-        filesURL.appendingPathComponent(id.rawValue.uuidString)
-    }
-
     func saveContent(_ data: Data, named fileName: String) throws -> FileTemplateFileReference {
         let file = try FileTemplateFileReference(fileName: fileName)
         let directory = directoryURL(for: file)

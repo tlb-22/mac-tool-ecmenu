@@ -28,16 +28,12 @@ sequenceDiagram
             L->>L: 保存已提交 records
             L->>S: P06 尽力清理未引用副本
             L-->>O: templates + initialized
-        else 有效当前索引或可迁移索引
-            L->>L: 校验；需要时准备迁移
-            opt 迁移版本 1
-                L->>S: P05/P03 复制全部内容；P04 提交新索引
-                S->>D: 新副本和 schema 2 索引
-            end
+        else 有效当前索引
+            L->>L: 解码并校验 schema 2 索引
             L->>L: 保存已提交 records
             L->>S: P06 尽力清理未引用副本
-            L-->>O: templates + restored 或 migrated
-        else 索引读取、校验或迁移失败
+            L-->>O: templates + restored
+        else 索引读取或校验失败
             L-->>O: 明确失败
         end
     end
@@ -52,16 +48,15 @@ sequenceDiagram
     end
 ```
 
-`loadIfNeeded()` 让启动和页面入口共享一个初始 Task；初始失败也保留该 Task，用户点击 Retry 才通过 `reload()` 再次读取。重试先进入 loading；库有缓存时只返回缓存，无缓存时重新尝试读取与迁移。初始化的成功路径同样执行维护式孤儿清理；[存储契约](Persistence.md#初始化与恢复)列出初始化失败边界。
+`loadIfNeeded()` 让启动和页面入口共享一个初始 Task；初始失败也保留该 Task，用户点击 Retry 才通过 `reload()` 再次读取。重试先进入 loading；库有缓存时只返回缓存，无缓存时重新读取并校验索引。初始化的成功路径同样执行维护式孤儿清理；[存储契约](Persistence.md#初始化与恢复)列出初始化失败边界。
 
-`loadForManagement()` 成功时发送一次提示，即使本次返回缓存，或同时完成初始化/迁移；这使之前收到 `.unavailable` 的 Extension 有重新查询机会。生产的普通 `load()`、`content(for:)`、`fileURL(for:)` 只在本次首次读取实际提交了初始化/迁移时提示。后两者先完成读取发布，再读取内容或验证打开 URL；即使请求的 ID 随后无法解析，已经发生的初始化提交仍然发布。
+`loadForManagement()` 成功时发送一次提示，即使本次返回缓存，或同时完成初始化；这使之前收到 `.unavailable` 的 Extension 有重新查询机会。生产的普通 `load()`、`content(for:)`、`fileURL(for:)` 只在本次首次读取实际提交了初始化时提示。后两者先完成读取发布，再读取内容或验证打开 URL；即使请求的 ID 随后无法解析，已经发生的初始化提交仍然发布。
 
 | 读取来源 | 库返回的事实 | 普通应用读取是否提示 | 管理页成功加载/重试是否提示 |
 |---|---|---|---|
 | `cached` | 已提交的进程内 records | 否 | 是 |
 | `restored` | 有效当前索引刚恢复 | 否 | 是 |
 | `initialized` | 本次首次初始化已提交 | 是 | 是，只发一次 |
-| `migrated` | 本次独立迁移已提交 | 是 | 是，只发一次 |
 
 这张表只描述发布触发条件。失效提示可能丢失，且不携带配置正文；它不等于 Extension 已应用清单。通知 API、快照中 `.unavailable` 与 `.available([])` 的区分和传输完成点由[菜单配置](../../Runtime/CommandMenuSettings.md)维护。
 
@@ -148,7 +143,7 @@ sequenceDiagram
     end
     C->>C: 完成名称编辑并取得文件操作占用
     C->>O: openTemplate(ID)
-    O->>O: load：必要的初始化或迁移先发布
+    O->>O: load：必要的初始化先发布
     O->>L: fileURL(ID)
     L->>D: P05 打开并验证普通文件，不读全部内容
     alt 验证通过
@@ -196,6 +191,6 @@ sequenceDiagram
 
 ## 验证证据与限制
 
-[应用操作测试](../../../../Tests/ECMenuTests/NewFileTemplates/Application/FileTemplateOperationsTests.swift)覆盖初始化提示一次、普通缓存查询不提示、管理加载/重试提示、内容请求失败前仍发布已发生的初始化，以及打开入口先迁移和发布再调用注入的打开适配。[Controller 测试](../../../../Tests/ECMenuTests/NewFileTemplates/Presentation/FileTemplateControllerTests.swift)覆盖共享初次加载、失败后显式重试、提交失败保持 ready、删除清理失败先显示已删除清单、更换清理失败保持成功。
+[应用操作测试](../../../../Tests/ECMenuTests/NewFileTemplates/Application/FileTemplateOperationsTests.swift)覆盖初始化提示一次、普通缓存查询不提示、管理加载/重试提示、内容请求失败前仍发布已发生的初始化，以及打开入口恢复当前索引后调用注入的打开适配。[Controller 测试](../../../../Tests/ECMenuTests/NewFileTemplates/Presentation/FileTemplateControllerTests.swift)覆盖共享初次加载、失败后显式重试、提交失败保持 ready、删除清理失败先显示已删除清单、更换清理失败保持成功。
 
-2026-09-08 当前结构完整 231 项测试通过，本页描述的提交结果与发布入口均包含在执行范围内，详见[验证记录](../../Architecture/Verification.md)。已有真实系统观察见[存储证据](Persistence.md#验证与实机证据)和[原生焦点证据](Editing.md#原生焦点证据与验收)。通知实际到达、默认编辑器真实显示/保存、输入法与窗口切换仍需要对应实机验收。
+提交结果与发布入口的完整测试结果见[验证记录](../../Architecture/Verification.md)。已有真实系统观察见[存储证据](Persistence.md#验证与实机证据)和[原生焦点证据](Editing.md#原生焦点证据与验收)。通知实际到达、默认编辑器真实显示/保存、输入法与窗口切换仍需要对应实机验收。

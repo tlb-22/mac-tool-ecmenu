@@ -39,9 +39,9 @@ sequenceDiagram
 | 触发来源 | 发布条件 | 不发布的情况 |
 |---|---|---|
 | `CommandMenuSettingsController` | 总开关或 Feature 可见性实际变化，保存调用返回后 | 重复设置相同值；从偏好恢复 Controller |
-| `FileTemplateOperations.load()` | 库读取返回 `.initialized` 或 `.migrated`，这次读取确实产生了提交 | `.cached` 或 `.restored`；读取抛错 |
+| `FileTemplateOperations.load()` | 库读取返回 `.initialized`，这次读取确实产生了提交 | `.cached` 或 `.restored`；读取抛错 |
 | `FileTemplateOperations.loadForManagement()` | 管理页加载或显式重试成功，重新确认模板可用性 | 读取抛错 |
-| 模板导入、改名、更换、删除 | 操作返回携带权威清单的 `FileTemplateCommit`，包括已提交且清理存在问题 | 本次变更提交前失败；此前读取产生的初始化/迁移提交仍按 load 规则发布 |
+| 模板导入、改名、更换、删除 | 操作返回携带权威清单的 `FileTemplateCommit`，包括已提交且清理存在问题 | 本次变更提交前失败；此前读取产生的初始化提交仍按 load 规则发布 |
 | `ApplicationIPCServer.startIfNeeded()` | 首次或恢复监听成功后调用注入的 `didStart` | 已在监听；初始化失败 |
 
 普通查询不无条件发布，避免“查询 → 通知 → 再次查询”的循环。发布条件直接来自本次读取的 origin 或变更结果，不维护额外的可变发布标记。若一次管理操作之前还需要初始化，初始化和后续变更是两个独立提交事实。
@@ -65,7 +65,7 @@ sequenceDiagram
     T->>L: load()
     alt 读取成功
         L-->>T: 已提交清单与本次读取 origin
-        opt 本次完成初始化或迁移提交
+        opt 本次完成初始化提交
             T->>T: 通知 MenuChangePublisher
         end
         T-->>P: 当前模板元数据
@@ -96,7 +96,7 @@ sequenceDiagram
 | [MenuSnapshotProvider](../../../ECMenu/CommandMenuSettings/Application/MenuSnapshotProvider.swift) | 配置读取闭包、异步模板读取闭包 → 完整快照 | 纯投影与异步调用协调，OSLog 记录模板读取失败；不持有副本，不直接访问文件。模板失败转换为 unavailable，当前开关继续返回 |
 | [MenuChangePublisher](../../../ECMenu/CommandMenuSettings/Application/MenuChangePublisher.swift)与[系统提示适配](../../../ECMenuShared/Platform/IPC/CommandMenuSettingsSignal.swift) | 已提交或可用性恢复事实 → 无正文通知 | `DistributedNotificationCenter.postNotificationName(..., userInfo: nil, deliverImmediately: true)`；无权威数据、无到达回执，Publisher 不持有状态 |
 | [ApplicationIPCServer](../../../ECMenu/IPC/ApplicationIPCServer.swift) | 已认证查询 → Provider 的异步结果；监听成功 → didStart | `Task @MainActor` 连接应用边界，socket 与 Security API 见[IPC](IPC.md#实现边界与源码入口)。IPC 不持有模板业务状态，也不判定模板提交完成 |
-| [Extension Replica](../../../ECMenuFinderExtension/CommandMenuSettings/Application/CommandMenuSettingsReplica.swift)与[缓存 Store](../../../ECMenuFinderExtension/CommandMenuSettings/Persistence/CommandMenuSettingsCacheStore.swift) | 有效快照或查询失败 → 下一次菜单使用的状态 | 独立 UserDefaults、通知 observer、认证查询；成功整体替换，失败保留，单飞期间新提示淘汰当前结果。完整 API、迁移与生命周期见[副本同步](MenuExecution.md#配置副本同步) |
+| [Extension Replica](../../../ECMenuFinderExtension/CommandMenuSettings/Application/CommandMenuSettingsReplica.swift)与[缓存 Store](../../../ECMenuFinderExtension/CommandMenuSettings/Persistence/CommandMenuSettingsCacheStore.swift) | 有效快照或查询失败 → 下一次菜单使用的状态 | 独立 UserDefaults、通知 observer、认证查询；成功整体替换，失败保留，单飞期间新提示淘汰当前结果。完整 API 与生命周期见[副本同步](MenuExecution.md#配置副本同步) |
 
 ## 状态模型
 
@@ -108,7 +108,7 @@ sequenceDiagram
 - Feature 开关控制该 Feature 的完整 Action 子树，不产生叶子级配置。
 - 新 Feature 不在隐藏集合中，默认可见；重新显示等于删除对应 ID。
 
-当前解码器只接受字段完整的当前 schema；持久化升级由独立迁移完成。Feature ID 是已发布契约，不随源码重命名变化。“新建文件”继续使用 `new-text-file`，保留用户既有显示偏好。
+当前解码器只接受字段完整的当前 schema。Feature ID 是已发布契约，不随源码重命名变化。“新建文件”继续使用 `new-text-file`，保留用户既有显示偏好。
 
 [完整菜单快照](../../../ECMenuShared/Contracts/CommandMenuSettings/CommandMenuSettingsSnapshot.swift)有自己的 schema，将配置与 `available([FileTemplateMenuItem]) / unavailable` 组合。有效空清单和不可用状态在存储与 IPC 中保持区别，菜单呈现均隐藏新建父菜单。模板描述只含 ID 与 displayName；创建命令按 ID 从模板能力读取执行时的内容和默认文件名。
 
@@ -120,7 +120,7 @@ sequenceDiagram
 | 已应用菜单副本与刷新状态 | 每个 Extension `CommandMenuSettingsReplica` | 用于下一次同步菜单构建；不反向修改主应用数据 |
 | 可恢复副本缓存 | Extension 自己的 UserDefaults 域 | `menu-configuration-snapshot-v1`；App Group 不合并两端偏好 |
 
-Extension 没有有效缓存时使用总开关/Feature 默认开启且模板 unavailable 的 standard。其独立迁移只在新快照键不存在时读取旧开关缓存，写入 unavailable 快照后删除旧键；主应用同名旧键属于另一个存储域，不参加该迁移。Debug/Release 的偏好、模板库、通知名与 App Group 隔离，身份规则见[构建身份](../Delivery/BuildIdentity.md)。
+Extension 从自身偏好域的 `menu-configuration-snapshot-v1` 恢复当前快照；没有有效缓存时使用总开关/Feature 默认开启且模板 unavailable 的 standard，初始化时发起主应用查询。Debug/Release 的偏好、模板库、通知名与 App Group 隔离，身份规则见[构建身份](../Delivery/BuildIdentity.md)。
 
 ## 通知与持久化的完成边界
 
@@ -133,7 +133,7 @@ Extension 只在初始化和收到信号时查询，拉取期间的新提示会�
 - [配置值与 wire 测试](../../../Tests/ECMenuTests/CommandMenuSettings/CommandMenuSettingsTests.swift)：稀疏可见性、总开关、版本/必需字段验证。
 - [Controller 测试](../../../Tests/ECMenuTests/CommandMenuSettings/CommandMenuSettingsControllerTests.swift)：发布时已能读到更新偏好，相同值不发布，恢复不发布。
 - [模板操作测试](../../../Tests/ECMenuTests/NewFileTemplates/Application/FileTemplateOperationsTests.swift)：提交与初始化/管理加载的发布边界；普通缓存查询不产生通知循环。
-- [IPC 测试](../../../Tests/ECMenuTests/IPC/ContextCommandTransportTests.swift)与[副本测试](../../../Tests/ECMenuFinderExtensionTests/CommandMenuSettings/CommandMenuSettingsReplicaTests.swift)：模板 unavailable 与传输失败的区分、缓存迁移、失败保留、并发提示与旧响应淘汰。
+- [IPC 测试](../../../Tests/ECMenuTests/IPC/ContextCommandTransportTests.swift)与[副本测试](../../../Tests/ECMenuFinderExtensionTests/CommandMenuSettings/CommandMenuSettingsReplicaTests.swift)：模板 unavailable 与传输失败的区分、缓存恢复、失败保留、并发提示与旧响应淘汰。
 - [系统状态测试](../../../Tests/ECMenuTests/GeneralSettings/StatusPageSystemStateTests.swift)：禁用规则由当前事实派生，应用缺失或 Extension 状态变化不改写保存值。
 
 这些定义通过注入边界和独立偏好域验证模块契约，不证明真实分布式通知可靠到达。实机验收应使用当前成对签名产物：修改总开关/Feature 后重新打开 Finder 菜单，管理页加载恢复模板可用性，验证有效空库、模板读取错误、主应用未运行和恢复监听的区别。实际命令仍需确认目标副作用，不能只观察菜单变化。

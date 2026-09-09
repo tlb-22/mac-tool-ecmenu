@@ -1,6 +1,6 @@
 # 模板存储与内容契约
 
-加载、变更、打开与发布的调用关系见[执行流](Flows.md)。本页维护模板数据身份、存储提交、迁移和系统 I/O 的边界。
+加载、变更、打开与发布的调用关系见[执行流](Flows.md)。本页维护模板数据身份、存储提交和系统 I/O 的边界。
 
 ## 模板身份与名称
 
@@ -26,13 +26,13 @@ Application Support 用于应用管理的用户数据，按应用身份设置子
 
 `index.json` 是模板清单的唯一持久化来源，当前 schema 为 `2`，`templates` 按菜单顺序保存。每项的 `template` 保存模板 ID、显示名和默认文件名，`file` 保存独立的文件副本 UUID 和导入文件名。记录及文件引用定义见 [FileTemplateRecord](../../../../ECMenu/NewFileTemplates/Persistence/FileTemplateRecord.swift)，版本校验与编码入口见 [FileTemplateIndex](../../../../ECMenu/NewFileTemplates/Persistence/FileTemplateIndex.swift)。解码拒绝重复模板 ID、重复文件副本 UUID 和越出单文件名范围的内容名称。
 
-文件副本与索引作为一套业务数据备份和迁移。界面偏好及功能显示开关有各自的 UserDefaults 所有者，不属于模板索引事务。
+文件副本与索引作为一套业务数据备份和恢复。界面偏好及功能显示开关有各自的 UserDefaults 所有者，不属于模板索引事务。
 
 ## 初始化与恢复
 
-只有模板根目录尚不存在，且索引读取确认为文件缺失时，才创建空白 TXT 初始模板。有效空清单表示用户已删除全部模板，重启不补回。已有根目录的索引缺失、损坏、版本不支持或读取失败是明确失败。
+只有模板根目录尚不存在，且索引读取确认为文件缺失时，才创建空白 TXT 初始模板。有效空清单表示用户已删除全部模板，重启不补回。索引只接受 schema `2`；已有根目录的索引缺失、损坏、版本不支持或读取失败是明确失败，不重写索引或清理内容。
 
-初始化先建立副本目录并保存零字节内容，再提交索引。若索引提交失败，根目录可能已经存在而索引缺失；普通读取重试不会把这一状态解释为全新模板库，也不承诺自动修复。初始索引成功后才保存 actor 的 records。首次有效恢复、初始化或迁移执行维护式孤儿清理，清理问题记日志。
+初始化先建立副本目录并保存零字节内容，再提交索引。若索引提交失败，根目录可能已经存在而索引缺失；普通读取重试不会把这一状态解释为全新模板库，也不承诺自动修复。初始索引成功后才保存 actor 的 records。首次有效恢复或初始化执行维护式孤儿清理，清理问题记日志。
 
 首次读取完成后，Library 仅缓存已提交记录；后续 `load()` 返回缓存，管理页 Retry 也不检测外部对索引的修改。无缓存时重试可以重新读取用户已经修复的索引。读取来源通过 [FileTemplateLoadResult](../../../../ECMenu/NewFileTemplates/Persistence/FileTemplateLoadResult.swift) 一次性返回，供应用层决定[发布时机](Flows.md#加载初始化与显式重试)。
 
@@ -60,12 +60,6 @@ Application Support 用于应用管理的用户数据，按应用身份设置子
 
 更换创建新的副本 UUID，所以外部编辑器稍后保存旧 URL 不会改变新索引引用的内容。旧路径可能被编辑器重新建立；它不再属于当前模板。默认应用打开的 Bool 完成点和交互流程见[打开内部副本](Flows.md#打开内部副本与外部编辑)。
 
-## 持久化迁移
-
-独立 [FileTemplateIndexMigration](../../../../ECMenu/NewFileTemplates/Persistence/FileTemplateIndexMigration.swift) 读取版本 `1`；当前索引解码器只接受版本 `2`。迁移保留模板 ID、名称、顺序和字节，将旧 `Files/<模板 UUID>` 复制到新的副本目录。旧格式没有导入文件名，迁移以当时的默认输出文件名作为内部文件名。
-
-所有副本准备好后才原子提交新索引，提交成功后清理旧文件。旧索引无效、内容缺失或提交失败时保留旧索引与旧内容并报告失败；已准备的新副本可能残留，由后续成功恢复的孤儿清理回收。修复原问题后可以重试。有效旧空清单迁移后仍为空。
-
 ## 文件 API 与完成点
 
 以下 API 均由 [FileTemplateStorage](../../../../ECMenu/NewFileTemplates/Persistence/FileTemplateStorage.swift) 在 Library actor 的串行操作内调用，属于主应用内的 Foundation/Darwin 边界，不是另一个进程。
@@ -87,10 +81,9 @@ P05 的普通文件限制来自项目对实际已打开 fd 的校验；`O_NOFOLL
 
 | 验证入口 | 覆盖范围与限制 |
 |---|---|
-| [Library 测试](../../../../Tests/ECMenuTests/NewFileTemplates/Persistence/FileTemplateLibraryTests.swift) | 一次初始化、有效空库、二进制独立副本、自动命名、普通文件限制、损坏索引、缓存、孤儿清理、提交失败及删除清理结果 |
+| [Library 测试](../../../../Tests/ECMenuTests/NewFileTemplates/Persistence/FileTemplateLibraryTests.swift) | 一次初始化、有效空库、二进制独立副本、自动命名、普通文件限制、损坏或不支持版本的索引、文件引用合法性、缓存、孤儿清理、提交失败及删除清理结果 |
 | [Replacement 测试](../../../../Tests/ECMenuTests/NewFileTemplates/Persistence/FileTemplateReplacementTests.swift) | 副本独立身份、每次读新字节、旧 URL 晚保存隔离、提交失败保留旧内容、清理问题与打开前验证 |
-| [Migration 测试](../../../../Tests/ECMenuTests/NewFileTemplates/Persistence/FileTemplateMigrationTests.swift) | 版本 1 身份/名称/顺序/字节保留、有效空库、失败保留旧数据、修复后重试与引用合法性 |
 
-项目观察（2026-09-08，macOS 26.6.2 / 25G83）：当前结构完整 231 项测试通过，包括二进制内容、同名模板身份、持久化失败、提交后清理结果、加载/提交发布及创建并发不覆盖检查。环境与执行范围见[验证记录](../../Architecture/Verification.md)。
+完整测试的运行环境、结果和执行范围见[验证记录](../../Architecture/Verification.md)。
 
 已有真实 Finder 验收确认 TXT 子菜单创建零字节默认文件、冲突后新名称及默认创建结果自动选中；证据属于创建能力，见[新建文件](../NewFile.md#项目设计与验证范围)。存储测试在隔离目录中验证文件内容和引用，不代表已实际驱动所有默认编辑器。实机复核应覆盖导入后删除源文件、默认应用保存后再次创建、更换后向旧 URL 保存，以及持久化错误后页面重试；窗口与权限验收分别见[名称编辑](Editing.md#原生焦点证据与验收)和[文件访问](../../Platform/FileAccess.md)。

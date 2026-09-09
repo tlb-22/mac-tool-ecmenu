@@ -145,24 +145,24 @@ final class FileTemplateLibraryTests: XCTestCase {
         try Data("unreferenced".utf8).write(to: orphan)
         let originalURL = try fixture.contentURL(for: initial[0].id)
         let corrupt = Data("{invalid json".utf8)
-        let missingFields = Data(#"{"schemaVersion":1}"#.utf8)
+        let missingFields = Data(#"{"schemaVersion":2}"#.utf8)
+        let previous = Data(#"{"schemaVersion":1,"templates":[]}"#.utf8)
         let future = Data(#"{"schemaVersion":3,"templates":[]}"#.utf8)
-        let duplicateID = try JSONSerialization.data(withJSONObject: [
-            "schemaVersion": 1,
-            "templates": [initial[0], initial[0]].map { [
-                "id": $0.id.rawValue.uuidString,
-                "displayName": $0.displayName,
-                "defaultFileName": $0.defaultFileName,
-            ] },
-        ])
-        for data in [corrupt, missingFields, future, duplicateID] {
+        let duplicateID = try JSONEncoder().encode(FileTemplateIndex(templates: [
+            FileTemplateRecord(template: initial[0], file: FileTemplateFileReference(fileName: "first.txt")),
+            FileTemplateRecord(template: initial[0], file: FileTemplateFileReference(fileName: "second.txt")),
+        ]))
+        let cases: [(data: Data, unsupportedSchema: Int?)] = [
+            (corrupt, nil), (missingFields, nil), (previous, 1), (future, 3), (duplicateID, nil),
+        ]
+        for (data, unsupportedSchema) in cases {
             try data.write(to: fixture.indexURL)
             do {
                 _ = try await FileTemplateLibrary(rootURL: fixture.libraryURL).load()
                 XCTFail("An invalid index must not initialize an empty replacement")
             } catch let error as FileTemplateLibraryError {
-                if data == future {
-                    XCTAssertEqual(error, .unsupportedSchema(3))
+                if let unsupportedSchema {
+                    XCTAssertEqual(error, .unsupportedSchema(unsupportedSchema))
                 } else if case .invalidIndex = error {
                     // 当前索引损坏在解码边界明确分类。
                 } else {
@@ -173,6 +173,55 @@ final class FileTemplateLibraryTests: XCTestCase {
             XCTAssertTrue(FileManager.default.fileExists(atPath: orphan.path))
             XCTAssertTrue(FileManager.default.fileExists(atPath: originalURL.path))
         }
+    }
+
+    func testInvalidCurrentFileReferencesCannotEscapeLibraryOrAliasAnotherTemplate() async throws {
+        let fixture = try FileTemplateLibraryFixture()
+        defer { fixture.remove() }
+        let library = FileTemplateLibrary(rootURL: fixture.libraryURL)
+        let initial = try await library.load().templates
+        let originalURL = try await library.fileURL(for: initial[0].id)
+        let savedIndex = try Data(contentsOf: fixture.indexURL)
+        let initialJSON = try XCTUnwrap(JSONSerialization.jsonObject(with: savedIndex) as? [String: Any])
+        let initialRecords = try XCTUnwrap(initialJSON["templates"] as? [[String: Any]])
+        for badName in ["../escape.txt", ".", "", "a/b"] {
+            var json = initialJSON
+            var record = initialRecords[0]
+            var file = try XCTUnwrap(record["file"] as? [String: Any])
+            file["fileName"] = badName
+            record["file"] = file
+            json["templates"] = [record]
+            let invalidData = try JSONSerialization.data(withJSONObject: json)
+            try invalidData.write(to: fixture.indexURL)
+            do {
+                _ = try await FileTemplateLibrary(rootURL: fixture.libraryURL).load()
+                XCTFail("Invalid content names must fail decoding")
+            } catch let error as FileTemplateLibraryError {
+                guard case .invalidIndex = error else {
+                    return XCTFail("Unexpected error: \(error)")
+                }
+            }
+            XCTAssertEqual(try Data(contentsOf: fixture.indexURL), invalidData)
+            XCTAssertTrue(FileManager.default.fileExists(atPath: originalURL.path))
+        }
+        var json = initialJSON
+        var duplicateContent = initialRecords[0]
+        var otherTemplate = try XCTUnwrap(duplicateContent["template"] as? [String: Any])
+        otherTemplate["id"] = UUID().uuidString
+        duplicateContent["template"] = otherTemplate
+        json["templates"] = [initialRecords[0], duplicateContent]
+        let aliasedData = try JSONSerialization.data(withJSONObject: json)
+        try aliasedData.write(to: fixture.indexURL)
+        do {
+            _ = try await FileTemplateLibrary(rootURL: fixture.libraryURL).load()
+            XCTFail("Independent templates cannot share a mutable content identity")
+        } catch let error as FileTemplateLibraryError {
+            guard case .invalidIndex = error else {
+                return XCTFail("Unexpected error: \(error)")
+            }
+        }
+        XCTAssertEqual(try Data(contentsOf: fixture.indexURL), aliasedData)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: originalURL.path))
     }
 
     func testMissingContentFailsWithoutSubstitutingAnEmptyFile() async throws {

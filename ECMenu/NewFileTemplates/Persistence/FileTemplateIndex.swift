@@ -1,11 +1,11 @@
 /**
  定义模板索引的当前持久化结构和编码版本。
- 以有序记录保存完整模板清单，供存储和迁移共同使用。
+ 以有序记录保存完整模板清单，并在读取时校验版本与身份唯一性。
  */
 
 import Foundation
 
-/// 当前索引只接受当前格式；历史格式由独立迁移转换后提交。
+/// 索引只接受当前格式，其他版本明确报告不受支持。
 nonisolated struct FileTemplateIndex: Codable {
     static let schemaVersion = 2
     let templates: [FileTemplateRecord]

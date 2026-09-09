@@ -47,7 +47,7 @@ sequenceDiagram
 |---|---|---|
 | [CreateNewFileFeature](../../../ECMenuFinderExtension/Commands/NewFile/CreateNewFileFeature.swift) | 菜单模板项与目标事实 → CreateNewFileCommand | 纯命令构造；只携带稳定 ID 与目录，不携带模板字节或主应用库对象 |
 | [CreateNewFileHandler](../../../ECMenu/Commands/NewFile/CreateNewFileHandler.swift) | Command + 注入读取/写入/反馈 → Outcome | 协调本次快照与写入；`DispatchTime.now` 仅测量诊断耗时，不决定文件内容 |
-| [FileTemplateOperations](../../../ECMenu/NewFileTemplates/Application/FileTemplateOperations.swift)与[模板库](NewFileTemplates/Main.md) | 模板 ID → FileTemplateContent / throws | 权威索引、迁移与副本由模板能力拥有；Darwin open/fstat、FileHandle 与索引 API 见[存储](NewFileTemplates/Persistence.md) |
+| [FileTemplateOperations](../../../ECMenu/NewFileTemplates/Application/FileTemplateOperations.swift)与[模板库](NewFileTemplates/Main.md) | 模板 ID → FileTemplateContent / throws | 权威索引与副本由模板能力拥有；Darwin open/fstat、FileHandle 与索引 API 见[存储](NewFileTemplates/Persistence.md) |
 | [NewFileWriter](../../../ECMenu/Commands/NewFile/NewFileWriter.swift) | Data、首选 URL → 新 URL / throws | 用 `FileCollisionNaming` 纯候选与 `Data.write` 完成排他创建，不先查询存在性 |
 | [CreateNewFileResult](../../../ECMenu/Commands/NewFile/CreateNewFileResult.swift) | 完成事实或系统错误 → 模板 / 目标失败，或成功 | 不可变结果；模板失败关联 ID，目标失败关联目录，不能混用权限说明 |
 | [CreateNewFileFeedback](../../../ECMenu/Commands/NewFile/CreateNewFileFeedback.swift) | Outcome + 本地 UUID → Finder 选择 / 警告 / 日志 | `NSWorkspace.selectFile`、`NSAlert`、`NSSound`、`Logger`；无独立持久状态 |

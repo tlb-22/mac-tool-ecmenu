@@ -24,11 +24,11 @@ final class FileTemplateOperations {
         self.didChange = didChange
     }
 
-    /// 普通查询只在本次读取确实提交了初始化或迁移时发布，缓存查询不会形成通知循环。
+    /// 普通查询只在本次读取确实提交了初始化时发布，缓存查询不会形成通知循环。
     func load() async throws -> [FileTemplate] {
         let result = try await library.load()
         switch result.origin {
-        case .initialized, .migrated:
+        case .initialized:
             didChange(result.templates)
         case .cached, .restored:
             break

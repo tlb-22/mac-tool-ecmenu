@@ -1,5 +1,5 @@
 /**
- 验证扩展菜单配置副本的缓存恢复、独立迁移和单飞刷新。
+ 验证扩展菜单配置副本的缓存恢复和单飞刷新。
  通过隔离偏好与可控拉取结果检查失败保留快照、信号合并及过时响应丢弃。
  */
 
@@ -56,34 +56,7 @@ final class CommandMenuSettingsReplicaTests: XCTestCase {
         XCTAssertTrue(replica.newFileTemplates.isEmpty)
     }
 
-    /// 旧扩展缓存只迁移已有开关；真实模板库必须由主应用发布。
-    func testLegacyCacheMigratesVisibilityWithoutInventingTemplates() throws {
-        let suiteName = "CommandMenuSettingsReplicaTests.\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
-        defer { defaults.removePersistentDomain(forName: suiteName) }
-        let legacy = CommandMenuSettings(
-            isEnabled: false,
-            hiddenFeatureIDs: ["new-text-file"]
-        )
-        defaults.set(
-            CommandMenuSettingsChannel.encodedData(for: legacy),
-            forKey: CommandMenuSettingsChannel.persistedConfigurationKey
-        )
-
-        let replica = CommandMenuSettingsReplica(defaults: defaults, transport: nil)
-
-        XCTAssertFalse(replica.isEnabled)
-        XCTAssertFalse(replica.isVisible(CreateNewFileCommand.descriptor.id))
-        XCTAssertTrue(replica.newFileTemplates.isEmpty)
-        XCTAssertNil(defaults.object(forKey: CommandMenuSettingsChannel.persistedConfigurationKey))
-        let stored = try XCTUnwrap(defaults.data(forKey: CommandMenuSettingsSnapshotCache.key))
-        XCTAssertEqual(
-            try CommandMenuSettingsSnapshotCache.decode(stored),
-            CommandMenuSettingsSnapshot(configuration: legacy, fileTemplateState: .unavailable)
-        )
-    }
-
-    /// 同名模板以独立身份和原顺序恢复，已有新版快照优先于旧缓存。
+    /// 同名模板以独立身份和原顺序从快照缓存恢复。
     func testSnapshotCacheRestoresDuplicateNamesAndDistinctIdentities() throws {
         let suiteName = "CommandMenuSettingsReplicaTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
@@ -100,11 +73,6 @@ final class CommandMenuSettingsReplicaTests: XCTestCase {
             CommandMenuSettingsSnapshotCache.encode(snapshot),
             forKey: CommandMenuSettingsSnapshotCache.key
         )
-        defaults.set(
-            CommandMenuSettingsChannel.encodedData(for: CommandMenuSettings(isEnabled: false)),
-            forKey: CommandMenuSettingsChannel.persistedConfigurationKey
-        )
-
         let replica = CommandMenuSettingsReplica(defaults: defaults, transport: nil)
 
         XCTAssertTrue(replica.isEnabled)

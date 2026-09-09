@@ -1,5 +1,5 @@
 /**
- 以 actor 串行持有模板记录，协调首次初始化、索引迁移与清单变更提交。
+ 以 actor 串行持有模板记录，协调首次初始化、索引恢复与清单变更提交。
  通过存储边界操作副本和索引，明确区分提交前失败与提交后的清理问题。
  */
 
@@ -32,19 +32,8 @@ actor FileTemplateLibrary {
         }
 
         let index: FileTemplateIndex
-        let origin: FileTemplateLoadResult.Origin
         do {
-            if let migrated = try FileTemplateIndexMigration.migrateIfNeeded(data, copyContent: { template in
-                let oldURL = storage.legacyContentURL(for: template.id)
-                return try storage.saveContent(storage.readContent(at: oldURL), named: template.defaultFileName)
-            }) {
-                try commit(migrated.templates)
-                index = migrated
-                origin = .migrated
-            } else {
-                index = try JSONDecoder().decode(FileTemplateIndex.self, from: data)
-                origin = .restored
-            }
+            index = try JSONDecoder().decode(FileTemplateIndex.self, from: data)
         } catch let error as FileTemplateLibraryError {
             throw error
         } catch {
@@ -53,7 +42,7 @@ actor FileTemplateLibrary {
 
         records = index.templates
         storage.cleanUnreferencedFiles(referencedBy: index.templates)
-        return FileTemplateLoadResult(templates: index.templates.map(\.template), origin: origin)
+        return FileTemplateLoadResult(templates: index.templates.map(\.template), origin: .restored)
     }
 
     /// 完整保存普通源文件的内容后，再把新模板追加到索引。

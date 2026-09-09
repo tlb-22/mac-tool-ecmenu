@@ -1,6 +1,6 @@
 /**
  验证模板操作层在初始化、管理读取和内容打开时发布模板清单变化的时机。
- 使用隔离模板库与注入回调，检查缓存读取、缺失身份及迁移后的发布顺序。
+ 使用隔离模板库与注入回调，检查缓存读取、缺失身份及已保存内容的打开。
  */
 
 import Foundation
@@ -77,20 +77,22 @@ final class FileTemplateOperationsTests: XCTestCase {
         XCTAssertEqual(changes.count, 1)
     }
 
-    func testOpeningMigratesAndPublishesBeforeInvokingTheDefaultApplication() async throws {
+    func testOpeningRestoresSavedTemplateWithoutPublishingChanges() async throws {
         let fixture = try FileTemplateLibraryFixture()
         defer { fixture.remove() }
-        let template = try FileTemplate(displayName: "Notes", defaultFileName: "notes.md")
-        _ = try fixture.saveLegacyIndex([template])
         let bytes = Data("notes".utf8)
-        _ = try fixture.saveLegacyContent(bytes, for: template.id)
+        let source = try fixture.source(named: "notes.md", data: bytes)
+        let savedLibrary = FileTemplateLibrary(rootURL: fixture.libraryURL)
+        let imported = try await savedLibrary.importFile(at: source)
+        let template = try XCTUnwrap(imported.templates.last)
+        let savedURL = try await savedLibrary.fileURL(for: template.id)
         var changes: [[FileTemplate]] = []
         var opened: [URL] = []
         let library = FileTemplateLibrary(rootURL: fixture.libraryURL)
         let operations = FileTemplateOperations(
             library: library,
             openFile: { url in
-                XCTAssertEqual(changes, [[template]])
+                XCTAssertTrue(changes.isEmpty)
                 opened.append(url)
             },
             didChange: { changes.append($0) }
@@ -98,12 +100,11 @@ final class FileTemplateOperationsTests: XCTestCase {
 
         try await operations.openTemplate(id: template.id)
 
-        XCTAssertEqual(changes, [[template]])
-        XCTAssertEqual(opened.count, 1)
-        XCTAssertEqual(opened.first?.lastPathComponent, "notes.md")
+        XCTAssertTrue(changes.isEmpty)
+        XCTAssertEqual(opened, [savedURL])
         let content = try await operations.content(for: template.id)
         XCTAssertEqual(content.data, bytes)
-        XCTAssertEqual(changes, [[template]])
+        XCTAssertTrue(changes.isEmpty)
         let cached = try await library.load()
         XCTAssertEqual(cached.origin, .cached)
     }
