@@ -4,6 +4,7 @@
  */
 
 import AppKit
+import ApplicationServices
 import Combine
 import SwiftUI
 import XCTest
@@ -12,6 +13,19 @@ import XCTest
 /// 通过真实原生字段的 mouseDown 和共享 field editor 验证页面焦点交接。
 @MainActor
 final class NewFileTemplateSettingsPageTests: XCTestCase {
+    /// 本进程的 AX 请求让 SwiftUI 建立可访问性树，不依赖外部辅助工具是否正在查询应用。
+    override func setUp() async throws {
+        try await super.setUp()
+        var role: CFTypeRef?
+        let result = AXUIElementCopyAttributeValue(
+            AXUIElementCreateApplication(getpid()),
+            kAXRoleAttribute as CFString,
+            &role
+        )
+        XCTAssertEqual(result, .success, "Could not initialize accessibility for the test process")
+        XCTAssertEqual(role as? String, kAXApplicationRole)
+    }
+
     func testUnchangedNamesSwitchBothDirectionsWithoutReplacingNativeFields() async throws {
         let fixture = try NewFileTemplateSettingsPageFixture()
         let host = NewFileTemplatesNativePageHost(harness: fixture.harness)

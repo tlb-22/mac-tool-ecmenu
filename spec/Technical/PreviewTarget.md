@@ -10,6 +10,10 @@
 
 项目观察（2026-09-08，macOS 26.6.2、Xcode 26.6）：SwiftUI 的 `AccessibilityNode` / `AccessibilityLazyLayoutNode` 实现了公开的 Objective-C 可访问性方法，但没有声明 `NSAccessibilityProtocol` 协议；按协议转换过滤子节点会遗漏真实控件。宿主测试通过原生视图树定位名称控件，经公开可访问性方法动态分派检查 SwiftUI 操作按钮。节点具体类名只用于说明本次观察，测试不依赖私有类或选择器，也不将该协议声明情况视为跨系统版本保证。
 
+测试前置条件：每项原生页面测试先用 `AXUIElementCreateApplication(getpid())` 定位测试进程，再通过 `AXUIElementCopyAttributeValue` 查询 `kAXRoleAttribute`，要求返回 `.success` 和 `kAXApplicationRole`。输入仅为本进程 PID 与角色属性，输出为 AX 状态和应用角色；查询失败作为测试失败报告。随后在 1 秒截止时间内跨主循环读取操作按钮，缺失时报告已观察到的按钮与缺失标题。原生字段就绪不代表 SwiftUI 的按钮树已经建立。
+
+项目观察（2026-09-09，macOS 26.6.2、Xcode 26.6）：[GitHub Actions 运行 34305654097](https://github.com/tlb-22/mac-tool-ecmenu/actions/runs/34305654097) 中六项按钮操作测试均读到空树。独立进程探针中，布局及调用窗口 `orderBack` 后均未建立 SwiftUI 节点，本进程角色查询后节点出现；在 `AXIsProcessTrusted() == false` 的沙箱进程中，该查询也成功。测试据此显式初始化自身的 AX 查询路径，保留隐藏窗口与节点就绪检查。Apple 的 [NSHostingView](https://developer.apple.com/documentation/swiftui/nshostingview) 契约提供 AppKit 桥接与可访问性访问接口；上述节点初始化行为属于此版本的项目观察，不是节点同步发布或跨版本时序保证。
+
 启动脚本可向单次预览进程传入 `-AppleLanguages (en)` 或 `-AppleLanguages (zh-Hans)`，分别检查英文和简体中文；未指定时不覆盖系统语言。语言只存在于进程启动参数中，预览和产品界面无需维护额外的 Locale 状态。
 
 批量截图脚本构建一次 Preview target，从注册表验证全部或调用方指定的场景，并串行捕获每个场景的英文和简体中文版本。Preview runtime 负责激活唯一可见顶层窗口；窗口成为 key window、完成布局和绘制，且窗口编号与尺寸跨一轮主循环保持稳定后，才通过标准输出发送 `READY <windowNumber>`。脚本按该窗口编号生成不含阴影的独立窗口截图，圆角外保持透明；截图完成后，runtime 再确认应用与窗口在整段捕获期间没有失焦，只保留通过确认的图片。截图不依赖辅助功能或外部模拟点击，批量截图与交互预览互斥运行。
