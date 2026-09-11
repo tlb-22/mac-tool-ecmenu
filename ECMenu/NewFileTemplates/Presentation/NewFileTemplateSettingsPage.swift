@@ -1,5 +1,5 @@
 /**
- 组成模板管理页的有序清单、拖拽、名称编辑、操作控件与加载错误界面。
+ 组成模板管理页的有序清单、文件类型图标、拖拽、名称编辑与操作界面。
  集中模板页面使用的布局和文案，通过注入的状态、编辑会话与操作回调绑定交互。
  */
 
@@ -7,13 +7,15 @@ import SwiftUI
 
 /// 文件模板页面的布局调节入口；页面通用参数沿用 StatusPageStyle。
 enum NewFileTemplatesStyle {
+    /// 文件类型图标的独立边长，按原始比例缩放。
+    static let templateIconSize: CGFloat = 24
+    /// 文件图标与名称控件之间的额外间距。
+    static let iconNameSpacing: CGFloat = 4
     /// 两个名称控件之间的间距；负值收紧系统内边距形成的空白。
     static let rowNameSpacing: CGFloat = -2
     /// 模板行的水平与垂直内边距。
     static let rowHorizontalPadding: CGFloat = 8
     static let rowVerticalPadding: CGFloat = 4
-    /// 左侧名称区域在模板行内额外增加的缩进。
-    static let nameLeadingPadding: CGFloat = 4
     /// 打开、更换和删除操作之间的间距。
     static let actionSpacing: CGFloat = 8
     /// 仅在文件读写持续一段时间后显示进度，避免短操作闪现指示器。
@@ -137,12 +139,22 @@ struct NewFileTemplateSettingsPage: View {
     private func templateRow(_ template: FileTemplate) -> some View {
         HStack(spacing: StatusPageStyle.rowSpacing) {
             reorderHandle(for: template)
-            VStack(alignment: .leading, spacing: NewFileTemplatesStyle.rowNameSpacing) {
-                name(template, field: .displayName)
-                name(template, field: .defaultFileName)
+            HStack(spacing: NewFileTemplatesStyle.iconNameSpacing) {
+                Image(nsImage: FileTemplateIconProvider.icon(forFileName: template.defaultFileName))
+                    .resizable()
+                    .scaledToFit()
+                    .frame(
+                        width: NewFileTemplatesStyle.templateIconSize,
+                        height: NewFileTemplatesStyle.templateIconSize
+                    )
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: NewFileTemplatesStyle.rowNameSpacing) {
+                    name(template, field: .displayName)
+                    name(template, field: .defaultFileName)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(.leading, NewFileTemplatesStyle.nameLeadingPadding)
-            .frame(maxWidth: .infinity, alignment: .leading)
 
             HStack(spacing: NewFileTemplatesStyle.actionSpacing) {
                 Button {

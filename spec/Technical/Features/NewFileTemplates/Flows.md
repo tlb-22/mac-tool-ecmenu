@@ -60,6 +60,34 @@ sequenceDiagram
 
 这张表只描述发布触发条件。失效提示可能丢失，且不携带配置正文；它不等于 Extension 已应用清单。通知 API、快照中 `.unavailable` 与 `.available([])` 的区分和传输完成点由[菜单配置](../../Runtime/CommandMenuSettings.md)维护。
 
+## 文件类型图标呈现
+
+```mermaid
+sequenceDiagram
+    box ECMenu 主应用进程
+        participant C as 页面状态控制
+        participant V as 模板页面
+        participant I as 文件类型图标适配
+        participant W as AppKit NSWorkspace
+    end
+    C-->>V: ready：加载或提交后的模板清单
+    V->>I: 已保存的 defaultFileName
+    I->>I: V05 后缀转换为 UTType
+    I->>W: V06 icon(for: 内容类型)
+    W-->>I: 系统文件类型图标 NSImage
+    I-->>V: NSImage
+    V->>V: 按独立尺寸缩放，与名称一起呈现
+```
+
+图标位于排序提示和两行名称之间，与名称组成内部 `HStack` 并整体垂直居中。页面顶部的 `NewFileTemplatesStyle.templateIconSize` 独立控制图标尺寸，保持原图比例；`iconNameSpacing` 控制图标与名称控件之间的间距，外层排序提示和操作按钮的间距由 `rowSpacing` 控制。图标是装饰性内容，不接收点击，也不成为辅助功能节点；拖动由所在行处理。
+
+页面直接根据已提交模板的 `defaultFileName` 取图标。名称草稿和提交失败保留原图标，成功提交后随 ready 清单更新；图标不形成新的可变状态或持久化字段。后缀用于提示文件类型，不验证内部副本的内容格式，也不读取文件缩略图或单文件自定义图标。
+
+| 职责模块 | 核心类型 | 源码入口 | 输入 → 输出；拥有的状态 | 外部 API |
+|---|---|---|---|---|
+| 模板页面 | `NewFileTemplateSettingsPage`、`NewFileTemplatesStyle` | [页面与布局参数](../../../../ECMenu/NewFileTemplates/Presentation/NewFileTemplateSettingsPage.swift) | 已提交模板、NSImage → 行内图标；尺寸属于呈现参数 | SwiftUI `Image(nsImage:)`、比例缩放与布局；不执行文件 I/O |
+| 文件类型图标适配 | `FileTemplateIconProvider` | [FileTemplateIconProvider.swift](../../../../ECMenu/NewFileTemplates/Platform/FileTemplateIconProvider.swift) | 默认文件名 → 系统图标 NSImage；无应用自有缓存 | V05、V06；由页面在 MainActor 同步调用 |
+
 ## 导入、更换与删除
 
 ```mermaid
@@ -231,6 +259,8 @@ sequenceDiagram
 | **V02** 页面：SwiftUI `.alert` | 操作会话中的本地化错误消息 → 用户可关闭的提示 | 主应用呈现状态，不改变已经提交的索引；名称提交失败由[编辑会话 E08](Editing.md#原生-api-输入输出)反馈 |
 | **V03** Operations：`Logger.error` | 更换已提交后的 `FileTemplateCleanupIssue.localizedDescription` → 日志 | 无业务成功回执，不撤回提交；原清理问题仍包含在返回 Commit 中 |
 | **V04** [FileTemplateOpener](../../../../ECMenu/NewFileTemplates/Platform/FileTemplateOpener.swift)：`NSWorkspace.shared.open(URL)` | 当前内部副本 URL → Bool | MainActor；false 转 `couldNotOpen`，true 表示系统打开请求成功，不表示编辑器已经显示或保存。使用同步 Bool 变体，见 [Apple API](https://developer.apple.com/documentation/appkit/nsworkspace/open(_:)) |
+| **V05** IconProvider：`NSString.pathExtension`、[`UTType(filenameExtension:)`](https://developer.apple.com/documentation/uniformtypeidentifiers/uttype-swift.struct/init(filenameextension:conformingto:)) | 默认文件名 → 后缀字符串 → 可选 UTType，默认要求符合 `.data` | 无法匹配已声明类型时，系统可能返回动态类型；无效参数返回 nil，项目使用 `.data`。动态类型继续交给系统图标 API；不访问模板文件 |
+| **V06** IconProvider：[`NSWorkspace.shared.icon(for:)`](https://developer.apple.com/documentation/appkit/nsworkspace/icon(for:)) | UTType → NSImage | 查询对应内容类型的图标，操作失败由系统返回默认图标，不抛错。项目在 MainActor 消费返回图片，由 SwiftUI 控制显示尺寸 |
 
 图中的读取、提交、验证和清理 API 统一在[存储表 P01–P06](Persistence.md#文件-api-与完成点)展开；默认编辑器没有由 ECMenu 调用的保存 API。
 
@@ -253,5 +283,7 @@ sequenceDiagram
 [应用操作测试](../../../../Tests/ECMenuTests/NewFileTemplates/Application/FileTemplateOperationsTests.swift)覆盖初始化提示一次、普通缓存查询不提示、管理加载/重试提示、内容请求失败前仍发布已发生的初始化，以及打开入口恢复当前索引后调用注入的打开适配。[Controller 测试](../../../../Tests/ECMenuTests/NewFileTemplates/Presentation/FileTemplateControllerTests.swift)覆盖共享初次加载、失败后显式重试、提交失败保持 ready、删除清理失败先显示已删除清单、更换清理失败保持成功。
 
 [排序测试](../../../../Tests/ECMenuTests/NewFileTemplates/Presentation/FileTemplateOrderingTests.swift)贯穿 Controller、Operations 与 Library，验证移动到指定项前或末尾、重启恢复、已提交名称与内容引用保留、原位不写不发布，以及提交失败保留原顺序并可重试。该测试不驱动鼠标、滚动或原生名称编辑焦点。
+
+图标验收应在独立 Preview 中检查常见、未知和无后缀名称，确认系统图标、默认文件名成功保存后的更新、失败时原图标保持，以及整行拖动。V05/V06 的返回语义来自 Apple 契约；图标具体外观取决于当前系统的类型与图标资源，实机结果及环境见[界面验证记录](../../Architecture/Verification.md#界面与真实-finder)。
 
 提交结果与发布入口的完整测试结果见[验证记录](../../Architecture/Verification.md)。已有真实系统观察见[存储证据](Persistence.md#验证与实机证据)和[原生焦点证据](Editing.md#原生焦点证据与验收)。通知实际到达、默认编辑器真实显示/保存、输入法与窗口切换仍需要对应实机验收。
