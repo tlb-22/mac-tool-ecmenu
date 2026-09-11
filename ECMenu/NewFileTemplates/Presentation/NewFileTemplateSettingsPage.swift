@@ -7,8 +7,8 @@ import SwiftUI
 
 /// 文件模板页面的布局调节入口；页面通用参数沿用 StatusPageStyle。
 enum NewFileTemplatesStyle {
-    /// 命令名与默认文件名控件之间的额外间距；控件本身保留系统内边距。
-    static let rowNameSpacing: CGFloat = 0
+    /// 两个名称控件之间的间距；负值收紧系统内边距形成的空白。
+    static let rowNameSpacing: CGFloat = -2
     /// 模板行的水平与垂直内边距。
     static let rowHorizontalPadding: CGFloat = 8
     static let rowVerticalPadding: CGFloat = 4
