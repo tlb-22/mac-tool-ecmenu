@@ -204,7 +204,7 @@ Archive 和打包不改变本机的 Extension 启用状态。Debug 与 Release �
 
 `python3 scripts/check-readme-images.py` 核对两份 README 是否各自引用与工程 `MARKETING_VERSION` 一致的图片，并确认文件存在且非空。该检查同时在截图结束时和 CI 中执行；升级工程版本后需要重新截图。图内显示的版本由实际 Preview 产物提供，视觉内容由截图后的人工检查确认。
 
-README 文件模板预览固定为 TXT 与 MD；真实菜单读取当前 Debug 模板库，拍摄前需准备相同清单，拍摄后恢复原库。替换前先停止 Debug 主应用，并保留整个模板库及内容副本；恢复后重新启动主应用，使内存缓存与磁盘一致。
+README 文件模板预览依次为 TXT、Markdown、Word，默认文件名分别为 `untitled.txt`、`untitled.md`、`untitled.docx`；配置位于 [README 预览场景](../Tests/ECMenuPreviews/Cases/READMEStatusPagePreview.swift)。真实菜单读取当前 Debug 模板库，拍摄前需准备名称、后缀和顺序一致的清单，拍摄后恢复原库。替换前先停止 Debug 主应用，并保留整个模板库及内容副本；恢复后重新启动主应用，使内存缓存与磁盘一致。
 
 该入口持有完整截图过程的互斥锁，并沿用 Finder 菜单截图的零窗口前置条件、语言恢复和权限要求。运行时保持桌面已解锁且不要操作 Finder。
 
