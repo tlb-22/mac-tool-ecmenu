@@ -92,6 +92,8 @@ sequenceDiagram
 
 ## 导入、更换与删除
 
+行尾的打开、更换和删除使用原生无边框图标按钮，保留本地化悬停提示与辅助功能名称；三个按钮共用 `NewFileTemplatesStyle` 的图标字号和按钮边长。打开使用 `text.document`，更换使用 `arrow.left.arrow.right`，删除使用红色 `trash`。
+
 ```mermaid
 sequenceDiagram
     autonumber

@@ -15,7 +15,7 @@ nonisolated struct CreateNewFileCommand: ContextCommandPayload, Equatable {
             defaultValue: "New File",
             comment: "Finder submenu for creating files from user templates"
         ),
-        icon: .systemSymbol(name: "text.document")
+        icon: .systemSymbol(name: "document.badge.plus")
     )
 
     /// 菜单期已经解析完成、执行时需要重新验证的目标目录路径。

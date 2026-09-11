@@ -52,7 +52,7 @@ enum StatusPagePane: String, CaseIterable, Identifiable {
         case .contextMenu:
             "contextualmenu.and.cursorarrow"
         case .newFileTemplates:
-            "doc.on.doc"
+            "document.badge.plus"
         }
     }
 }

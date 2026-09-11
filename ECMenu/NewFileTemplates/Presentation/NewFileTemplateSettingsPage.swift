@@ -18,6 +18,9 @@ enum NewFileTemplatesStyle {
     static let rowVerticalPadding: CGFloat = 4
     /// 打开、更换和删除操作之间的间距。
     static let actionSpacing: CGFloat = 8
+    /// 行内操作图标共用的字号与按钮边长，保留系统符号的自然比例。
+    static let actionIconPointSize: CGFloat = 13
+    static let actionButtonSize: CGFloat = 18
     /// 仅在文件读写持续一段时间后显示进度，避免短操作闪现指示器。
     static let operationProgressDelay: Duration = .milliseconds(300)
 }
@@ -155,27 +158,43 @@ struct NewFileTemplateSettingsPage: View {
                 Button {
                     perform { try await openTemplate(template.id) }
                 } label: {
-                    Text(NewFileTemplatesText.open)
+                    Image(systemName: "text.document")
+                        .frame(
+                            width: NewFileTemplatesStyle.actionButtonSize,
+                            height: NewFileTemplatesStyle.actionButtonSize
+                        )
                 }
                 .help(Text(NewFileTemplatesText.openHelp))
+                .accessibilityLabel(Text(NewFileTemplatesText.open))
 
                 Button {
                     perform { try await replaceTemplate(template.id) }
                 } label: {
-                    Text(NewFileTemplatesText.replace)
+                    Image(systemName: "arrow.left.arrow.right")
+                        .frame(
+                            width: NewFileTemplatesStyle.actionButtonSize,
+                            height: NewFileTemplatesStyle.actionButtonSize
+                        )
                 }
                 .help(Text(NewFileTemplatesText.replaceHelp))
+                .accessibilityLabel(Text(NewFileTemplatesText.replace))
 
                 Button(role: .destructive) {
                     perform { try await removeTemplate(template.id) }
                 } label: {
                     Image(systemName: "trash")
                         .foregroundStyle(.red)
+                        .frame(
+                            width: NewFileTemplatesStyle.actionButtonSize,
+                            height: NewFileTemplatesStyle.actionButtonSize
+                        )
                 }
-                .buttonStyle(.borderless)
                 .help(Text(NewFileTemplatesText.delete))
                 .accessibilityLabel(Text(NewFileTemplatesText.delete))
             }
+            .font(.system(size: NewFileTemplatesStyle.actionIconPointSize))
+            .foregroundStyle(.primary)
+            .buttonStyle(.borderless)
         }
         .padding(.horizontal, NewFileTemplatesStyle.rowHorizontalPadding)
         .padding(.vertical, NewFileTemplatesStyle.rowVerticalPadding)
