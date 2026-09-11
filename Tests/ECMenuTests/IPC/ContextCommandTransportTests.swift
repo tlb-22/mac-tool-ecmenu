@@ -166,7 +166,8 @@ final class ContextCommandTransportTests: XCTestCase {
         let item = FileTemplateMenuItem(id: .init(), displayName: "TXT", filenameExtension: "txt")
         let snapshot = CommandMenuSettingsSnapshot(configuration: .standard, newFileTemplates: [item])
         let data = try JSONEncoder().encode(snapshot)
-        var object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let validObject = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        var object = validObject
         var incompleteItem = try XCTUnwrap(
             JSONSerialization.jsonObject(with: JSONEncoder().encode(item)) as? [String: Any]
         )
@@ -176,9 +177,11 @@ final class ContextCommandTransportTests: XCTestCase {
         let items = try JSONSerialization.jsonObject(with: JSONEncoder().encode([item, item]))
         object["fileTemplates"] = ["available": ["_0": items]]
         XCTAssertThrowsError(try JSONDecoder().decode(CommandMenuSettingsSnapshot.self, from: JSONSerialization.data(withJSONObject: object)))
-        object["fileTemplates"] = ["unavailable": [:]]
-        object["schemaVersion"] = 999
-        XCTAssertThrowsError(try JSONDecoder().decode(CommandMenuSettingsSnapshot.self, from: JSONSerialization.data(withJSONObject: object)))
+        for version in [1, 999] {
+            var unsupported = validObject
+            unsupported["schemaVersion"] = version
+            XCTAssertThrowsError(try JSONDecoder().decode(CommandMenuSettingsSnapshot.self, from: JSONSerialization.data(withJSONObject: unsupported)))
+        }
     }
 
     @MainActor

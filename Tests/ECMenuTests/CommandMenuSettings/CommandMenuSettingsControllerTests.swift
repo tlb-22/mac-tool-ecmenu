@@ -8,6 +8,23 @@ import XCTest
 
 @MainActor
 final class CommandMenuSettingsControllerTests: XCTestCase {
+    /// 已发布的旧偏好回到产品默认值，读取本身保留原数据且不发布变更。
+    func testReleasedConfigurationUsesDefaultsWithoutOverwritingStoredData() throws {
+        let suite = "CommandMenuSettingsTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let releasedData = Data(#"{"schemaVersion":1,"isEnabled":false,"hiddenFeatureIDs":["new-text-file"]}"#.utf8)
+        defaults.set(releasedData, forKey: CommandMenuSettingsChannel.persistedConfigurationKey)
+        let store = CommandMenuSettingsStore(defaults: defaults)
+
+        XCTAssertNil(store.load())
+        let controller = CommandMenuSettingsController(store: store, publisher: MenuChangePublisher {
+            XCTFail("Restoring unsupported preferences must not publish a change")
+        })
+        XCTAssertEqual(controller.configuration, .standard)
+        XCTAssertEqual(defaults.data(forKey: CommandMenuSettingsChannel.persistedConfigurationKey), releasedData)
+    }
+
     func testChangesPersistBeforePublicationAndNoOpDoesNotPublish() throws {
         let suite = "CommandMenuSettingsTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))

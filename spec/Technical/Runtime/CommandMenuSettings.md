@@ -138,9 +138,9 @@ sequenceDiagram
 - 重新显示等于删除对应隐藏 ID；显示开关、依赖可用性和总开关都不改写顺序。
 - `orderedFeatureIDs` 使用稳定 Feature ID，恰好包含当前全部固定命令各一次；默认顺序来自 `defaultFeatureIDs`。移动以目标 Feature ID 表示插入位置，nil 表示末尾，不以显示名称或视图下标持久化。
 
-当前解码器只接受字段完整的当前 schema。Feature ID 是已发布契约，不随源码重命名变化。“新建文件”继续使用 `new-text-file`，保留用户既有显示偏好。
+当前解码器只接受字段完整的当前 schema。Feature ID 是稳定契约，不随源码重命名变化，“新建文件”使用 `new-text-file`。1.1.1 从 1.1.0 的 schema `1` 升级时，旧菜单偏好解码失败并采用默认总开关、显隐和命令顺序；读取本身保留原偏好字节，下一次有效设置变更写入 schema `2`。文件模板库继续使用原有 schema `2`，模板数据直接沿用。
 
-[完整菜单快照](../../../ECMenuShared/Contracts/CommandMenuSettings/CommandMenuSettingsSnapshot.swift)使用独立的外层 schema `1`，将当前配置与 `available([FileTemplateMenuItem]) / unavailable` 组合。有效空清单和不可用状态在存储与 IPC 中保持区别，菜单呈现均隐藏新建父菜单。模板描述包含 ID、displayName 与 filenameExtension，并保留模板索引的数组顺序。后缀由已提交默认文件名的 `NSString.pathExtension` 推导，空字符串表示无后缀；Extension 用它在本机读取文件类型图标，见[菜单图标](../Platform/Finder/MenuIcons.md)。创建命令按 ID 从模板能力读取执行时的内容和默认文件名。
+[完整菜单快照](../../../ECMenuShared/Contracts/CommandMenuSettings/CommandMenuSettingsSnapshot.swift)使用独立的外层 schema `2`，将当前配置与 `available([FileTemplateMenuItem]) / unavailable` 组合。有效空清单和不可用状态在存储与 IPC 中保持区别，菜单呈现均隐藏新建父菜单。模板描述包含 ID、displayName 与 filenameExtension，并保留模板索引的数组顺序。后缀由已提交默认文件名的 `NSString.pathExtension` 推导，空字符串表示无后缀；Extension 用它在本机读取文件类型图标，见[菜单图标](../Platform/Finder/MenuIcons.md)。创建命令按 ID 从模板能力读取执行时的内容和默认文件名。
 
 | 状态 | 唯一所有者 | 生命周期与其他使用者 |
 |---|---|---|

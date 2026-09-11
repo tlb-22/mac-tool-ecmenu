@@ -20,7 +20,7 @@ nonisolated enum FileTemplateMenuState: Codable, Equatable, Sendable {
 
 /// 主应用发布的完整菜单事实；模板库仍由主应用独立持有。
 nonisolated struct CommandMenuSettingsSnapshot: Codable, Equatable, Sendable {
-    static let currentSchemaVersion = 1
+    static let currentSchemaVersion = 2
     static let standard = CommandMenuSettingsSnapshot(
         configuration: .standard,
         fileTemplateState: .unavailable
