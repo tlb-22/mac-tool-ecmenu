@@ -97,7 +97,7 @@ sequenceDiagram
             T->>T: 通知 MenuChangePublisher
         end
         T-->>P: 当前模板元数据
-        P->>P: 投影 ID 与 displayName，标记 available
+        P->>P: 投影 ID、displayName 与 filenameExtension，标记 available
     else 模板库读取失败
         L-->>T: Error
         T-->>P: Error
@@ -139,7 +139,7 @@ sequenceDiagram
 
 当前解码器只接受字段完整的当前 schema。Feature ID 是已发布契约，不随源码重命名变化。“新建文件”继续使用 `new-text-file`，保留用户既有显示偏好。
 
-[完整菜单快照](../../../ECMenuShared/Contracts/CommandMenuSettings/CommandMenuSettingsSnapshot.swift)使用独立的外层 schema `1`，将当前配置与 `available([FileTemplateMenuItem]) / unavailable` 组合。有效空清单和不可用状态在存储与 IPC 中保持区别，菜单呈现均隐藏新建父菜单。模板描述只含 ID 与 displayName，并保留模板索引的数组顺序；创建命令按 ID 从模板能力读取执行时的内容和默认文件名。
+[完整菜单快照](../../../ECMenuShared/Contracts/CommandMenuSettings/CommandMenuSettingsSnapshot.swift)使用独立的外层 schema `1`，将当前配置与 `available([FileTemplateMenuItem]) / unavailable` 组合。有效空清单和不可用状态在存储与 IPC 中保持区别，菜单呈现均隐藏新建父菜单。模板描述包含 ID、displayName 与 filenameExtension，并保留模板索引的数组顺序。后缀由已提交默认文件名的 `NSString.pathExtension` 推导，空字符串表示无后缀；Extension 用它在本机读取文件类型图标，见[菜单图标](../Platform/Finder/MenuIcons.md)。创建命令按 ID 从模板能力读取执行时的内容和默认文件名。
 
 | 状态 | 唯一所有者 | 生命周期与其他使用者 |
 |---|---|---|

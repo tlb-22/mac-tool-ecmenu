@@ -1,5 +1,5 @@
 /**
- 把符号和应用图标适配为 Finder 菜单槽位可用的图像，统一源图生成、画布度量与缺失处理。
+ 把符号、应用和文件类型图标适配为 Finder 菜单槽位图像，统一画布度量与缺失处理。
  渲染器独占跨菜单图像缓存，几何变换复用共享画布原语。
  */
 
@@ -24,24 +24,37 @@ final class FinderMenuIconRenderer {
             + menuIconFont.leading
     )
 
-    /// SF Symbol 和应用图标共用的正方形画布。
+    /// 全部菜单图标来源共用的正方形画布。
     private static let menuIconCanvasSize = NSSize(
         width: menuIconCanvasLength,
         height: menuIconCanvasLength
     )
 
-    /// 复用已经居中适配的固定符号和应用图标，避免重复创建图像。
+    /// 按符号、应用路径和文件后缀复用已适配的图像。
     private var iconCache: [String: NSImage] = [:]
 
     /// 把共享的无框架图标声明解析为 Finder 可以显示的 AppKit 图像。
     /// - Parameter icon: 当前菜单项的图标声明。
-    /// - Returns: SF Symbol、实际应用图标或图标读取失败占位符。
+    /// - Returns: 统一画布上的符号、应用图标、文件类型图标或读取失败占位符。
     func image(
         for icon: ContextCommandIcon
     ) -> NSImage? {
         switch icon {
         case .systemSymbol(let name):
             return systemSymbol(named: name)
+
+        case .fileType(let filenameExtension):
+            let cacheKey = "fileType:\(filenameExtension)"
+            if let cachedIcon = iconCache[cacheKey] {
+                return cachedIcon
+            }
+            let sourceIcon = FileTypeIconProvider.icon(forFilenameExtension: filenameExtension)
+            let icon = AppKitIconCanvasRenderer.proportionallyFittedImage(
+                sourceIcon,
+                canvasSize: Self.menuIconCanvasSize
+            )
+            iconCache[cacheKey] = icon
+            return icon
 
         case .application(let requirement):
             guard

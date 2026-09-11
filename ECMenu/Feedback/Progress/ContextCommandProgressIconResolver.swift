@@ -1,5 +1,5 @@
 /**
- 解析进度任务描述中的系统图标或应用图标。
+ 解析进度任务描述中的系统符号、应用或文件类型图标。
  将图标查找与缓存集中在进度展示边界。
  */
 
@@ -15,6 +15,9 @@ final class ContextCommandProgressIconResolver {
     /// 解析 descriptor 的真实图标，外部应用缺失时使用统一占位符。
     func image(for descriptor: ContextCommandDescriptor) -> NSImage? {
         switch descriptor.icon {
+        case .fileType(let filenameExtension):
+            return centeredImage(FileTypeIconProvider.icon(forFilenameExtension: filenameExtension))
+
         case .systemSymbol(let name):
             return systemSymbol(named: name)
 

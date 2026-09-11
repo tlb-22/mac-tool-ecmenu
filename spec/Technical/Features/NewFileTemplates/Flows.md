@@ -81,12 +81,12 @@ sequenceDiagram
 
 图标位于排序提示和两行名称之间，与名称组成内部 `HStack` 并整体垂直居中。页面顶部的 `NewFileTemplatesStyle.templateIconSize` 独立控制图标尺寸，保持原图比例；`iconNameSpacing` 控制图标与名称控件之间的间距，外层排序提示和操作按钮的间距由 `rowSpacing` 控制。图标是装饰性内容，不接收点击，也不成为辅助功能节点；拖动由所在行处理。
 
-页面直接根据已提交模板的 `defaultFileName` 取图标。名称草稿和提交失败保留原图标，成功提交后随 ready 清单更新；图标不形成新的可变状态或持久化字段。后缀用于提示文件类型，不验证内部副本的内容格式，也不读取文件缩略图或单文件自定义图标。
+页面直接根据已提交模板的 `defaultFileName` 取图标。名称草稿和提交失败保留原图标，成功提交后随 ready 清单更新；设置页图标不形成新的可变状态或持久化字段。Finder 通过菜单快照接收同一后缀，并在 Extension 内查询与适配图标，见[菜单图标](../../Platform/Finder/MenuIcons.md#文件类型图标)。后缀用于提示文件类型，不验证内部副本的内容格式，也不读取文件缩略图或单文件自定义图标。
 
 | 职责模块 | 核心类型 | 源码入口 | 输入 → 输出；拥有的状态 | 外部 API |
 |---|---|---|---|---|
 | 模板页面 | `NewFileTemplateSettingsPage`、`NewFileTemplatesStyle` | [页面与布局参数](../../../../ECMenu/NewFileTemplates/Presentation/NewFileTemplateSettingsPage.swift) | 已提交模板、NSImage → 行内图标；尺寸属于呈现参数 | SwiftUI `Image(nsImage:)`、比例缩放与布局；不执行文件 I/O |
-| 文件类型图标适配 | `FileTemplateIconProvider` | [FileTemplateIconProvider.swift](../../../../ECMenu/NewFileTemplates/Platform/FileTemplateIconProvider.swift) | 默认文件名 → 系统图标 NSImage；无应用自有缓存 | V05、V06；由页面在 MainActor 同步调用 |
+| 文件类型图标适配 | `FileTypeIconProvider` | [FileTypeIconProvider.swift](../../../../ECMenuShared/Platform/Rendering/FileTypeIconProvider.swift) | 默认文件名 → 系统图标 NSImage；无应用自有缓存 | V05、V06；由页面在 MainActor 同步调用 |
 
 ## 导入、更换与删除
 
@@ -276,7 +276,7 @@ sequenceDiagram
 | 拖动开始时的名称提交引用 | 模板页面持有名称 Task 引用，一次拖动期间 | 完成移动消费同次名称结果后调用业务移动；结束时释放引用，不取消名称任务 |
 | `FileTemplateContent` | 单次调用返回的不可变值 | 新建文件用例消费，不暴露库路径 |
 | 读取来源与 Commit | 一次调用的不可变事实 | Operations 决定是否发布；不另存可变“需要发布”标记 |
-| 菜单副本 | Finder Extension 的 Replica | 经 IPC 整体应用，仅含 ID 与显示名；不承担模板持久化 |
+| 菜单副本 | Finder Extension 的 Replica | 经 IPC 整体应用，包含 ID、显示名与默认文件名后缀；不承担模板持久化 |
 
 ## 验证证据与限制
 

@@ -45,7 +45,7 @@ final class ContextCommandLocalizationTests: XCTestCase {
 
         let menu = ContextMenuComposition.menu(
             commandClient: ContextCommandClient(),
-            newFileTemplates: [FileTemplateMenuItem(id: FileTemplateID(), displayName: "TXT")]
+            newFileTemplates: [FileTemplateMenuItem(id: FileTemplateID(), displayName: "TXT", filenameExtension: "txt")]
         )
         let titles = menu.nodes.flatMap(localizedTitles)
         XCTAssertEqual(Set(titles.map(\.key)), Set(expectations.map(\.resource.key)))

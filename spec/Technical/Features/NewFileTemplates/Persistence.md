@@ -6,7 +6,7 @@
 
 模板由软件生成的唯一、稳定 `FileTemplateID` 标识，显示名和默认输出文件名均允许重复；它们不作为存储键、内容查找依据或命令身份。菜单项按 ID 绑定用户选择，主应用按同一 ID 读取当前模板。已经删除或不可读取的模板返回运行时失败，不按名称寻找替代项。
 
-模板 ID 和文件副本 UUID 是两份不同的身份。名称修改保留二者；更换只改变文件副本 UUID 和导入文件名，保留模板 ID、名称与清单顺序。完整元数据由主应用 [FileTemplate](../../../../ECMenu/NewFileTemplates/Domain/FileTemplate.swift) 拥有；跨端仅共享 [ID](../../../../ECMenuShared/Contracts/NewFileTemplates/FileTemplateID.swift) 和[菜单描述](../../../../ECMenuShared/Contracts/NewFileTemplates/FileTemplateMenuItem.swift)。
+模板 ID 和文件副本 UUID 是两份不同的身份。名称修改保留二者；更换只改变文件副本 UUID 和导入文件名，保留模板 ID、名称与清单顺序。完整元数据由主应用 [FileTemplate](../../../../ECMenu/NewFileTemplates/Domain/FileTemplate.swift) 拥有；跨端仅共享 [ID](../../../../ECMenuShared/Contracts/NewFileTemplates/FileTemplateID.swift) 和[菜单描述](../../../../ECMenuShared/Contracts/NewFileTemplates/FileTemplateMenuItem.swift)，菜单描述含 ID、显示名和用于类型图标的默认文件名后缀。
 
 排序只移动权威记录数组中的位置，保留记录中的模板 ID、名称、文件副本 UUID 与导入文件名。菜单快照按同一记录顺序投影；不另存排序索引，也不按显示名定位模板。导入追加到清单末尾，删除保留其余模板的相对顺序。
 

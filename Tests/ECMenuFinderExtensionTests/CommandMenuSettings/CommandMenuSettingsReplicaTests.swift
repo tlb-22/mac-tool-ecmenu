@@ -14,7 +14,7 @@ final class CommandMenuSettingsReplicaTests: XCTestCase {
         let suiteName = "CommandMenuSettingsReplicaTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
-        let template = FileTemplateMenuItem(id: FileTemplateID(), displayName: "Notes")
+        let template = FileTemplateMenuItem(id: FileTemplateID(), displayName: "Notes", filenameExtension: "md")
         let cached = CommandMenuSettingsSnapshot(
             configuration: CommandMenuSettings(isEnabled: false),
             newFileTemplates: [template]
@@ -56,14 +56,14 @@ final class CommandMenuSettingsReplicaTests: XCTestCase {
         XCTAssertTrue(replica.newFileTemplates.isEmpty)
     }
 
-    /// 命令顺序与同名模板的独立身份、原顺序共同从快照缓存恢复。
+    /// 命令顺序与同名模板的独立身份、后缀、原顺序共同从快照缓存恢复。
     func testSnapshotCacheRestoresDuplicateNamesAndDistinctIdentities() throws {
         let suiteName = "CommandMenuSettingsReplicaTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
         let templates = [
-            FileTemplateMenuItem(id: FileTemplateID(), displayName: "TXT"),
-            FileTemplateMenuItem(id: FileTemplateID(), displayName: "TXT"),
+            FileTemplateMenuItem(id: FileTemplateID(), displayName: "TXT", filenameExtension: "txt"),
+            FileTemplateMenuItem(id: FileTemplateID(), displayName: "TXT", filenameExtension: ""),
         ]
         let snapshot = CommandMenuSettingsSnapshot(
             configuration: CommandMenuSettings(orderedFeatureIDs: CommandMenuSettings.defaultFeatureIDs.reversed()),
@@ -79,6 +79,7 @@ final class CommandMenuSettingsReplicaTests: XCTestCase {
         XCTAssertEqual(replica.newFileTemplates, templates)
         XCTAssertEqual(replica.menuSettings, snapshot.configuration)
         XCTAssertEqual(replica.newFileTemplates.map(\.displayName), ["TXT", "TXT"])
+        XCTAssertEqual(replica.newFileTemplates.map(\.filenameExtension), ["txt", ""])
         XCTAssertNotEqual(replica.newFileTemplates[0].id, replica.newFileTemplates[1].id)
     }
 
@@ -101,7 +102,7 @@ final class CommandMenuSettingsReplicaTests: XCTestCase {
 
         let stale = CommandMenuSettingsSnapshot(
             configuration: CommandMenuSettings(isEnabled: false),
-            newFileTemplates: [FileTemplateMenuItem(id: FileTemplateID(), displayName: "Stale")]
+            newFileTemplates: [FileTemplateMenuItem(id: FileTemplateID(), displayName: "Stale", filenameExtension: "txt")]
         )
         transport.completeNext(with: .success(stale))
         await waitForRequestCount(2, in: transport)
@@ -111,8 +112,8 @@ final class CommandMenuSettingsReplicaTests: XCTestCase {
         XCTAssertTrue(replica.newFileTemplates.isEmpty)
 
         let templates = [
-            FileTemplateMenuItem(id: FileTemplateID(), displayName: "TXT"),
-            FileTemplateMenuItem(id: FileTemplateID(), displayName: "TXT"),
+            FileTemplateMenuItem(id: FileTemplateID(), displayName: "TXT", filenameExtension: "txt"),
+            FileTemplateMenuItem(id: FileTemplateID(), displayName: "TXT", filenameExtension: "txt"),
         ]
         let latest = CommandMenuSettingsSnapshot(
             configuration: CommandMenuSettings(

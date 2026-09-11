@@ -117,8 +117,9 @@ final class ContextCommandTransportTests: XCTestCase {
                 orderedFeatureIDs: CommandMenuSettings.defaultFeatureIDs.reversed()
             ),
             newFileTemplates: [
-                FileTemplateMenuItem(id: .init(), displayName: "TXT"),
-                FileTemplateMenuItem(id: .init(), displayName: "TXT")
+                FileTemplateMenuItem(id: .init(), displayName: "TXT", filenameExtension: "txt"),
+                FileTemplateMenuItem(id: .init(), displayName: "TXT", filenameExtension: "md"),
+                FileTemplateMenuItem(id: .init(), displayName: "README", filenameExtension: "")
             ]
         )
         XCTAssertEqual(
@@ -132,6 +133,12 @@ final class ContextCommandTransportTests: XCTestCase {
 
     func testMatchingRuntimeIdentityAllowsCommandMenuSettingsQuery() async throws {
         let socketURL = try ProjectTestDirectory.makeUniqueSocketURL()
+        let snapshot = CommandMenuSettingsSnapshot(
+            configuration: .standard,
+            newFileTemplates: [
+                FileTemplateMenuItem(id: .init(), displayName: "Notes", filenameExtension: "md")
+            ]
+        )
         let server = try AuthenticatedLocalSocketServer(
             expectedClientSigningIdentifier:
                 ApplicationIPC.applicationSigningIdentifier,
@@ -139,7 +146,7 @@ final class ContextCommandTransportTests: XCTestCase {
             contextCommandSink: { _ in
                 XCTFail("A configuration query reached the command sink")
             },
-            commandMenuSettingsProvider: { reply in reply(.success(.standard)) }
+            commandMenuSettingsProvider: { reply in reply(.success(snapshot)) }
         )
         defer { server.stop() }
 
@@ -152,14 +159,20 @@ final class ContextCommandTransportTests: XCTestCase {
             try client.fetchCommandMenuSettings()
         }.value
 
-        XCTAssertEqual(configuration, .standard)
+        XCTAssertEqual(configuration, snapshot)
     }
 
-    func testMenuSnapshotRejectsInvalidTemplateIdentitiesAndUnsupportedSchema() throws {
-        let item = FileTemplateMenuItem(id: .init(), displayName: "TXT")
+    func testMenuSnapshotRejectsIncompleteTemplatesInvalidIdentitiesAndUnsupportedSchema() throws {
+        let item = FileTemplateMenuItem(id: .init(), displayName: "TXT", filenameExtension: "txt")
         let snapshot = CommandMenuSettingsSnapshot(configuration: .standard, newFileTemplates: [item])
         let data = try JSONEncoder().encode(snapshot)
         var object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        var incompleteItem = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: JSONEncoder().encode(item)) as? [String: Any]
+        )
+        incompleteItem.removeValue(forKey: "filenameExtension")
+        object["fileTemplates"] = ["available": ["_0": [incompleteItem]]]
+        XCTAssertThrowsError(try JSONDecoder().decode(CommandMenuSettingsSnapshot.self, from: JSONSerialization.data(withJSONObject: object)))
         let items = try JSONSerialization.jsonObject(with: JSONEncoder().encode([item, item]))
         object["fileTemplates"] = ["available": ["_0": items]]
         XCTAssertThrowsError(try JSONDecoder().decode(CommandMenuSettingsSnapshot.self, from: JSONSerialization.data(withJSONObject: object)))
@@ -192,6 +205,18 @@ final class ContextCommandTransportTests: XCTestCase {
         let recovered = await provider.currentSnapshot()
         XCTAssertEqual(recovered.configuration, switches)
         XCTAssertEqual(recovered.newFileTemplates.map(\.id), templates.map(\.id))
+        XCTAssertEqual(recovered.newFileTemplates.map(\.filenameExtension), ["txt"])
+
+        let template = try XCTUnwrap(templates.first)
+        _ = try await library.updateName(
+            for: template.id,
+            field: .defaultFileName,
+            value: "notes.archive.md"
+        )
+        let renamed = await provider.currentSnapshot()
+        XCTAssertEqual(renamed.newFileTemplates.map(\.id), [template.id])
+        XCTAssertEqual(renamed.newFileTemplates.map(\.displayName), [template.displayName])
+        XCTAssertEqual(renamed.newFileTemplates.map(\.filenameExtension), ["md"])
     }
 
     func testPermissionFailureDoesNotRemoveAnActiveSocketAsStale() throws {

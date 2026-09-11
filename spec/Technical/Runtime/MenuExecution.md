@@ -95,13 +95,13 @@ flowchart TB
 | 图片压缩菜单规则（组合） | `ImageCompressionMenuInput`、`CompressImagesFeature` | [ImageCompressionMenuInput.swift](../../../ECMenuFinderExtension/Commands/ImageCompression/ImageCompressionMenuInput.swift)、[CompressImagesFeature.swift](../../../ECMenuFinderExtension/Commands/ImageCompression/CompressImagesFeature.swift) | items 选择 → 压缩命令或 nil | `URL.resourceValues` 读取 `.isDirectoryKey/.contentTypeKey`；`CGImageSourceCopyTypeIdentifiers()` 与 `UTType.conforms(to:)` 提供支持集合。要求全部为非目录、非 PDF 且类型受支持；未知/读取失败隐藏菜单。支持集合进程内只读取一次，菜单阶段不解码图片 |
 | 菜单控制器内部：应用依赖查询 | `FinderContextMenuController.isApplicationAvailable` | [FinderContextMenuController.swift](../../../ECMenuFinderExtension/Menu/FinderContextMenuController.swift) | 固定 bundle identifier → 可用或不可用 | `NSWorkspace.urlForApplication(withBundleIdentifier:)` 返回 `URL?`；nil 隐藏对应叶子。该结果不是执行时应用仍然存在的保证 |
 | 动作树准备（组合） | `AnyContextMenuAction`、`PreparedContextMenuAction`、`FinderContextMenuDefinition`、`ContextMenuNode`、`ContextMenuNodeResolver` | [PreparedContextMenuAction.swift](../../../ECMenuFinderExtension/Menu/PreparedContextMenuAction.swift)、[FinderContextMenuDefinition.swift](../../../ECMenuFinderExtension/Menu/FinderContextMenuDefinition.swift)、[ContextMenuLayout.swift](../../../ECMenuFinderExtension/Menu/ContextMenuLayout.swift) | 声明树、冻结快照 → 可执行叶子与规范化树 | 无外部 I/O；准备闭包固定实际 Command，树规则保序并移除空子菜单和每层首尾/连续分隔线 |
-| 菜单图标呈现（组合） | `FinderMenuIconRenderer`、`AppKitIconCanvasRenderer` | [FinderMenuIconRenderer.swift](../../../ECMenuFinderExtension/Menu/FinderMenuIconRenderer.swift)、[AppKitIconCanvasRenderer.swift](../../../ECMenuShared/Platform/Rendering/AppKitIconCanvasRenderer.swift) | 符号或应用图标声明 → Finder 可用 `NSImage?` | `NSFont.menuFont`、`NSImage(systemSymbolName:)`、Symbol configuration、`NSWorkspace.icon(forFile:)` 与画布绘制。Symbol 失败可无图标，应用图标缺失或适配失败用占位符；不改变已准备命令。适配器独占按符号名/应用路径缓存的图像 |
+| 菜单图标呈现（组合） | `FinderMenuIconRenderer`、`FileTypeIconProvider`、`AppKitIconCanvasRenderer` | [FinderMenuIconRenderer.swift](../../../ECMenuFinderExtension/Menu/FinderMenuIconRenderer.swift)、[AppKitIconCanvasRenderer.swift](../../../ECMenuShared/Platform/Rendering/AppKitIconCanvasRenderer.swift) | 符号、应用或文件类型图标声明 → Finder 可用 `NSImage?` | `NSFont.menuFont`、`NSImage(systemSymbolName:)`、Symbol configuration、`NSWorkspace.icon(forFile:)`、文件类型查询与画布绘制。Symbol 失败可无图标，应用图标缺失或适配失败用占位符；不改变已准备命令。适配器独占按符号名/应用路径/文件后缀缓存的图像；类型图标 API 与源码入口见[菜单图标](../Platform/Finder/MenuIcons.md#文件类型图标) |
 
 ### 菜单生命周期与完成点
 
 返回 `NSMenu` 只表示 Extension 已构造菜单，不表示 Finder 已显示或用户已选择。菜单 Controller 保留叶子对应的冻结命令与唯一 tag，点击消费一次；它不在点击时重新读取 Finder 当前选择或菜单开关。每次菜单注册后，按 `max(256, 本次菜单叶子数)` 保留最近动作，后续大量菜单可淘汰旧项。无效或重复 tag 只播放提示音。
 
-一级入口顺序、模板显示名、模板顺序与 ID 在当前菜单中固定；模板内容和默认文件名由主应用执行时读取。配置副本更新只影响下一次菜单构建。图标缓存独立跨菜单保留，同一路径的应用图标变化不会主动清空缓存。
+一级入口顺序、模板显示名、图标后缀、模板顺序与 ID 在当前菜单中固定；模板内容和默认文件名由主应用执行时读取。配置副本更新只影响下一次菜单构建。图标缓存独立跨菜单保留，同一路径的应用图标或同一后缀的系统类型图标变化不会主动清空缓存。文件类型来源与统一画布见[菜单图标](../Platform/Finder/MenuIcons.md)。
 
 Finder 字段组合属于项目映射，API 顺序也不承诺等于可见排序；官方范围及项目观察见[菜单语义](../Platform/Finder/ContextMenus.md)。菜单主体尺度与图标裁切依据见[菜单图标](../Platform/Finder/MenuIcons.md)。
 

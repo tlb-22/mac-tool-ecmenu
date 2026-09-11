@@ -21,7 +21,7 @@ final class ContextCommandFeatureTests: XCTestCase {
         let templateID = FileTemplateID()
         let newFile = CreateNewFileFeature(
             commandClient: client,
-            newFileTemplates: [FileTemplateMenuItem(id: templateID, displayName: "TXT")]
+            newFileTemplates: [FileTemplateMenuItem(id: templateID, displayName: "TXT", filenameExtension: "txt")]
         )
         let vscode = OpenInVSCodeFeature(commandClient: client)
         let iterm = OpenInITerm2Feature(commandClient: client)
@@ -78,7 +78,7 @@ final class ContextCommandFeatureTests: XCTestCase {
         let templateID = FileTemplateID()
         let feature = CreateNewFileFeature(
             commandClient: ContextCommandClient(),
-            newFileTemplates: [FileTemplateMenuItem(id: templateID, displayName: "TXT")]
+            newFileTemplates: [FileTemplateMenuItem(id: templateID, displayName: "TXT", filenameExtension: "txt")]
         )
 
         XCTAssertEqual(

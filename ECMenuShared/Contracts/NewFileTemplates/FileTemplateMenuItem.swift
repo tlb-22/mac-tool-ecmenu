@@ -1,6 +1,6 @@
 /**
- 限定主应用发布给 Finder 的模板菜单信息，只交付稳定身份与经过验证的显示名称。
- 传输解码拒绝空白名称，模板内容、默认文件名与内部存储位置由主应用独立拥有。
+ 限定主应用发布给 Finder 的模板菜单信息：稳定身份、显示名称和文件名后缀。
+ 传输解码拒绝空白名称；后缀供系统图标查询，内容、完整文件名与存储位置由主应用拥有。
  */
 
 import Foundation
@@ -9,16 +9,19 @@ import Foundation
 nonisolated struct FileTemplateMenuItem: Codable, Equatable, Sendable {
     let id: FileTemplateID
     let displayName: String
+    let filenameExtension: String
 
-    init(id: FileTemplateID, displayName: String) {
+    init(id: FileTemplateID, displayName: String, filenameExtension: String) {
         precondition(!displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         self.id = id
         self.displayName = displayName
+        self.filenameExtension = filenameExtension
     }
 
     private enum CodingKeys: String, CodingKey {
         case id
         case displayName
+        case filenameExtension
     }
 
     init(from decoder: Decoder) throws {
@@ -33,5 +36,6 @@ nonisolated struct FileTemplateMenuItem: Codable, Equatable, Sendable {
         }
         id = try container.decode(FileTemplateID.self, forKey: .id)
         self.displayName = displayName
+        filenameExtension = try container.decode(String.self, forKey: .filenameExtension)
     }
 }

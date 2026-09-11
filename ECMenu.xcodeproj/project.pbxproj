@@ -90,6 +90,7 @@
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Platform/Rendering/AppKitIconCanvasRenderer.swift,
+				Platform/Rendering/FileTypeIconProvider.swift,
 			);
 			target = I10000000000000000000006 /* ContextCommandSender */;
 		};

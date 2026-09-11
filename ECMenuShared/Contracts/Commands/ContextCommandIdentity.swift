@@ -74,7 +74,7 @@ nonisolated struct ContextCommandDescriptor: Equatable, Identifiable, Sendable {
         switch icon {
         case .systemSymbol(let name):
             precondition(!name.isEmpty)
-        case .application:
+        case .application, .fileType:
             break
         }
 
@@ -92,6 +92,9 @@ nonisolated enum ContextCommandIcon: Equatable, Sendable {
 
     /// 使用关联应用的软件图标；读取失败时由呈现端降级。
     case application(ContextCommandApplicationRequirement)
+
+    /// 根据文件名后缀读取系统文档图标；空字符串表示无后缀。
+    case fileType(filenameExtension: String)
 }
 
 /// 描述一个右键命令依赖的固定 macOS 应用。

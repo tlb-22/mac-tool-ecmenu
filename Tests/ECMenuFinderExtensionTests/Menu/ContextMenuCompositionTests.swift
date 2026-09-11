@@ -15,7 +15,7 @@ final class ContextMenuCompositionTests: XCTestCase {
         let menu = ContextMenuComposition.menu(
             commandClient: ContextCommandClient(),
             newFileTemplates: [
-                FileTemplateMenuItem(id: FileTemplateID(), displayName: "TXT"),
+                FileTemplateMenuItem(id: FileTemplateID(), displayName: "TXT", filenameExtension: "txt"),
             ]
         )
         let featureIDs = menu.nodes
@@ -50,8 +50,8 @@ final class ContextMenuCompositionTests: XCTestCase {
             orderedFeatureIDs: ids
         )
         let templates = [
-            FileTemplateMenuItem(id: FileTemplateID(), displayName: "MD"),
-            FileTemplateMenuItem(id: FileTemplateID(), displayName: "TXT"),
+            FileTemplateMenuItem(id: FileTemplateID(), displayName: "MD", filenameExtension: "md"),
+            FileTemplateMenuItem(id: FileTemplateID(), displayName: "TXT", filenameExtension: "txt"),
         ]
         let definition = ContextMenuComposition.menu(
             commandClient: ContextCommandClient(),
@@ -610,12 +610,12 @@ final class ContextMenuCompositionTests: XCTestCase {
         )
     }
 
-    /// 同名模板以原始文字显示，各叶子按稳定身份投递，并保留当前列表顺序。
+    /// 同名模板保留各自文件类型图标、稳定身份和顺序，图标与父菜单使用同一画布。
     func testTemplateSubmenuPreservesDuplicateNamesAndDistinctIdentities() throws {
         let transport = RecordingContextCommandTransport()
         let templates = [
-            FileTemplateMenuItem(id: FileTemplateID(), displayName: "command.copyPath"),
-            FileTemplateMenuItem(id: FileTemplateID(), displayName: "command.copyPath"),
+            FileTemplateMenuItem(id: FileTemplateID(), displayName: "command.copyPath", filenameExtension: "txt"),
+            FileTemplateMenuItem(id: FileTemplateID(), displayName: "command.copyPath", filenameExtension: "md"),
         ]
         let directory = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
         let targetPath = absolutePath(directory.path)
@@ -640,10 +640,19 @@ final class ContextMenuCompositionTests: XCTestCase {
 
         XCTAssertEqual(menu.items.count, 1)
         XCTAssertEqual(parent.title, localizedTitle(CreateNewFileCommand.descriptor))
-        XCTAssertNotNil(parent.image)
+        let parentImage = try XCTUnwrap(parent.image)
         XCTAssertNil(controller.preparedAction(for: parent))
         XCTAssertEqual(submenu.items.map(\.title), templates.map(\.displayName))
-        XCTAssertTrue(submenu.items.allSatisfy { $0.image == nil })
+        for (item, template) in zip(submenu.items, templates) {
+            let image = try XCTUnwrap(item.image)
+            XCTAssertEqual(image.size, parentImage.size)
+            XCTAssertEqual(image.alignmentRect, parentImage.alignmentRect)
+            XCTAssertFalse(image.isTemplate)
+            XCTAssertEqual(
+                controller.preparedAction(for: item)?.descriptor.icon,
+                .fileType(filenameExtension: template.filenameExtension)
+            )
+        }
         XCTAssertTrue(submenu.items.allSatisfy { $0.submenu == nil })
         XCTAssertNotEqual(submenu.items[0].tag, submenu.items[1].tag)
         submenu.items.forEach { controller.perform($0) }
@@ -658,8 +667,8 @@ final class ContextMenuCompositionTests: XCTestCase {
     /// 新菜单立即使用当前模板清单，旧菜单仍绑定原模板与原目标。
     func testTemplateChangesAffectNextMenuWithoutRebindingOldActions() throws {
         let transport = RecordingContextCommandTransport()
-        let first = FileTemplateMenuItem(id: FileTemplateID(), displayName: "TXT")
-        let second = FileTemplateMenuItem(id: FileTemplateID(), displayName: "Markdown")
+        let first = FileTemplateMenuItem(id: FileTemplateID(), displayName: "TXT", filenameExtension: "txt")
+        let second = FileTemplateMenuItem(id: FileTemplateID(), displayName: "Markdown", filenameExtension: "md")
         var templates = [first]
         let directory = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
         let firstPath = absolutePath(directory.path)
@@ -689,6 +698,14 @@ final class ContextMenuCompositionTests: XCTestCase {
 
         XCTAssertEqual(oldItem.title, first.displayName)
         XCTAssertEqual(newItem.title, second.displayName)
+        XCTAssertEqual(
+            controller.preparedAction(for: oldItem)?.descriptor.icon,
+            .fileType(filenameExtension: first.filenameExtension)
+        )
+        XCTAssertEqual(
+            controller.preparedAction(for: newItem)?.descriptor.icon,
+            .fileType(filenameExtension: second.filenameExtension)
+        )
         controller.perform(oldItem)
         controller.perform(newItem)
         let commands = try transport.recordedRequests.map {
@@ -722,7 +739,7 @@ final class ContextMenuCompositionTests: XCTestCase {
             for: snapshot,
             action: #selector(NSApplication.terminate(_:))
         ))
-        templates = [FileTemplateMenuItem(id: FileTemplateID(), displayName: "TXT")]
+        templates = [FileTemplateMenuItem(id: FileTemplateID(), displayName: "TXT", filenameExtension: "txt")]
         XCTAssertNotNil(controller.menu(
             for: snapshot,
             action: #selector(NSApplication.terminate(_:))
@@ -743,7 +760,7 @@ final class ContextMenuCompositionTests: XCTestCase {
     /// 用户模板数可以超过旧菜单缓存预算，本次菜单的任何叶子都不能被提前淘汰。
     func testLargeTemplateMenuRetainsEveryCurrentAction() throws {
         let templates = (0..<300).map { index in
-            FileTemplateMenuItem(id: FileTemplateID(), displayName: "Template \(index)")
+            FileTemplateMenuItem(id: FileTemplateID(), displayName: "Template \(index)", filenameExtension: "")
         }
         let controller = FinderContextMenuController(
             menu: FinderContextMenuDefinition {

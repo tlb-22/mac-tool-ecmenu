@@ -140,7 +140,7 @@ struct NewFileTemplateSettingsPage: View {
         HStack(spacing: StatusPageStyle.rowSpacing) {
             reorderHandle(for: template)
             HStack(spacing: NewFileTemplatesStyle.iconNameSpacing) {
-                Image(nsImage: FileTemplateIconProvider.icon(forFileName: template.defaultFileName))
+                Image(nsImage: FileTypeIconProvider.icon(forFileName: template.defaultFileName))
                     .resizable()
                     .scaledToFit()
                     .frame(

@@ -1,6 +1,6 @@
 /**
  以当前模板菜单描述和单目标事实组成新建文件子菜单，将每个叶子绑定到模板身份与目标目录。
- 显示名属于本次菜单，实际模板内容与默认文件名由主应用执行时读取。
+ 显示名与图标后缀属于本次菜单，实际模板内容与默认文件名由主应用执行时读取。
  */
 
 import Foundation
@@ -11,7 +11,7 @@ final class CreateNewFileFeature: ContextMenuFeature {
 
     let commandClient: ContextCommandClient
 
-    /// 当前菜单构建时冻结的模板顺序、身份和显示名。
+    /// 当前菜单构建时冻结的模板顺序、身份、显示名和图标后缀。
     private let newFileTemplates: [FileTemplateMenuItem]
 
     init(
@@ -30,6 +30,7 @@ final class CreateNewFileFeature: ContextMenuFeature {
                 .item(ContextMenuAction(
                     id: template.id.rawValue.uuidString,
                     title: .verbatim(template.displayName),
+                    icon: .fileType(filenameExtension: template.filenameExtension),
                     command: { [self] context in
                         command(templateID: template.id, in: context)
                     }

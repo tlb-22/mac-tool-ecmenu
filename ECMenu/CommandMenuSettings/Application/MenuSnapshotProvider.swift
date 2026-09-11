@@ -17,7 +17,11 @@ struct MenuSnapshotProvider {
         let templateState: FileTemplateMenuState
         do {
             templateState = .available(try await templates().map {
-                FileTemplateMenuItem(id: $0.id, displayName: $0.displayName)
+                FileTemplateMenuItem(
+                    id: $0.id,
+                    displayName: $0.displayName,
+                    filenameExtension: ($0.defaultFileName as NSString).pathExtension
+                )
             })
         } catch {
             templateState = .unavailable

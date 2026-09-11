@@ -80,6 +80,15 @@ enum SettingsComponents {
         systemState: StatusPageSystemState
     ) -> some View {
         switch descriptor.icon {
+        case .fileType(let filenameExtension):
+            if let image = StatusPageIconRenderer.applicationIcon(
+                FileTypeIconProvider.icon(forFilenameExtension: filenameExtension)
+            ) {
+                renderedCommandIcon(image)
+            } else {
+                emptyStatusIcon
+            }
+
         case .systemSymbol(let name):
             if let image = StatusPageIconRenderer.hierarchicalSystemSymbol(
                 named: name
