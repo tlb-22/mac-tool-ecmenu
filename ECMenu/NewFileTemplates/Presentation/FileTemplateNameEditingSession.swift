@@ -5,7 +5,7 @@
 
 import Combine
 
-/// 原生焦点和文字读写集中在控件边界，编辑会话只负责提交与目标交接。
+/// 原生焦点、文字读写与失败提示集中在控件边界，会话负责提交与目标交接。
 @MainActor
 protocol FileTemplateNameControl: AnyObject {
     var target: FileTemplateNameTarget { get }
@@ -14,6 +14,7 @@ protocol FileTemplateNameControl: AnyObject {
     func beginEditing(_ value: String)
     func finishEditing(_ value: String)
     func setInputEnabled(_ enabled: Bool)
+    func signalCommitFailure()
 }
 
 /// 状态页唯一的名称编辑会话；保存期间继续接收目标，最后一次选择决定交接位置。
@@ -117,6 +118,7 @@ final class FileTemplateNameEditingSession: ObservableObject {
             if !saved {
                 previous.control.beginEditing(previous.draft.value)
                 transition = nil
+                previous.control.signalCommitFailure()
                 return false
             }
         }

@@ -37,7 +37,6 @@ final class FileTemplateNameDraftTests: XCTestCase {
         XCTAssertTrue(firstResult)
         XCTAssertTrue(duplicateResult)
         XCTAssertFalse(draft.isSaving)
-        XCTAssertNil(draft.errorMessage)
         let laterResult = await draft.commit()
         XCTAssertTrue(laterResult)
         XCTAssertEqual(save.values, ["Notes"])
@@ -57,12 +56,11 @@ final class FileTemplateNameDraftTests: XCTestCase {
             XCTAssertTrue(initialResult)
             XCTAssertTrue(duplicateResult)
             XCTAssertEqual(savedValues, [])
-            XCTAssertNil(draft.errorMessage)
             XCTAssertFalse(draft.isSaving)
         }
     }
 
-    /// 校验失败不能吞掉输入；修正后的重试清除错误并提交修正值。
+    /// 校验失败不能吞掉输入；修正后的重试提交修正值。
     func testValidationFailureKeepsInputAndAllowsCorrectedRetry() async throws {
         let template = try FileTemplate(displayName: "TXT", defaultFileName: "untitled.txt")
         let scenarios: [(FileTemplateNameField, String, String)] = [
@@ -81,14 +79,12 @@ final class FileTemplateNameDraftTests: XCTestCase {
             XCTAssertFalse(failed)
             XCTAssertEqual(draft.value, invalid)
             XCTAssertFalse(draft.isSaving)
-            XCTAssertFalse(try XCTUnwrap(draft.errorMessage).isEmpty)
             XCTAssertTrue(saved.isEmpty)
 
             draft.value = corrected
             let retried = await draft.commit()
             XCTAssertTrue(retried)
             XCTAssertEqual(draft.value, corrected)
-            XCTAssertNil(draft.errorMessage)
             XCTAssertFalse(draft.isSaving)
             XCTAssertEqual(attemptedValues, [invalid, corrected])
             XCTAssertEqual(saved, [try field.updating(template, to: corrected)])

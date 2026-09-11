@@ -176,7 +176,7 @@ sequenceDiagram
     end
 ```
 
-系统 List 持有拖动预览与插入提示，不提前改写 Controller 或 Library 的已提交顺序。开始拖动触发的名称保存独立完成；`onMove` 产生稳定 ID 移动意图后，通过 `FileTemplatePageActions` 等待同一名称提交，成功后执行排序，失败时保留名称错误与编辑焦点，不提交顺序。顺序操作从 Library 的最新记录移动模板，因此保留已提交名称与文件引用。取消排序不撤销名称提交；名称焦点与失败反馈见[编辑会话](Editing.md#入口取消与后续操作)。
+系统 List 持有拖动预览与插入提示，不提前改写 Controller 或 Library 的已提交顺序。开始拖动触发的名称保存独立完成；`onMove` 产生稳定 ID 移动意图后，通过 `FileTemplatePageActions` 等待同一名称提交，成功后执行排序，失败时保留名称草稿与编辑焦点，不提交顺序。顺序操作从 Library 的最新记录移动模板，因此保留已提交名称与文件引用。取消排序不撤销名称提交；名称焦点与系统提示音反馈见[编辑会话](Editing.md#入口取消与后续操作)。
 
 图中的“模板页面与原生列表（组合）”由 [NewFileTemplateSettingsPage](../../../../ECMenu/NewFileTemplates/Presentation/NewFileTemplateSettingsPage.swift)、`FileTemplatePageActions`、共用 `SettingsReorderList` 与 `SettingsReorderHandle` 组成。列表将系统移动下标转换为稳定 ID；源码映射与拖动、键盘、辅助功能 API 输入输出由[设置列表排序交互](../../Runtime/CommandMenuSettings.md#设置列表排序交互)维护。本页面连接名称提交与模板移动业务回调。
 
@@ -228,7 +228,7 @@ sequenceDiagram
 | API / 调用者 | 实际输入与输出 | 完成点、失败与约束 |
 |---|---|---|
 | **V01** FileChooser：`NSOpenPanel.beginSheetModal(for:)` / `begin` | 标题、当前 key window；只选一个文件，禁止选目录，包按目录浏览 → `ModalResponse`，`.OK` 读取 `panel.url` | MainActor；其他响应返回 nil，`.OK` 缺 URL 属于实现不变量错误。面板只收集选择，普通文件验证交给 Storage |
-| **V02** 页面：SwiftUI `.alert` | 操作会话中的本地化错误消息 → 用户可关闭的提示 | 主应用呈现状态，不改变已经提交的索引；名称错误由草稿旁文字呈现 |
+| **V02** 页面：SwiftUI `.alert` | 操作会话中的本地化错误消息 → 用户可关闭的提示 | 主应用呈现状态，不改变已经提交的索引；名称提交失败由[编辑会话 E08](Editing.md#原生-api-输入输出)反馈 |
 | **V03** Operations：`Logger.error` | 更换已提交后的 `FileTemplateCleanupIssue.localizedDescription` → 日志 | 无业务成功回执，不撤回提交；原清理问题仍包含在返回 Commit 中 |
 | **V04** [FileTemplateOpener](../../../../ECMenu/NewFileTemplates/Platform/FileTemplateOpener.swift)：`NSWorkspace.shared.open(URL)` | 当前内部副本 URL → Bool | MainActor；false 转 `couldNotOpen`，true 表示系统打开请求成功，不表示编辑器已经显示或保存。使用同步 Bool 变体，见 [Apple API](https://developer.apple.com/documentation/appkit/nsworkspace/open(_:)) |
 

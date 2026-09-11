@@ -1,6 +1,7 @@
 /**
  把原生 NSTextField 接入 SwiftUI 模板名称行，并桥接编辑与焦点事件。
- 保持控件实例身份，将文本变更和结束编辑交给名称编辑会话。
+ 保持控件身份和文字布局，阅读时只显示文字，编辑时由系统绘制输入框。
+ 文本变更和结束编辑交给名称编辑会话，提交失败使用系统提示音。
  */
 
 import AppKit
@@ -81,6 +82,8 @@ struct FileTemplateNameTextField: NSViewRepresentable {
             nativeField.editingCoordinator = self
             nativeField.delegate = self
             nativeField.lineBreakMode = .byTruncatingTail
+            nativeField.drawsBackground = false
+            nativeField.textColor = field == .displayName ? .labelColor : .secondaryLabelColor
             nativeField.setContentHuggingPriority(.defaultLow, for: .horizontal)
             nativeField.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
             nativeField.setAccessibilityLabel(String(localized: field == .displayName
@@ -117,6 +120,7 @@ struct FileTemplateNameTextField: NSViewRepresentable {
             }
             nativeField.selectText(nil)
             setInputEnabled(true)
+            nativeField.needsDisplay = true
         }
 
         func finishEditing(_ value: String) {
@@ -126,10 +130,15 @@ struct FileTemplateNameTextField: NSViewRepresentable {
                 window.makeFirstResponder(nil)
             }
             if nativeField.stringValue != value { nativeField.stringValue = value }
+            nativeField.needsDisplay = true
         }
 
         func setInputEnabled(_ enabled: Bool) {
             (nativeField.currentEditor() as? NSTextView)?.isEditable = enabled
+        }
+
+        func signalCommitFailure() {
+            NSSound.beep()
         }
 
         func controlTextDidBeginEditing(_ notification: Notification) {
@@ -143,6 +152,7 @@ struct FileTemplateNameTextField: NSViewRepresentable {
         }
 
         func controlTextDidEndEditing(_ notification: Notification) {
+            nativeField.needsDisplay = true
             session.editingDidEnd(self)
         }
 
@@ -186,7 +196,7 @@ final class FileTemplateNameNativeField: NSTextField {
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
-        cell = FileTemplateNameInputCell(textCell: "")
+        cell = FileTemplateNameCell(textCell: "")
     }
 
     @available(*, unavailable)
@@ -227,8 +237,17 @@ final class FileTemplateNameNativeField: NSTextField {
     }
 }
 
-/// 名称框自行处理鼠标输入，避免列表把文字点击延迟为行选择或拖动候选。
-private final class FileTemplateNameInputCell: NSTextFieldCell {
+/// 系统 cell 保持文字和编辑器的相同布局，只在编辑时绘制边框，并直接接收字段区域的鼠标输入。
+private final class FileTemplateNameCell: NSTextFieldCell {
+    override func draw(withFrame cellFrame: NSRect, in controlView: NSView) {
+        // 展开截断文字的系统提示也会调用 cell 绘制，其承载视图不一定是输入控件。
+        if (controlView as? NSTextField)?.currentEditor() != nil {
+            super.draw(withFrame: cellFrame, in: controlView)
+        } else {
+            super.drawInterior(withFrame: cellFrame, in: controlView)
+        }
+    }
+
     override func hitTest(for event: NSEvent, in cellFrame: NSRect, of controlView: NSView) -> NSCell.HitResult {
         let point = controlView.convert(event.locationInWindow, from: nil)
         guard isEnabled, cellFrame.contains(point) else { return [] }

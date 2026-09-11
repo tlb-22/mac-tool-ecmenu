@@ -27,6 +27,8 @@ final class FileTemplateNameEditingSessionTests: XCTestCase {
         XCTAssertEqual(first.finishedValues, ["TXT"])
         XCTAssertEqual(second.begunValues, ["untitled.txt"])
         XCTAssertTrue(saved.isEmpty)
+        XCTAssertEqual(first.commitFailureCount, 0)
+        XCTAssertEqual(second.commitFailureCount, 0)
         session.editingDidEnd(first)
         XCTAssertTrue(session.isEditing(second))
         XCTAssertFalse(session.isTransitioning)
@@ -63,6 +65,7 @@ final class FileTemplateNameEditingSessionTests: XCTestCase {
         XCTAssertEqual(latest.begunValues, ["Other"])
         XCTAssertEqual(gate.values, ["Changed"])
         XCTAssertEqual(first.finishedValues, ["Changed"])
+        XCTAssertEqual(first.commitFailureCount, 0)
     }
 
     func testFailedSaveRestoresOriginalControlAndInputCanBeCorrectedBeforeRetry() async {
@@ -87,7 +90,8 @@ final class FileTemplateNameEditingSessionTests: XCTestCase {
         XCTAssertTrue(session.isEditing(first))
         XCTAssertFalse(session.isTransitioning)
         XCTAssertEqual(session.draft?.value, "  ")
-        XCTAssertNotNil(session.draft?.errorMessage)
+        XCTAssertEqual(first.commitFailureCount, 1)
+        XCTAssertEqual(second.commitFailureCount, 0)
         XCTAssertEqual(saved, ["  "])
         XCTAssertEqual(first.begunValues, ["TXT", "  "])
         XCTAssertTrue(second.begunValues.isEmpty)
@@ -99,6 +103,8 @@ final class FileTemplateNameEditingSessionTests: XCTestCase {
         XCTAssertTrue(session.isEditing(second))
         XCTAssertEqual(saved, ["  ", "Corrected"])
         XCTAssertEqual(first.finishedValues, ["Corrected"])
+        XCTAssertEqual(first.commitFailureCount, 1, "A successful retry must not signal another failure")
+        XCTAssertEqual(second.commitFailureCount, 0)
     }
 
     func testLatestFieldEditorValueIsCommittedEvenBeforeChangeNotificationArrives() async {
@@ -124,6 +130,7 @@ final class FileTemplateNameEditingSessionTests: XCTestCase {
         XCTAssertNil(session.draft)
         XCTAssertEqual(control.finishedValues, ["TXT"])
         XCTAssertTrue(saved.isEmpty)
+        XCTAssertEqual(control.commitFailureCount, 0)
     }
 
     func testDropConsumesTheDragStartNameCommitWithoutRetryingFailure() async {
@@ -170,7 +177,8 @@ final class FileTemplateNameEditingSessionTests: XCTestCase {
             XCTAssertEqual(gate.values, ["Changed"], "Dropping must consume the original result without saving again")
             XCTAssertEqual(session.isEditing(control), !succeeds)
             XCTAssertNil(actions.errorMessage)
-            if !succeeds { XCTAssertNotNil(session.draft?.errorMessage) }
+            XCTAssertEqual(control.commitFailureCount, succeeds ? 0 : 1,
+                           "Drag start and drop must share one failure signal with the same commit")
         }
     }
 }
@@ -184,6 +192,7 @@ private final class NameControlSpy: FileTemplateNameControl {
     private(set) var begunValues: [String] = []
     private(set) var finishedValues: [String] = []
     private(set) var inputEnabled: [Bool] = []
+    private(set) var commitFailureCount = 0
 
     init(value: String) { displayedValue = value }
     func prepareToCommit() -> String { displayedValue }
@@ -199,6 +208,7 @@ private final class NameControlSpy: FileTemplateNameControl {
         didFinish?()
     }
     func setInputEnabled(_ enabled: Bool) { inputEnabled.append(enabled) }
+    func signalCommitFailure() { commitFailureCount += 1 }
 }
 
 @MainActor

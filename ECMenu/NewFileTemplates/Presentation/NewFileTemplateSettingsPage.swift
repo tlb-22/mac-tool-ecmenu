@@ -7,11 +7,11 @@ import SwiftUI
 
 /// 文件模板页面的布局调节入口；页面通用参数沿用 StatusPageStyle。
 enum NewFileTemplatesStyle {
-    /// 命令名与默认文件名之间的间距。
-    static let rowNameSpacing: CGFloat = 4
+    /// 命令名与默认文件名控件之间的额外间距；控件本身保留系统内边距。
+    static let rowNameSpacing: CGFloat = 0
     /// 模板行的水平与垂直内边距。
     static let rowHorizontalPadding: CGFloat = 8
-    static let rowVerticalPadding: CGFloat = 8
+    static let rowVerticalPadding: CGFloat = 4
     /// 左侧名称区域在模板行内额外增加的缩进。
     static let nameLeadingPadding: CGFloat = 4
     /// 打开、更换和删除操作之间的间距。
@@ -176,20 +176,13 @@ struct NewFileTemplateSettingsPage: View {
 
     private func name(_ template: FileTemplate, field: FileTemplateNameField) -> some View {
         let target = FileTemplateNameTarget(templateID: template.id, field: field)
-        return VStack(alignment: .leading, spacing: NewFileTemplatesStyle.rowNameSpacing) {
-            FileTemplateNameTextField(
-                template: template,
-                field: field,
-                session: nameEditing,
-                allowsEditing: { actions.allowsNameEditing(target, in: nameEditing) },
-                save: { value in try await updateName(template.id, field, value) }
-            )
-
-            if let draft = nameEditing.draft,
-               draft.target == target {
-                FileTemplateNameError(draft: draft)
-            }
-        }
+        return FileTemplateNameTextField(
+            template: template,
+            field: field,
+            session: nameEditing,
+            allowsEditing: { actions.allowsNameEditing(target, in: nameEditing) },
+            save: { value in try await updateName(template.id, field, value) }
+        )
     }
 
     private func perform(_ operation: @escaping () async throws -> Void) {
@@ -238,20 +231,6 @@ private struct FileTemplateOperationProgress: View {
                 }
                 isVisible = true
             }
-    }
-}
-
-/// 错误随当前草稿更新；文字和焦点由始终存在的原生控件持有。
-private struct FileTemplateNameError: View {
-    @ObservedObject var draft: FileTemplateNameDraft
-
-    var body: some View {
-        if let message = draft.errorMessage {
-            Text(verbatim: message)
-                .font(.caption)
-                .foregroundStyle(.red)
-                .fixedSize(horizontal: false, vertical: true)
-        }
     }
 }
 

@@ -500,23 +500,32 @@ final class NewFileTemplateSettingsPageTests: XCTestCase {
         }
     }
 
-    func testBlankClickWithInvalidInputKeepsOriginalTextAndNativeFocus() async throws {
+    func testBlankClickWithInvalidInputKeepsTextFocusAndRowLayout() async throws {
         let fixture = try NewFileTemplateSettingsPageFixture()
+        var attempts: [NewFileTemplatesNativeSave] = []
+        fixture.harness.saveBoundary = { attempts.append($0) }
         let host = NewFileTemplatesNativePageHost(harness: fixture.harness)
         defer { host.close() }
         let name = try await field(for: fixture.firstName, in: host)
         try click(name, in: host)
         try await assertEditing(fixture.firstName, field: name, host: host)
         try typeIntoFirstResponder("  ", in: host)
+        host.layout()
+        let table = try XCTUnwrap(descendants(in: host.view).compactMap { $0 as? NSTableView }.first)
+        let originalRows = (0..<table.numberOfRows).map { table.rect(ofRow: $0) }
+        let originalFields = nativeFields(in: host.view).map { $0.convert($0.bounds, to: host.view) }
         try clickBlank(.belowLastRow, in: host)
         for _ in 0..<100 {
-            if fixture.harness.nameEditing.draft?.errorMessage != nil,
+            if !attempts.isEmpty,
                !fixture.harness.nameEditing.isTransitioning { break }
             await Task.yield()
         }
         try await assertEditing(fixture.firstName, field: name, host: host)
         XCTAssertEqual(fixture.harness.nameEditing.draft?.value, "  ")
-        XCTAssertNotNil(fixture.harness.nameEditing.draft?.errorMessage)
+        XCTAssertEqual(attempts, [.init(target: fixture.firstName, value: "  ")])
+        XCTAssertEqual((0..<table.numberOfRows).map { table.rect(ofRow: $0) }, originalRows,
+                       "A rejected name must not add space for an inline error")
+        XCTAssertEqual(nativeFields(in: host.view).map { $0.convert($0.bounds, to: host.view) }, originalFields)
         XCTAssertTrue(fixture.harness.saved.isEmpty)
         try typeIntoFirstResponder("Corrected after blank click", in: host)
         XCTAssertEqual(fixture.harness.nameEditing.draft?.value, "Corrected after blank click")
@@ -524,6 +533,8 @@ final class NewFileTemplateSettingsPageTests: XCTestCase {
 
     func testFileOperationSaveFailureKeepsOriginalNativeFocusAndDoesNotRunOperation() async throws {
         let fixture = try NewFileTemplateSettingsPageFixture()
+        var attempts: [NewFileTemplatesNativeSave] = []
+        fixture.harness.saveBoundary = { attempts.append($0) }
         let host = NewFileTemplatesNativePageHost(harness: fixture.harness)
         defer { host.close() }
         let name = try await field(for: fixture.firstName, in: host)
@@ -543,13 +554,13 @@ final class NewFileTemplateSettingsPageTests: XCTestCase {
                        "The editing background must not cover the Open button")
         XCTAssertTrue(open.press())
         for _ in 0..<100 {
-            if fixture.harness.nameEditing.draft?.errorMessage != nil,
+            if !attempts.isEmpty,
                !fixture.harness.nameEditing.isTransitioning { break }
             await Task.yield()
         }
         try await assertEditing(fixture.firstName, field: name, host: host)
         XCTAssertEqual(fixture.harness.nameEditing.draft?.value, "  ")
-        XCTAssertNotNil(fixture.harness.nameEditing.draft?.errorMessage)
+        XCTAssertEqual(attempts, [.init(target: fixture.firstName, value: "  ")])
         XCTAssertTrue(fixture.harness.openedIDs.isEmpty)
         XCTAssertTrue(fixture.harness.saved.isEmpty)
         XCTAssertTrue(name.isEnabled)

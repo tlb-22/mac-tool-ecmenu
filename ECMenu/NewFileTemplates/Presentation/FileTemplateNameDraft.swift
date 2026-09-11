@@ -1,9 +1,8 @@
 /**
- 持有一次模板名称字段编辑的目标、原始值、草稿和提交错误。
+ 持有一次模板名称字段编辑的目标、原始值、草稿和提交阶段。
  让并发的编辑结束请求共享同一次异步保存，并保留失败后可继续编辑的状态。
  */
 
-import Combine
 import Foundation
 
 nonisolated struct FileTemplateNameTarget: Hashable, Sendable {
@@ -13,10 +12,9 @@ nonisolated struct FileTemplateNameTarget: Hashable, Sendable {
 
 /// 输入草稿拥有一次编辑的生命周期；回车、失焦和后续操作共享同一次提交。
 @MainActor
-final class FileTemplateNameDraft: ObservableObject {
+final class FileTemplateNameDraft {
     let target: FileTemplateNameTarget
-    @Published var value: String
-    @Published private(set) var errorMessage: String?
+    var value: String
 
     private enum CommitState {
         case idle
@@ -24,7 +22,7 @@ final class FileTemplateNameDraft: ObservableObject {
         case saved
     }
 
-    @Published private var commitState = CommitState.idle
+    private var commitState = CommitState.idle
     let originalValue: String
     private let save: (String) async throws -> Void
 
@@ -59,11 +57,9 @@ final class FileTemplateNameDraft: ObservableObject {
             let task = Task {
                 do {
                     try await save(valueToSave)
-                    errorMessage = nil
                     commitState = .saved
                     return true
                 } catch {
-                    errorMessage = error.localizedDescription
                     commitState = .idle
                     return false
                 }
