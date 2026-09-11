@@ -9,8 +9,6 @@ import SwiftUI
 enum NewFileTemplatesStyle {
     /// 命令名与默认文件名之间的间距。
     static let rowNameSpacing: CGFloat = 4
-    /// 每个名称的高度，原地编辑前后保持一致。
-    static let nameHeight: CGFloat = 18
     /// 模板行的水平与垂直内边距。
     static let rowHorizontalPadding: CGFloat = 8
     static let rowVerticalPadding: CGFloat = 8
@@ -186,7 +184,6 @@ struct NewFileTemplateSettingsPage: View {
                 allowsEditing: { actions.allowsNameEditing(target, in: nameEditing) },
                 save: { value in try await updateName(template.id, field, value) }
             )
-            .frame(height: NewFileTemplatesStyle.nameHeight)
 
             if let draft = nameEditing.draft,
                draft.target == target {

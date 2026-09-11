@@ -573,6 +573,42 @@ final class NewFileTemplateSettingsPageTests: XCTestCase {
         XCTAssertFalse(table.registeredDraggedTypes.isEmpty)
     }
 
+    func testNativeListAcceptsNameInputAcrossItsBoundsWithoutRowSelection() async throws {
+        let fixture = try NewFileTemplateSettingsPageFixture()
+        let host = NewFileTemplatesNativePageHost(harness: fixture.harness)
+        defer { host.close() }
+        let name = try await field(for: fixture.firstName, in: host)
+        let table = try XCTUnwrap(descendants(in: host.view).compactMap { $0 as? NSTableView }.first)
+        let cell = try XCTUnwrap(name.cell)
+        XCTAssertFalse(table.isRowSelected(table.row(for: name)))
+
+        func event(at point: NSPoint) throws -> NSEvent {
+            try XCTUnwrap(NSEvent.mouseEvent(
+                with: .leftMouseDown, location: name.convert(point, to: nil), modifierFlags: [],
+                timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: host.window.windowNumber,
+                context: nil, eventNumber: 1, clickCount: 1, pressure: 1
+            ))
+        }
+
+        // 查询真正的列表事件分流；空名称和文字后的留白仍属于输入区域，不要求先选中行。
+        // 此处不派发桌面事件，也不以返回值代替真实点击延迟的实机测量。
+        for value in ["TXT", ""] {
+            name.stringValue = value
+            for x in [name.bounds.minX + 2, name.bounds.maxX - 2] {
+                let click = try event(at: NSPoint(x: x, y: name.bounds.midY))
+                XCTAssertTrue(table.validateProposedFirstResponder(name, for: click))
+            }
+        }
+
+        let outside = try event(at: NSPoint(x: name.bounds.maxX + 2, y: name.bounds.midY))
+        XCTAssertFalse(cell.hitTest(for: outside, in: name.bounds, of: name).contains(.trackableArea),
+                       "The input control must leave the surrounding row available to list dragging")
+        name.isEnabled = false
+        let inside = try event(at: NSPoint(x: name.bounds.midX, y: name.bounds.midY))
+        XCTAssertFalse(cell.hitTest(for: inside, in: name.bounds, of: name).contains(.trackableArea),
+                       "A disabled input must not claim mouse tracking")
+    }
+
     func testNativeListFocusCommitsNameAndReorderedRowsKeepTheirTemplateBindings() async throws {
         let fixture = try NewFileTemplateSettingsPageFixture()
         let host = NewFileTemplatesNativePageHost(harness: fixture.harness)

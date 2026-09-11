@@ -2,6 +2,8 @@
 
 名称编辑由模板能力的 Presentation 管理原生输入、草稿和焦点；Application 协调提交，Library actor 从当前记录更新单字段。产品交互规则见[文件模板页面](../../../Requirements/StatusPage.md#文件模板)，文件操作流程见[执行流](Flows.md#导入更换与删除)。
 
+每行的显示名和默认文件名分别使用标准 `NSTextField`，保留系统字体、边界、背景与焦点提示。控件通过 `init(string:)` 初始化，SwiftUI 适配从 `intrinsicContentSize` 取得高度，由页面分配可用宽度。单击输入区域直接进入字段编辑；列表拖动从排序提示或非控件区域开始，具体分流见下方原生 API。
+
 ## 单字段提交与焦点交接
 
 ```mermaid
@@ -57,7 +59,7 @@ sequenceDiagram
 
 | 职责模块 | 核心类型 | 源码入口 | 输入 → 输出；所有权 | 外部边界 |
 |---|---|---|---|---|
-| 原生输入：字段适配 | `FileTemplateNameTextField`、其 `Coordinator`、`FileTemplateNameNativeField` | [FileTemplateNameTextField.swift](../../../../ECMenu/NewFileTemplates/Presentation/FileTemplateNameTextField.swift) | 模板 ID + 字段、会话授权与 AppKit 事件 → 控件文字/可编辑性、提交/交接意图 | E01–E03；控件适配不访问模板存储 |
+| 原生输入：字段适配 | `FileTemplateNameTextField`、其 `Coordinator`、`FileTemplateNameNativeField` 与私有 `FileTemplateNameInputCell` | [FileTemplateNameTextField.swift](../../../../ECMenu/NewFileTemplates/Presentation/FileTemplateNameTextField.swift) | 模板 ID + 字段、会话授权与 AppKit 事件 → 系统输入框、提交/交接意图；cell 只声明字段的鼠标输入区域 | E01–E03、E05–E06；控件适配不访问模板存储 |
 | 原生输入：页面背景点击 | `FileTemplateEditingBackground`、`FileTemplateEditingBackgroundView` | [背景视图与 SwiftUI 适配](../../../../ECMenu/NewFileTemplates/Presentation/FileTemplateEditingBackground.swift) | 页面外侧与底部空白点击 → `requestFinishing()`；不持有草稿 | E01；通过原生 `mouseDown` 收集点击。列表内部空白由系统 List 接收，通过字段失焦接入会话 |
 | 编辑会话与草稿：焦点交接 | `FileTemplateNameEditingSession`、`FileTemplateNameControl` | [FileTemplateNameEditingSession.swift](../../../../ECMenu/NewFileTemplates/Presentation/FileTemplateNameEditingSession.swift) | 原生控件协议、保存闭包和目标请求 → Bool 交接结果 | 无直接 AppKit/文件 I/O；唯一 active 持有草稿和控件，transition 持有最后请求与 Task |
 | 编辑会话与草稿：字段草稿 | `FileTemplateNameDraft`、`FileTemplateNameTarget` | [FileTemplateNameDraft.swift](../../../../ECMenu/NewFileTemplates/Presentation/FileTemplateNameDraft.swift) | 原始值、输入和保存闭包 → 保存结果、错误文字 | 无外部 I/O；拥有输入值和 idle/saving/saved 状态，重复提交共享 Task |
@@ -74,6 +76,7 @@ sequenceDiagram
 
 | 用户入口 | 提交与交接规则 |
 |---|---|
+| 单击未编辑的名称输入框 | 输入区域接收本次鼠标按下，向会话请求开始编辑 |
 | Return、失焦、背景点击 | 请求完成当前草稿；背景只接收未命中前景控件的点击，失败保留原草稿 |
 | 点击另一字段、保存期间改变目标 | 保存完成后进入最后一次请求的字段；失败不进入后续目标 |
 | Tab / Shift-Tab | 成功后使用窗口 key-view 导航，失败不移动 |
@@ -97,10 +100,16 @@ sequenceDiagram
 | **E02 文本与焦点**：`currentEditor()`、`NSTextView.hasMarkedText/unmarkText`、`selectText`、`setSelectedRange`、`NSWindow.makeFirstResponder` | 当前窗口 field editor、文字和选区 → 最新文本、焦点/选区状态 | MainActor；提交前结束标记并读最新文字，恢复时保留交接状态。`selectText` 可能产生同步原生通知，见下方项目观察 |
 | **E03 键盘导航**：`selectKeyView(following:/preceding:)` | 当前控件和前后方向 → 窗口的 key-view 选择 | 只在保存成功后触发，不把导航请求视为存储成功回执 |
 | **E04 页面生命周期**：`NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)`、SwiftUI `onDisappear` | 应用 inactive / 页面消失 → 异步完成编辑请求 | 请求在 MainActor 会话中协调；应用/窗口变化本身不等待索引提交 |
+| **E05 输入框构造与尺寸**：`NSTextField.init(string:)`、`NSView.intrinsicContentSize`、`NSViewRepresentable.sizeThatFits` | 名称文字、SwiftUI 提议宽度 → 系统输入框及适合其内容的高度 | 保留 AppKit 默认外观和字体；适配层只协调可用宽度与控件高度 |
+| **E06 鼠标区域**：`NSCell.hitTest(for:in:of:)`、`NSCell.HitResult` | 鼠标事件、cell 矩形与控件 → 命中标记 | 已启用输入框的完整 cell 区域返回 `contentArea` 与 `trackableArea`，由字段直接处理文字及框内空白处的鼠标输入；区域外或已禁用时返回空命中 |
 
 系统 field editor 的共享模型由 [Apple Cocoa Text Architecture Guide](https://developer.apple.com/library/archive/documentation/TextFonts/Conceptual/CocoaTextArchitecture/TextEditing/TextEditing.html)说明。具体事件到达顺序仍需按项目使用方式验证，不能仅从共享模型推导全部焦点行为。
 
+外观与尺寸依据 [`NSTextField.init(string:)`](https://developer.apple.com/documentation/appkit/nstextfield/init(string:)) 和 [`intrinsicContentSize`](https://developer.apple.com/documentation/appkit/nsview/intrinsiccontentsize) 的系统控件契约。鼠标分流使用公开的 [`NSCell.hitTest(for:in:of:)`](https://developer.apple.com/documentation/appkit/nscell/hittest(for:in:of:))；Apple 的[表格事件处理说明](https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/TableView/RowSelection/RowSelection.html)解释，`NSTableView` 会检查子控件 cell 的命中类型，可编辑文字区域可能延迟 first responder 交接。AppKit SDK 的 `NSTableView.h` 进一步说明，`trackableArea` 命中不会开始行拖动。名称 cell 因此把自身范围声明为直接处理鼠标的输入区域；此适配只改变事件分流，外观仍由系统绘制。上述契约描述 AppKit 表格机制，不承诺 SwiftUI `List` 在所有版本上的内部实现或点击延迟。
+
 ## 原生焦点证据与验收
+
+项目观察（2026-09-11，macOS 26.6.2、Xcode 26.6）：独立 Preview 中，使用标准输入框外观而保留默认 cell 命中时，真实单击到 AX 首次观察到目标字段聚焦约为 0.59 秒；完整输入区域使用 E06 命中规则后约为 0.06 秒。测量使用 30 毫秒的鼠标按下/释放间隔和 10 毫秒的 AX 轮询，包含派发和查询开销，不能视为控件内部耗时或其他系统版本的性能保证。诊断方法见[原生列表交互诊断](../../PreviewTarget.md#原生列表交互诊断)，运行标识与截图见[界面验证记录](../../Architecture/Verification.md#界面与真实-finder)。
 
 项目观察（2026-09-08，macOS 26.6.2、Xcode 26.6）：对已经编辑的 `NSTextField` 调用 `selectText` 恢复选择时，可能同步产生结束编辑通知。因此程序化恢复期间仍属于当前交接，不能将该通知再次解释为用户离开字段。这是特定系统上的项目验证结果，不是所有 macOS 版本的通知顺序保证。
 

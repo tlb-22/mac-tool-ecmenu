@@ -44,7 +44,7 @@ struct FileTemplateNameTextField: NSViewRepresentable {
     ) -> CGSize? {
         CGSize(
             width: proposal.width ?? nsView.intrinsicContentSize.width,
-            height: NewFileTemplatesStyle.nameHeight
+            height: nsView.intrinsicContentSize.height
         )
     }
 
@@ -72,7 +72,7 @@ struct FileTemplateNameTextField: NSViewRepresentable {
             save: @escaping (String) async throws -> Void
         ) {
             target = FileTemplateNameTarget(templateID: template.id, field: field)
-            nativeField = FileTemplateNameNativeField(frame: .zero)
+            nativeField = FileTemplateNameNativeField(string: field.value(in: template))
             self.session = session
             self.allowsEditing = allowsEditing
             self.save = save
@@ -80,19 +80,7 @@ struct FileTemplateNameTextField: NSViewRepresentable {
 
             nativeField.editingCoordinator = self
             nativeField.delegate = self
-            nativeField.stringValue = field.value(in: template)
-            nativeField.isEditable = true
-            nativeField.isSelectable = true
-            nativeField.isBordered = false
-            nativeField.isBezeled = false
-            nativeField.drawsBackground = false
-            nativeField.focusRingType = .none
-            nativeField.maximumNumberOfLines = 1
-            nativeField.cell?.isScrollable = true
             nativeField.lineBreakMode = .byTruncatingTail
-            nativeField.font = .systemFont(ofSize: field == .displayName
-                ? NSFont.systemFontSize : NSFont.smallSystemFontSize)
-            nativeField.textColor = field == .displayName ? .labelColor : .secondaryLabelColor
             nativeField.setContentHuggingPriority(.defaultLow, for: .horizontal)
             nativeField.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
             nativeField.setAccessibilityLabel(String(localized: field == .displayName
@@ -196,6 +184,14 @@ struct FileTemplateNameTextField: NSViewRepresentable {
 final class FileTemplateNameNativeField: NSTextField {
     weak var editingCoordinator: FileTemplateNameTextField.Coordinator?
 
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        cell = FileTemplateNameInputCell(textCell: "")
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("Use init(string:)") }
+
     /// 键盘与辅助功能的焦点请求也须在原生编辑器接收输入前取得批准。
     override func becomeFirstResponder() -> Bool {
         guard isEditingApproved else { return false }
@@ -228,5 +224,14 @@ final class FileTemplateNameNativeField: NSTextField {
             return false
         }
         return true
+    }
+}
+
+/// 名称框自行处理鼠标输入，避免列表把文字点击延迟为行选择或拖动候选。
+private final class FileTemplateNameInputCell: NSTextFieldCell {
+    override func hitTest(for event: NSEvent, in cellFrame: NSRect, of controlView: NSView) -> NSCell.HitResult {
+        let point = controlView.convert(event.locationInWindow, from: nil)
+        guard isEnabled, cellFrame.contains(point) else { return [] }
+        return [.contentArea, .trackableArea]
     }
 }

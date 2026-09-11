@@ -1,6 +1,6 @@
 #!/bin/zsh
 
-# 构建独立的设置排序诊断工具，在用户批准后拖动指定 Preview 窗口并保存拖动截图。
+# 构建独立的设置排序诊断工具，在用户批准后拖动或点击指定 Preview 窗口并保存截图。
 # --check 只查询现有输入权限；编译产物与截图保存在本次 scratch 目录，不操作产品配置。
 
 set -euo pipefail
@@ -11,6 +11,7 @@ readonly developer_directory="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/
 
 usage() {
     print "Usage: ./scripts/test-settings-reorder.sh --check"
+    print "       ./scripts/test-settings-reorder.sh --click <preview-pid> <x> <y>"
     print "       ./scripts/test-settings-reorder.sh <preview-pid> <from-x> <from-y> <to-x> <to-y> <duration-seconds> [--cancel]"
     print "Coordinates are relative to the Preview window's top-left corner; duration is 0.5–10 seconds."
     print "Mouse input requires explicit user approval and targets only com.axiomace.ecmenu.test.preview."
@@ -23,6 +24,8 @@ fi
 
 if (( $# == 1 )) && [[ "$1" == --check ]]; then
     :
+elif (( $# == 4 )) && [[ "$1" == --click ]]; then
+    :
 elif (( $# == 6 )) || { (( $# == 7 )) && [[ "$7" == --cancel ]]; }; then
     :
 else
@@ -34,7 +37,6 @@ readonly run_name="$(date '+%Y%m%d-%H%M%S')-settings-reorder-$$"
 readonly probe_directory="$project_root/.artifacts/scratch/probes/$run_name"
 readonly build_log="$project_root/.artifacts/scratch/logs/$run_name.log"
 readonly helper_path="$probe_directory/SettingsReorderAutomation"
-readonly screenshot_path="$probe_directory/drag.png"
 
 mkdir -p "$probe_directory/module-cache" "${build_log:h}"
 cd "$project_root"
@@ -56,8 +58,11 @@ print "Build log: $build_log"
 if (( $# == 1 )); then
     exec "$helper_path" --check
 fi
+if [[ "$1" == --click ]]; then
+    exec "$helper_path" "$@" "$probe_directory/click.png"
+fi
 
-drag_arguments=("${@:1:6}" "$screenshot_path")
+drag_arguments=("${@:1:6}" "$probe_directory/drag.png")
 if (( $# == 7 )); then
     drag_arguments+=(--cancel)
 fi

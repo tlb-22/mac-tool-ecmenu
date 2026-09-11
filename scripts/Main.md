@@ -141,7 +141,17 @@ Archive 和打包不改变本机的 Extension 启用状态。Debug 与 Release �
 
 `preview-ui.sh` 只替换独立预览进程，不结束主应用或刷新 Finder Extension；日常主应用运行继续使用 `run-debug.sh`。Xcode 构建产物保存在 `.derivedData/`，完整构建日志位于 `.artifacts/scratch/logs/`；临时截图或视觉检查结果位于 `.artifacts/scratch/previews/`。
 
-设置列表的真实拖拽检查使用 `./scripts/test-settings-reorder.sh --check` 查询已有权限，再使用 `./scripts/test-settings-reorder.sh <preview-pid> <from-x> <from-y> <to-x> <to-y> <duration-seconds> [--cancel]`。实际鼠标输入须先获得用户明确许可；工具仅操作 `com.axiomace.ecmenu.test.preview` 窗口，坐标相对窗口左上角，拖动时间为 0.5–10 秒，`--cancel` 在截图后按 Esc 取消移动。它不申请系统权限，结束后恢复此前应用焦点；辅助程序、module cache 和拖动中的截图保存在本次 `.artifacts/scratch/probes/YYYYMMDD-HHMMSS-settings-reorder-<pid>/`，编译日志保存在 `scratch/logs/`，不占用 Derived Data。
+设置列表的真实鼠标检查使用以下入口：
+
+```text
+./scripts/test-settings-reorder.sh --check
+./scripts/test-settings-reorder.sh --click <preview-pid> <x> <y>
+./scripts/test-settings-reorder.sh <preview-pid> <from-x> <from-y> <to-x> <to-y> <duration-seconds> [--cancel]
+```
+
+`--check` 查询已有权限；`--click` 点击尚未聚焦的名称输入框，以 10 毫秒间隔观察 AX 焦点，最多等待 2 秒，输出鼠标按下到字段聚焦的耗时并保存 `click.png`。拖动模式在放开前保存 `drag.png`，`--cancel` 在截图后按 Esc 取消移动，拖动时间为 0.5–10 秒。
+
+实际鼠标输入须先获得用户明确许可；工具仅操作 `com.axiomace.ecmenu.test.preview` 窗口，坐标相对窗口左上角。它不申请系统权限，结束后恢复此前应用焦点；辅助程序、module cache 和截图保存在本次 `.artifacts/scratch/probes/YYYYMMDD-HHMMSS-settings-reorder-<pid>/`，编译日志保存在 `scratch/logs/`，不占用 Derived Data。测量与截图的证据边界见[原生列表交互诊断](../spec/Technical/PreviewTarget.md#原生列表交互诊断)。
 
 一次生成全部 Preview 的中英文窗口截图：
 
