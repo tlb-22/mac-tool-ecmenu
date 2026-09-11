@@ -6,7 +6,7 @@
 import Foundation
 import OSLog
 
-/// 主应用菜单偏好的唯一存储适配，保持已发布键与编码格式。
+/// 主应用菜单偏好的唯一存储适配，使用稳定键与当前编码格式。
 @MainActor
 struct CommandMenuSettingsStore {
     let defaults: UserDefaults

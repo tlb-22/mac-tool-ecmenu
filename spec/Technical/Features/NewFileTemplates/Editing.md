@@ -51,20 +51,22 @@ sequenceDiagram
 
 图中的“页面状态控制 / 模板应用操作”是呈现提交入口和应用操作的连续交接，详细职责见[模块映射](Flows.md#导入更换与删除)。只有 Library 的 `updateName` 从权威记录读取另一个字段；读取、构造有效模板和提交之间没有 actor 异步挂起点。名称修改保持模板 ID、文件引用、内部文件名和顺序，规则允许重名。
 
-编辑会话接收保存期间的新目标，最后一次请求覆盖此前目标；这些请求共享当前草稿的同一次提交，过期请求不再交接焦点。成功时先修改唯一 active 状态，再结束旧控件，避免旧控件同步产生的失焦通知误清除新目标。失败时原控件继续接收输入，Controller 不切换 loading、不重新读取或重复发布原快照。
+编辑会话接收保存期间的新目标，最后一次请求覆盖此前目标；这些请求共享当前草稿的同一次提交，过期请求不再交接焦点。保存挂起时，点击列表空白处产生的原生失焦也将最后目的地改为结束编辑。成功时先修改唯一 active 状态，再结束旧控件，避免旧控件同步产生的失焦通知误清除新目标。失败时原控件继续接收输入，恢复焦点产生的同步通知不另开提交；Controller 不切换 loading、不重新读取或重复发布原快照。
 
 ## 模块与状态所有权
 
 | 职责模块 | 核心类型 | 源码入口 | 输入 → 输出；所有权 | 外部边界 |
 |---|---|---|---|---|
 | 原生输入：字段适配 | `FileTemplateNameTextField`、其 `Coordinator`、`FileTemplateNameNativeField` | [FileTemplateNameTextField.swift](../../../../ECMenu/NewFileTemplates/Presentation/FileTemplateNameTextField.swift) | 模板 ID + 字段、会话授权与 AppKit 事件 → 控件文字/可编辑性、提交/交接意图 | E01–E03；控件适配不访问模板存储 |
-| 原生输入：背景点击 | `FileTemplateEditingBackground`、`FileTemplateEditingBackgroundView` | [背景视图与 SwiftUI 适配](../../../../ECMenu/NewFileTemplates/Presentation/FileTemplateEditingBackground.swift) | 未命中前景控件的鼠标点击 → `requestFinishing()`；不持有草稿 | E01；通过原生 `mouseDown` 收集点击 |
+| 原生输入：页面背景点击 | `FileTemplateEditingBackground`、`FileTemplateEditingBackgroundView` | [背景视图与 SwiftUI 适配](../../../../ECMenu/NewFileTemplates/Presentation/FileTemplateEditingBackground.swift) | 页面外侧与底部空白点击 → `requestFinishing()`；不持有草稿 | E01；通过原生 `mouseDown` 收集点击。列表内部空白由系统 List 接收，通过字段失焦接入会话 |
 | 编辑会话与草稿：焦点交接 | `FileTemplateNameEditingSession`、`FileTemplateNameControl` | [FileTemplateNameEditingSession.swift](../../../../ECMenu/NewFileTemplates/Presentation/FileTemplateNameEditingSession.swift) | 原生控件协议、保存闭包和目标请求 → Bool 交接结果 | 无直接 AppKit/文件 I/O；唯一 active 持有草稿和控件，transition 持有最后请求与 Task |
 | 编辑会话与草稿：字段草稿 | `FileTemplateNameDraft`、`FileTemplateNameTarget` | [FileTemplateNameDraft.swift](../../../../ECMenu/NewFileTemplates/Presentation/FileTemplateNameDraft.swift) | 原始值、输入和保存闭包 → 保存结果、错误文字 | 无外部 I/O；拥有输入值和 idle/saving/saved 状态，重复提交共享 Task |
 | 模板库与名称规则：有效名称 | `FileTemplateNameField`、`FileTemplate` | [单字段更新](../../../../ECMenu/NewFileTemplates/Domain/FileTemplateNameField.swift)、[有效模型](../../../../ECMenu/NewFileTemplates/Domain/FileTemplate.swift) | 当前模板、待修改字段和值 → 有效模板或验证错误 | 纯规则，无外部 I/O |
 | 模板库与名称规则：提交 | `FileTemplateLibrary` | [FileTemplateLibrary.swift](../../../../ECMenu/NewFileTemplates/Persistence/FileTemplateLibrary.swift)的 `updateName` | ID、字段和值 → 已提交清单或提交前失败 | 通过 Storage 使用 [P04 索引提交](Persistence.md#文件-api-与完成点) |
 | 文件操作会话 | `FileTemplatePageActions` | [FileTemplatePageActions.swift](../../../../ECMenu/NewFileTemplates/Presentation/FileTemplatePageActions.swift) | 文件操作意图、编辑会话 → 先完成名称再执行 | 无直接 I/O；phase 在等待名称、执行文件操作之间转移，切页不释放占用 |
 | 页面与导航 | `StatusPageContent`、`NewFileTemplateSettingsPage` | [设置外壳](../../../../ECMenu/Settings/StatusPageContent.swift)、[模板页面](../../../../ECMenu/NewFileTemplates/Presentation/NewFileTemplateSettingsPage.swift) | 页面切换、后台通知、视图消失 → 请求完成编辑或更新导航 | E04；窗口会话持有编辑和文件操作对象，页面内容接收注入回调 |
+
+模板页面通过原生列表的拖动开始回调持有 `requestFinishing()` 返回的 `Task<Bool, Never>`，完成移动时通过 `FileTemplatePageActions.perform(afterNameCommit:operation:)` 消费这一次提交的结果。名称任务已经失败时，不重新尝试保存；拖动结束只释放页面对任务的引用，不取消已发出的名称提交。系统列表通过辅助功能发起移动而没有鼠标拖动时，在移动入口请求完成名称。列表与阶段 API 见[排序呈现模块](../../Runtime/CommandMenuSettings.md#设置列表排序交互)。
 
 草稿只拥有一个字段，不能保存整行旧副本覆盖其他最近提交的值。控件身份由模板 ID + 字段标识；同名模板不能共享一次编辑。名称输入和操作占用根据当前会话读取，不仅依赖下一轮 SwiftUI 属性更新。
 
@@ -79,8 +81,13 @@ sequenceDiagram
 | 点击另一设置分类 | 等待 `finishEditing()` 成功后才切页，失败停留原页 |
 | 页面消失 / 应用失去 active | 发起结束编辑任务；它是提交触发，不是同步阻止系统切换的回执 |
 | 导入、打开、更换、删除 | PageActions 先完成名称；失败阻止文件操作，成功后占用持续至操作结束，包括文件选择器等待 |
+| 从排序提示或行内非控件区域开始拖动 | 立即 `requestFinishing()`，按原有规则提交名称并结束编辑；名称提交不等待放下 |
+| 放下到新位置 | PageActions 等待拖动开始时保存的名称提交 Task；成功后执行一次排序，失败保留原草稿与焦点，不重试保存或提交顺序 |
+| 键盘或辅助功能移动 | 先请求完成名称，再通过 PageActions 执行一次移动；失败保留原草稿与焦点 |
 
 选择器取消正常释放占用，不回滚先前已完成的名称修改。短操作进度、名称只读与操作锁分别建模；视图移除时取消延迟指示器，不取消库提交。行为验收仍以[页面需求](../../../Requirements/StatusPage.md#文件模板)为准。
+
+排序开始与排序提交是两个输入事件。拖动取消或放回原位只结束拖动态，已经保存的名称保持生效；悬停不提交顺序。整行拖动预览、插入指示与滚动由系统 List 管理，[共用排序呈现组件](../../Runtime/CommandMenuSettings.md#设置列表排序交互)连接阶段通知、移动结果与辅助功能；模板记录的移动与持久化见[排序执行流](Flows.md#调整模板顺序)。
 
 ## 原生 API 输入输出
 

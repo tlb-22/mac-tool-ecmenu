@@ -126,6 +126,62 @@ sequenceDiagram
 | 默认应用打开适配 | `FileTemplateOpener` | [系统实现](../../../../ECMenu/NewFileTemplates/Platform/FileTemplateOpener.swift) | 内部副本 URL → 打开请求成功或失败；不持有编辑器状态 | V04 |
 | 菜单变更发布 | `MenuChangePublisher` | [MenuChangePublisher.swift](../../../../ECMenu/CommandMenuSettings/Application/MenuChangePublisher.swift) | 已提交清单或可用性重新确认 → 分布式失效提示；不保存清单 | [菜单配置](../../Runtime/CommandMenuSettings.md)的 `DistributedNotificationCenter` 边界 |
 
+## 调整模板顺序
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor U as 用户
+    box ECMenu 主应用进程
+        participant V as 模板页面与原生列表（组合）
+        participant E as 名称编辑会话
+        participant C as 页面状态控制
+        participant O as 模板应用操作
+        participant L as 模板库
+        participant S as 模板文件存储
+        participant P as 菜单变更发布
+    end
+    U->>V: 从排序提示或行内非控件区域开始拖动
+    V->>E: 退出名称编辑并立即提交
+    Note over E,S: 名称遵循单字段提交流程，独立保存
+    U->>V: 移动指针，查看插入位置
+    alt 取消拖动或顺序未变
+        V->>V: 清除拖动呈现，不提交顺序
+    else 完成有效移动
+        V->>V: onMove 下标转换为稳定 ID 移动意图
+        V->>E: PageActions 等待同一次名称提交
+        alt 名称保存失败
+            E-->>V: 保留草稿与焦点，不提交顺序
+        else 名称已保存或没有编辑
+            V->>C: moveTemplate(ID, before: 目标 ID 或末尾)
+            C->>O: moveTemplate(id:before:)
+            O->>L: move(id:before:)
+            L->>L: 从当前权威 records 计算位置
+            alt 当前顺序确实变化
+                L->>S: P04 原子提交完整索引一次
+                alt 提交成功
+                    L->>L: 替换 records
+                    L-->>O: committed，携带有序清单
+                    O->>P: didChange：发布一次失效提示
+                    O-->>C: FileTemplateCommit
+                    C-->>V: 应用新的 ready 清单
+                else 提交失败
+                    L-->>C: 经 Operations 返回存储错误
+                    C-->>V: 保留原清单，显示错误
+                end
+            else 当前顺序未变
+                L-->>C: 经 Operations 返回 nil，不保存或发布
+            end
+        end
+    end
+```
+
+系统 List 持有拖动预览与插入提示，不提前改写 Controller 或 Library 的已提交顺序。开始拖动触发的名称保存独立完成；`onMove` 产生稳定 ID 移动意图后，通过 `FileTemplatePageActions` 等待同一名称提交，成功后执行排序，失败时保留名称错误与编辑焦点，不提交顺序。顺序操作从 Library 的最新记录移动模板，因此保留已提交名称与文件引用。取消排序不撤销名称提交；名称焦点与失败反馈见[编辑会话](Editing.md#入口取消与后续操作)。
+
+图中的“模板页面与原生列表（组合）”由 [NewFileTemplateSettingsPage](../../../../ECMenu/NewFileTemplates/Presentation/NewFileTemplateSettingsPage.swift)、`FileTemplatePageActions`、共用 `SettingsReorderList` 与 `SettingsReorderHandle` 组成。列表将系统移动下标转换为稳定 ID；源码映射与拖动、键盘、辅助功能 API 输入输出由[设置列表排序交互](../../Runtime/CommandMenuSettings.md#设置列表排序交互)维护。本页面连接名称提交与模板移动业务回调。
+
+排序调用沿用上方页面状态控制、模板应用操作、模板库、存储与发布模块。`FileTemplateController.moveTemplate(id:before:)` 持有本次更新占用，接收提交结果后更新 ready；`FileTemplateOperations.moveTemplate(id:before:)` 仅对实际 Commit 发布；`FileTemplateLibrary.move(id:before:)` 在 actor 当前记录中按 ID 移位，nil 目标表示末尾，顺序未变返回 nil。模板或目标 ID 已不存在时返回 `templateNotFound`。排序只调用 [P04 索引提交](Persistence.md#文件-api-与完成点)，不读取或修改内部副本文件。
+
 ## 打开内部副本与外部编辑
 
 ```mermaid
@@ -186,6 +242,8 @@ sequenceDiagram
 | 页面 ready/failed 与初始加载 Task | Controller，配置窗口使用的呈现模型 | 读取结果或 Commit 更新；存储失败保持原 ready |
 | 文件操作 phase 与错误 | PageActions，状态页窗口会话 | 先结束名称、再选择/执行，defer 释放；页面切换不释放占用 |
 | 字段草稿、提交 Task 与最后目标 | NameDraft / NameEditingSession，状态页窗口会话 | [名称编辑流程](Editing.md)控制焦点与结果 |
+| 拖动预览、插入位置与滚动 | 系统 List，一次原生拖动期间 | 完成移动通过 onMove 输出下标；共用组件转换为稳定 ID，不修改业务清单 |
+| 拖动开始时的名称提交引用 | 模板页面持有名称 Task 引用，一次拖动期间 | 完成移动消费同次名称结果后调用业务移动；结束时释放引用，不取消名称任务 |
 | `FileTemplateContent` | 单次调用返回的不可变值 | 新建文件用例消费，不暴露库路径 |
 | 读取来源与 Commit | 一次调用的不可变事实 | Operations 决定是否发布；不另存可变“需要发布”标记 |
 | 菜单副本 | Finder Extension 的 Replica | 经 IPC 整体应用，仅含 ID 与显示名；不承担模板持久化 |
@@ -193,5 +251,7 @@ sequenceDiagram
 ## 验证证据与限制
 
 [应用操作测试](../../../../Tests/ECMenuTests/NewFileTemplates/Application/FileTemplateOperationsTests.swift)覆盖初始化提示一次、普通缓存查询不提示、管理加载/重试提示、内容请求失败前仍发布已发生的初始化，以及打开入口恢复当前索引后调用注入的打开适配。[Controller 测试](../../../../Tests/ECMenuTests/NewFileTemplates/Presentation/FileTemplateControllerTests.swift)覆盖共享初次加载、失败后显式重试、提交失败保持 ready、删除清理失败先显示已删除清单、更换清理失败保持成功。
+
+[排序测试](../../../../Tests/ECMenuTests/NewFileTemplates/Presentation/FileTemplateOrderingTests.swift)贯穿 Controller、Operations 与 Library，验证移动到指定项前或末尾、重启恢复、已提交名称与内容引用保留、原位不写不发布，以及提交失败保留原顺序并可重试。该测试不驱动鼠标、滚动或原生名称编辑焦点。
 
 提交结果与发布入口的完整测试结果见[验证记录](../../Architecture/Verification.md)。已有真实系统观察见[存储证据](Persistence.md#验证与实机证据)和[原生焦点证据](Editing.md#原生焦点证据与验收)。通知实际到达、默认编辑器真实显示/保存、输入法与窗口切换仍需要对应实机验收。

@@ -56,6 +56,17 @@ final class FileTemplateController: ObservableObject {
         }
     }
 
+    /// 拖放结束后提交最终位置；无变化不替换页面快照，写入失败保持原顺序。
+    func moveTemplate(id: FileTemplateID, before destinationID: FileTemplateID?) async throws {
+        precondition(!isUpdating && templates != nil)
+        isUpdating = true
+        defer { isUpdating = false }
+
+        if let result = try await operations.moveTemplate(id: id, before: destinationID) {
+            state = .ready(result.templates)
+        }
+    }
+
     func openTemplate(id: FileTemplateID) async throws {
         try await operations.openTemplate(id: id)
     }

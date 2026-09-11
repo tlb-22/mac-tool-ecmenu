@@ -6,7 +6,7 @@
 
 ## 用户焦点恢复
 
-会驱动主应用、Preview 或 Finder 的自动化入口在运行前记录当前前台应用，并在自身清理完成后将焦点交还给同一应用实例：`run-debug.sh`、`test.sh`、`test-integration.sh`、`activate-environment.sh`、`capture-previews.sh`、`capture-finder-menus.sh` 和 `capture-readme-images.sh`。嵌套调用只由最外层入口记录和恢复一次，因此 README 截图流程不会在中途被子脚本切回原应用。
+会驱动主应用、Preview 或 Finder 的自动化入口在运行前记录当前前台应用，并在自身清理完成后将焦点交还给同一应用实例：`run-debug.sh`、`test.sh`、`test-integration.sh`、`activate-environment.sh`、`test-settings-reorder.sh`、`capture-previews.sh`、`capture-finder-menus.sh` 和 `capture-readme-images.sh`。嵌套调用只由最外层入口记录和恢复一次，因此 README 截图流程不会在中途被子脚本切回原应用。
 
 普通应用退出后不会被脚本重新启动；Finder 因部分流程会主动重启，可恢复到身份唯一匹配的新 Finder 进程。没有前台应用的 CI 会话直接跳过恢复。`preview-ui.sh` 用于把可交互的 Preview 留在前台，不执行恢复。实现依据与 macOS Space 边界见[自动化脚本的用户焦点恢复](../spec/Technical/UserFocusRestoration.md)。
 
@@ -140,6 +140,8 @@ Archive 和打包不改变本机的 Extension 启用状态。Debug 与 Release �
 预览代码位于 `Tests/ECMenuPreviews/`，每个 Case 在文件开头集中保存任务数量等可调参数，并由声明式 Composition 统一注册。
 
 `preview-ui.sh` 只替换独立预览进程，不结束主应用或刷新 Finder Extension；日常主应用运行继续使用 `run-debug.sh`。Xcode 构建产物保存在 `.derivedData/`，完整构建日志位于 `.artifacts/scratch/logs/`；临时截图或视觉检查结果位于 `.artifacts/scratch/previews/`。
+
+设置列表的真实拖拽检查使用 `./scripts/test-settings-reorder.sh --check` 查询已有权限，再使用 `./scripts/test-settings-reorder.sh <preview-pid> <from-x> <from-y> <to-x> <to-y> <duration-seconds> [--cancel]`。实际鼠标输入须先获得用户明确许可；工具仅操作 `com.axiomace.ecmenu.test.preview` 窗口，坐标相对窗口左上角，拖动时间为 0.5–10 秒，`--cancel` 在截图后按 Esc 取消移动。它不申请系统权限，结束后恢复此前应用焦点；辅助程序、module cache 和拖动中的截图保存在本次 `.artifacts/scratch/probes/YYYYMMDD-HHMMSS-settings-reorder-<pid>/`，编译日志保存在 `scratch/logs/`，不占用 Derived Data。
 
 一次生成全部 Preview 的中英文窗口截图：
 

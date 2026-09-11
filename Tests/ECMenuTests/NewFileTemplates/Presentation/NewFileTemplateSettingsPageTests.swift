@@ -219,7 +219,7 @@ final class NewFileTemplateSettingsPageTests: XCTestCase {
         XCTAssertEqual(nativeFields(in: host.view).map(ObjectIdentifier.init), originalFields.map(ObjectIdentifier.init))
         XCTAssertEqual(originalFields.map(\.textColor), originalColors)
         XCTAssertTrue(originalFields.allSatisfy(\.isEnabled))
-        let actions = accessibilityElements(in: host.view).filter { $0.role == .button }
+        let actions = try await operationButtons(in: host)
         XCTAssertFalse(actions.isEmpty)
         XCTAssertTrue(actions.allSatisfy(\.isEnabled), "Removing one row must not dim every action button")
         XCTAssertFalse(accessibilityElements(in: host.view).contains { $0.role == .progressIndicator })
@@ -354,7 +354,8 @@ final class NewFileTemplateSettingsPageTests: XCTestCase {
             XCTAssertTrue(originalFields.allSatisfy(\.isEnabled))
             XCTAssertEqual(originalFields.map(\.textColor), originalColors)
             XCTAssertEqual(nativeFields(in: host.view).map(ObjectIdentifier.init), originalFields.map(ObjectIdentifier.init))
-            XCTAssertTrue(accessibilityElements(in: host.view).filter { $0.role == .button }.allSatisfy(\.isEnabled))
+            let fileActions = try await operationButtons(in: host)
+            XCTAssertTrue(fileActions.allSatisfy(\.isEnabled))
             XCTAssertFalse(accessibilityElements(in: host.view).contains { $0.role == .progressIndicator })
             XCTAssertTrue(trigger.press())
             await Task.yield()
@@ -557,6 +558,60 @@ final class NewFileTemplateSettingsPageTests: XCTestCase {
         XCTAssertEqual(fixture.harness.nameEditing.draft?.value, "Corrected")
     }
 
+    func testTemplateRowsUseTheNativeListWithRegisteredDragTypes() async throws {
+        let fixture = try NewFileTemplateSettingsPageFixture()
+        let host = NewFileTemplatesNativePageHost(harness: fixture.harness)
+        defer { host.close() }
+        let first = try await field(for: fixture.firstName, in: host)
+        let second = try await field(for: fixture.secondName, in: host)
+        let table = try XCTUnwrap(descendants(in: host.view).compactMap { $0 as? NSTableView }.first)
+
+        // 核实页面接入系统列表和拖放注册；不把读取容器当作实际鼠标拖拽验收。
+        XCTAssertEqual(table.numberOfRows, fixture.harness.templates.count)
+        XCTAssertEqual(table.row(for: first), 0)
+        XCTAssertEqual(table.row(for: second), 1)
+        XCTAssertFalse(table.registeredDraggedTypes.isEmpty)
+    }
+
+    func testNativeListFocusCommitsNameAndReorderedRowsKeepTheirTemplateBindings() async throws {
+        let fixture = try NewFileTemplateSettingsPageFixture()
+        let host = NewFileTemplatesNativePageHost(harness: fixture.harness)
+        defer { host.close() }
+        let name = try await field(for: fixture.firstName, in: host)
+        let table = try XCTUnwrap(descendants(in: host.view).compactMap { $0 as? NSTableView }.first)
+        try click(name, in: host)
+        try await assertEditing(fixture.firstName, field: name, host: host)
+        try typeIntoFirstResponder("Moved name", in: host)
+
+        XCTAssertTrue(host.window.makeFirstResponder(table))
+        for _ in 0..<100 {
+            if fixture.harness.nameEditing.draft == nil, !fixture.harness.nameEditing.isTransitioning { break }
+            await Task.yield()
+        }
+        XCTAssertNil(fixture.harness.nameEditing.draft)
+        XCTAssertNil(name.currentEditor())
+        XCTAssertEqual(fixture.harness.saved, [.init(target: fixture.firstName, value: "Moved name")])
+
+        // 模拟业务发布新的已提交顺序，检查原生列表重排行后仍把输入绑定到相同模板。
+        fixture.harness.move(fixture.firstName.templateID, before: nil)
+        for _ in 0..<100 {
+            host.layout()
+            if let moved = nativeFields(in: host.view).first(where: { $0.editingCoordinator?.target == fixture.firstName }),
+               table.row(for: moved) == 1 { break }
+            await Task.yield()
+        }
+        let moved = try await field(for: fixture.firstName, in: host)
+        let retained = try await field(for: fixture.secondName, in: host)
+        XCTAssertEqual(table.row(for: moved), 1)
+        XCTAssertEqual(table.row(for: retained), 0)
+        XCTAssertEqual(moved.stringValue, "Moved name")
+        XCTAssertEqual(retained.stringValue, "MD")
+        try click(moved, in: host)
+        try await assertEditing(fixture.firstName, field: moved, host: host)
+        try typeIntoFirstResponder("Edited after moving", in: host)
+        XCTAssertEqual(fixture.harness.nameEditing.draft?.value, "Edited after moving")
+    }
+
     /// 隐藏宿主通过提示框的公开错误绑定确认失败，系统弹窗展示留给实际窗口验收。
     private func dismissOperationError(in host: NewFileTemplatesNativePageHost) async throws {
         for _ in 0..<100 {
@@ -620,8 +675,15 @@ final class NewFileTemplateSettingsPageTests: XCTestCase {
             point = NSPoint(x: host.view.bounds.maxX - 40,
                             y: host.view.isFlipped ? host.view.bounds.maxY - 24 : 24)
         }
-        let hit = try hitView(at: point, in: host)
-        try mouseDown(on: hit, at: point, in: host)
+        if case .belowLastRow = area {
+            let table = try XCTUnwrap(descendants(in: host.view).compactMap { $0 as? NSTableView }.first)
+            XCTAssertEqual(table.row(at: table.convert(point, from: host.view)), -1)
+            // 隐藏窗口不分发桌面点击；验证点击表格空白时由窗口执行的原生焦点交接。
+            XCTAssertTrue(host.window.makeFirstResponder(table))
+        } else {
+            let hit = try hitView(at: point, in: host)
+            try mouseDown(on: hit, at: point, in: host)
+        }
     }
 
     private func descendants(in view: NSView) -> [NSView] {
@@ -678,7 +740,9 @@ final class NewFileTemplateSettingsPageTests: XCTestCase {
             let matches = titles.compactMap { title in
                 buttons.first { $0.text.contains(title) }
             }
-            if matches.count == titles.count { return matches }
+            if matches.count == titles.count {
+                return buttons.filter { button in titles.contains { button.text.contains($0) } }
+            }
             guard ProcessInfo.processInfo.systemUptime < deadline else {
                 let missing = titles.filter { title in !buttons.contains { $0.text.contains(title) } }
                 return try XCTUnwrap(
@@ -699,7 +763,8 @@ final class NewFileTemplateSettingsPageTests: XCTestCase {
             guard visited.insert(element.identity).inserted else { return [] }
             return [element] + element.children.flatMap(visit)
         }
-        return visit(NewFileTemplatesNativeAccessibilityElement(object: root))
+        // 原生表格按可见性合成行的 AX 树；隐藏宿主从已创建的 NSView 行入口读取实际控件。
+        return ([root] + descendants(in: root)).flatMap { visit(NewFileTemplatesNativeAccessibilityElement(object: $0)) }
     }
 }
 
@@ -743,6 +808,11 @@ private final class NewFileTemplatesNativePageHarness: ObservableObject {
     var saveBoundary: ((NewFileTemplatesNativeSave) async throws -> Void)?
 
     init(templates: [FileTemplate]) { self.templates = templates }
+    func move(_ id: FileTemplateID, before destination: FileTemplateID?) {
+        let template = templates.remove(at: templates.firstIndex { $0.id == id }!)
+        let index = destination.map { next in templates.firstIndex { $0.id == next }! } ?? templates.endIndex
+        templates.insert(template, at: index)
+    }
     func open(_ id: FileTemplateID) { openedIDs.append(id) }
     func replace(_ id: FileTemplateID) async throws {
         isUpdating = true
@@ -791,7 +861,8 @@ private struct NewFileTemplatesNativePageContent: View {
             nameEditing: harness.nameEditing, actions: harness.actions,
             importTemplate: { try await harness.importTemplate() }, updateName: { try await harness.update($0, field: $1, value: $2) },
             openTemplate: { harness.open($0) }, replaceTemplate: { try await harness.replace($0) },
-            removeTemplate: { try await harness.remove($0) }, reload: {}
+            removeTemplate: { try await harness.remove($0) },
+            moveTemplate: { harness.move($0, before: $1) }, reload: {}
         )
         .id(pageID)
     }

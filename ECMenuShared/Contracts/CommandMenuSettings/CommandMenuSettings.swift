@@ -1,5 +1,5 @@
 /**
- 定义两个产品共同理解的菜单开关值及其版本化 JSON 信封，保存总开关与稀疏隐藏功能集合。
+ 定义两个产品共同理解的菜单配置及其版本化 JSON 信封，保存总开关、隐藏功能集合和命令顺序。
  业务修改使用有效值，解码严格验证当前格式；实际偏好读写由各进程的存储边界负责。
  */
 
@@ -10,8 +10,19 @@ nonisolated struct CommandMenuSettings: Codable, Equatable, Sendable {
     /// 当前持久化和传输格式版本；领域状态本身不保存该值。
     static let currentSchemaVersion = CommandMenuSettingsEnvelope.currentSchemaVersion
 
-    /// 所有功能使用产品默认可见性时的配置。
+    /// 产品默认开关、可见性与命令顺序。
     static let standard = CommandMenuSettings()
+
+    /// 当前产品的完整默认顺序；显示过滤不会改变这份功能集合。
+    static let defaultFeatureIDs: [ContextCommandFeatureID] = [
+        CreateNewFileCommand.descriptor.id,
+        CopyPathCommand.descriptor.id,
+        HideItemsCommand.descriptor.id,
+        ShowItemsCommand.descriptor.id,
+        CompressImagesCommand.descriptor.id,
+        OpenInVSCodeCommand.descriptor.id,
+        OpenInITerm2Command.descriptor.id,
+    ]
 
     /// 产品是否向 Finder 贡献任何右键菜单项。
     private(set) var isEnabled: Bool
@@ -19,13 +30,23 @@ nonisolated struct CommandMenuSettings: Codable, Equatable, Sendable {
     /// 偏离默认可见状态的功能稳定标识集合。
     private(set) var hiddenFeatureIDs: Set<String>
 
-    /// 创建产品启用状态和隐藏功能集合组成的有效领域配置。
+    /// 全部固定命令的唯一完整排列；隐藏项仍保留其位置。
+    private(set) var orderedFeatureIDs: [ContextCommandFeatureID]
+
+    /// 创建产品开关、隐藏功能集合和完整命令排列组成的有效领域配置。
     init(
         isEnabled: Bool = true,
-        hiddenFeatureIDs: Set<String> = []
+        hiddenFeatureIDs: Set<String> = [],
+        orderedFeatureIDs: [ContextCommandFeatureID] = Self.defaultFeatureIDs
     ) {
+        precondition(
+            orderedFeatureIDs.count == Self.defaultFeatureIDs.count
+                && Set(orderedFeatureIDs) == Set(Self.defaultFeatureIDs),
+            "Menu ordering must contain every product feature exactly once"
+        )
         self.isEnabled = isEnabled
         self.hiddenFeatureIDs = hiddenFeatureIDs
+        self.orderedFeatureIDs = orderedFeatureIDs
     }
 
     /// 设置产品是否向 Finder 贡献右键菜单，不改变各功能的独立可见性。
@@ -56,6 +77,32 @@ nonisolated struct CommandMenuSettings: Codable, Equatable, Sendable {
         }
     }
 
+    /// 把一个完整功能移动到指定功能前，nil 表示末尾；返回顺序是否实际变化。
+    @discardableResult
+    mutating func move(
+        _ featureID: ContextCommandFeatureID,
+        before nextFeatureID: ContextCommandFeatureID?
+    ) -> Bool {
+        guard let sourceIndex = orderedFeatureIDs.firstIndex(of: featureID) else {
+            preconditionFailure("Only a registered menu feature can be moved")
+        }
+        let insertionIndex: Int
+        if let nextFeatureID {
+            guard let index = orderedFeatureIDs.firstIndex(of: nextFeatureID) else {
+                preconditionFailure("The insertion target must be a registered menu feature")
+            }
+            if nextFeatureID == featureID { return false }
+            insertionIndex = index
+        } else {
+            insertionIndex = orderedFeatureIDs.count
+        }
+        let destinationIndex = insertionIndex > sourceIndex ? insertionIndex - 1 : insertionIndex
+        guard destinationIndex != sourceIndex else { return false }
+        orderedFeatureIDs.remove(at: sourceIndex)
+        orderedFeatureIDs.insert(featureID, at: destinationIndex)
+        return true
+    }
+
     /// 通过版本化信封恢复领域状态。
     init(from decoder: Decoder) throws {
         self = try CommandMenuSettingsEnvelope(from: decoder).configuration
@@ -70,7 +117,7 @@ nonisolated struct CommandMenuSettings: Codable, Equatable, Sendable {
 /// 持久化与传输专用的版本信封；解码后只向业务层交付有效配置。
 nonisolated private struct CommandMenuSettingsEnvelope: Codable, Sendable {
     /// 当前持久化和传输格式版本。
-    static let currentSchemaVersion = 1
+    static let currentSchemaVersion = 2
 
     /// 从当前格式恢复出的有效领域状态。
     let configuration: CommandMenuSettings
@@ -80,6 +127,7 @@ nonisolated private struct CommandMenuSettingsEnvelope: Codable, Sendable {
         case schemaVersion
         case isEnabled
         case hiddenFeatureIDs
+        case orderedFeatureIDs
     }
 
     /// 使用当前领域状态创建待编码信封。
@@ -102,6 +150,15 @@ nonisolated private struct CommandMenuSettingsEnvelope: Codable, Sendable {
             )
         }
 
+        let featureIDs = try container.decode([String].self, forKey: .orderedFeatureIDs)
+        let expectedIDs = CommandMenuSettings.defaultFeatureIDs.map(\.rawValue)
+        guard featureIDs.count == expectedIDs.count, Set(featureIDs) == Set(expectedIDs) else {
+            throw DecodingError.dataCorruptedError(
+                forKey: .orderedFeatureIDs,
+                in: container,
+                debugDescription: "Menu ordering must contain every product feature exactly once"
+            )
+        }
         configuration = CommandMenuSettings(
             isEnabled: try container.decode(
                 Bool.self,
@@ -112,7 +169,8 @@ nonisolated private struct CommandMenuSettingsEnvelope: Codable, Sendable {
                     [String].self,
                     forKey: .hiddenFeatureIDs
                 )
-            )
+            ),
+            orderedFeatureIDs: featureIDs.map(ContextCommandFeatureID.init(rawValue:))
         )
     }
 
@@ -124,6 +182,10 @@ nonisolated private struct CommandMenuSettingsEnvelope: Codable, Sendable {
         try container.encode(
             configuration.hiddenFeatureIDs.sorted(),
             forKey: .hiddenFeatureIDs
+        )
+        try container.encode(
+            configuration.orderedFeatureIDs.map(\.rawValue),
+            forKey: .orderedFeatureIDs
         )
     }
 }

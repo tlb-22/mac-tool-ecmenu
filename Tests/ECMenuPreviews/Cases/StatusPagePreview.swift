@@ -199,6 +199,7 @@ private struct StatusPagePreviewContent: View {
             setVisibility: { isVisible, featureID in
                 configuration.setVisible(isVisible, for: featureID)
             },
+            moveCommand: { configuration.move($0, before: $1) },
             openFullDiskAccessSettings: {},
             importTemplate: {
                 guard case .ready(var templates) = fileTemplateState else {
@@ -226,6 +227,15 @@ private struct StatusPagePreviewContent: View {
                     preconditionFailure("Deletion requires an available template list")
                 }
                 fileTemplateState = .ready(templates.filter { $0.id != id })
+            },
+            moveTemplate: { id, destination in
+                guard case .ready(var templates) = fileTemplateState else {
+                    preconditionFailure("Reordering requires an available template list")
+                }
+                let template = templates.remove(at: templates.firstIndex { $0.id == id }!)
+                let index = destination.map { next in templates.firstIndex { $0.id == next }! } ?? templates.endIndex
+                templates.insert(template, at: index)
+                fileTemplateState = .ready(templates)
             },
             reloadTemplates: {
                 fileTemplateState = .ready(FileTemplatePreviewFixtures.templates)

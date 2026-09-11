@@ -77,10 +77,10 @@ struct StatusPageContent: View {
     /// 主应用登录项当前的登记和系统批准状态。
     let loginItemState: LoginItemRegistrationState
 
-    /// 按声明顺序显示的所有右键命令。
+    /// 全部右键命令的产品描述；页面根据配置排列显示顺序。
     let descriptors: [ContextCommandDescriptor]
 
-    /// 当前产品总开关与菜单可见性快照。
+    /// 当前产品总开关、菜单可见性与命令顺序快照。
     let configuration: CommandMenuSettings
 
     /// 模板库的读取结果与正在执行的持久化操作。
@@ -98,6 +98,7 @@ struct StatusPageContent: View {
 
     /// 用户更改一项命令可见性时的回调。
     let setVisibility: (Bool, ContextCommandFeatureID) -> Void
+    let moveCommand: (ContextCommandFeatureID, ContextCommandFeatureID?) -> Void
 
     /// 用户请求打开完全磁盘访问设置时的回调。
     let openFullDiskAccessSettings: () -> Void
@@ -108,6 +109,7 @@ struct StatusPageContent: View {
     let openTemplate: (FileTemplateID) async throws -> Void
     let replaceTemplate: (FileTemplateID) async throws -> Void
     let removeTemplate: (FileTemplateID) async throws -> Void
+    let moveTemplate: (FileTemplateID, FileTemplateID?) async throws -> Void
     let reloadTemplates: () async -> Void
 
     /// 草稿随状态页窗口保留；侧栏切换先完成当前名称提交。
@@ -213,7 +215,8 @@ struct StatusPageContent: View {
                 descriptors: descriptors,
                 configuration: configuration,
                 systemState: systemState,
-                setVisibility: setVisibility
+                setVisibility: setVisibility,
+                moveCommand: moveCommand
             )
         case .newFileTemplates:
             NewFileTemplateSettingsPage(
@@ -226,6 +229,7 @@ struct StatusPageContent: View {
                 openTemplate: openTemplate,
                 replaceTemplate: replaceTemplate,
                 removeTemplate: removeTemplate,
+                moveTemplate: moveTemplate,
                 reload: reloadTemplates
             )
         }

@@ -78,6 +78,9 @@ final class CommandMenuSettingsReplica: NSObject {
     /// 构建本次子菜单所需的有序模板描述。
     var newFileTemplates: [FileTemplateMenuItem] { configuration.newFileTemplates }
 
+    /// 本次菜单使用的开关与命令顺序；副本只提供不可变值。
+    var menuSettings: CommandMenuSettings { configuration.configuration }
+
     /// 从单飞状态推导是否仍在等待响应，供边界验证读取。
     var isRefreshing: Bool {
         if case .fetching = refreshState { return true }

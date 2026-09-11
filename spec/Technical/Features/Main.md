@@ -3,7 +3,7 @@
 每个业务能力从执行流进入模块、数据/API 边界与验证证据。公共运行机制和平台结论通过链接复用。产品行为与验收边界见[功能需求](../../Requirements/Features/Main.md)。
 
 - [新建文件](NewFile.md)：从 Finder 子菜单到模板内容读取、不覆盖写入和 Finder 结果选择。
-- [文件模板](NewFileTemplates/Main.md)：模板加载、导入、编辑、更换、删除、持久化与原生编辑会话。
+- [文件模板](NewFileTemplates/Main.md)：模板加载、导入、编辑、排序、更换、删除、持久化与原生编辑会话。
 - [菜单配置](../Runtime/CommandMenuSettings.md)：开关修改、菜单快照、失效发布与 Extension 副本同步。
 - [通用设置](GeneralSettings.md)：登录项状态、系统设置入口和设置页面的能力边界。
 - [拷贝路径](CopyPath.md)：路径对象存在性和系统剪贴板表示。

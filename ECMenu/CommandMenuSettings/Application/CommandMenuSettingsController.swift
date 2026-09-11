@@ -1,5 +1,5 @@
 /**
- 持有进程内唯一可变的命令菜单配置，并响应总开关与命令可见性变更。
+ 持有进程内唯一可变的命令菜单配置，并响应总开关、命令可见性和显示顺序变更。
  每次有效变更统一保存偏好并发布菜单失效通知。
  */
 
@@ -27,6 +27,14 @@ final class CommandMenuSettingsController: ObservableObject {
     func setVisible(_ isVisible: Bool, for feature: ContextCommandFeatureID) {
         guard configuration.isVisible(feature) != isVisible else { return }
         configuration.setVisible(isVisible, for: feature)
+        persistAndPublish()
+    }
+
+    /// 一次完成的排序只提交一次；无位置变化时不保存或发布。
+    func move(_ featureID: ContextCommandFeatureID, before nextFeatureID: ContextCommandFeatureID?) {
+        var updated = configuration
+        guard updated.move(featureID, before: nextFeatureID) else { return }
+        configuration = updated
         persistAndPublish()
     }
 

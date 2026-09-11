@@ -22,7 +22,8 @@ final class FinderSync: FIFinderSync {
         makeMenu: { [commandClient, commandMenuSettings] in
             ContextMenuComposition.menu(
                 commandClient: commandClient,
-                newFileTemplates: commandMenuSettings.newFileTemplates
+                newFileTemplates: commandMenuSettings.newFileTemplates,
+                configuration: commandMenuSettings.menuSettings
             )
         },
         configuration: commandMenuSettings

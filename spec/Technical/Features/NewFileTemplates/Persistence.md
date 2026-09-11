@@ -8,6 +8,8 @@
 
 模板 ID 和文件副本 UUID 是两份不同的身份。名称修改保留二者；更换只改变文件副本 UUID 和导入文件名，保留模板 ID、名称与清单顺序。完整元数据由主应用 [FileTemplate](../../../../ECMenu/NewFileTemplates/Domain/FileTemplate.swift) 拥有；跨端仅共享 [ID](../../../../ECMenuShared/Contracts/NewFileTemplates/FileTemplateID.swift) 和[菜单描述](../../../../ECMenuShared/Contracts/NewFileTemplates/FileTemplateMenuItem.swift)。
 
+排序只移动权威记录数组中的位置，保留记录中的模板 ID、名称、文件副本 UUID 与导入文件名。菜单快照按同一记录顺序投影；不另存排序索引，也不按显示名定位模板。导入追加到清单末尾，删除保留其余模板的相对顺序。
+
 ## 模板库持久化
 
 模板库位于 Foundation 返回的用户 Application Support 目录下，以当前主应用 signing identifier 隔离产品身份：
@@ -39,6 +41,8 @@ Application Support 用于应用管理的用户数据，按应用身份设置子
 ## 提交与清理结果
 
 导入和更换先完整写入新的独立副本，再原子替换索引。索引写入返回成功之后，Library 才替换进程内 records。提交失败时保留旧清单和内容，尝试清理未提交的新副本；这次清理若失败只记日志，继续抛原始提交错误。
+
+排序在 Library actor 内从当前已提交记录计算新位置；实际顺序变化时只执行一次 P04 索引提交，不读写或清理内容副本。写入失败保留原记录顺序，页面继续呈现原清单并报告错误；顺序未变化时不写索引，也不发布变更提示。
 
 库变更方法返回的 [FileTemplateCommit](../../../../ECMenu/NewFileTemplates/Domain/FileTemplateCommit.swift) 表示已提交事实：
 

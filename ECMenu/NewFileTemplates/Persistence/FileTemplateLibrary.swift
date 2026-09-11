@@ -84,6 +84,28 @@ actor FileTemplateLibrary {
         return try update(field.updating(template, to: value))
     }
 
+    /// 按稳定身份移动当前记录；nil 目标表示末尾，位置未改变时不写索引。
+    func move(id: FileTemplateID, before destinationID: FileTemplateID?) throws -> FileTemplateCommit? {
+        var current = try currentRecords()
+        guard let source = current.firstIndex(where: { $0.template.id == id }) else {
+            throw FileTemplateLibraryError.templateNotFound(id)
+        }
+        let destination: Int
+        if let destinationID {
+            guard let target = current.firstIndex(where: { $0.template.id == destinationID }) else {
+                throw FileTemplateLibraryError.templateNotFound(destinationID)
+            }
+            destination = target > source ? target - 1 : target
+        } else {
+            destination = current.count - 1
+        }
+        guard source != destination else { return nil }
+
+        current.insert(current.remove(at: source), at: destination)
+        try commit(current)
+        return .committed(current.map(\.template))
+    }
+
     /// 完整复制选定文件后原子发布新引用；提交后的清理问题随权威清单返回。
     func replaceFile(for id: FileTemplateID, at sourceURL: URL) throws -> FileTemplateCommit {
         var current = try currentRecords()

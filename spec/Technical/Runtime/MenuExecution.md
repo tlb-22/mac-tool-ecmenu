@@ -56,7 +56,7 @@ flowchart TB
         enabled{副本总开关开启<br/>且菜单类型受支持?}
         read[FinderContextReader<br/>读取 targetedURL 和 selectedItemURLs]
         valid{合法语义快照?}
-        composition[ContextMenuComposition<br/>按当前模板描述组成动作树]
+        composition[ContextMenuComposition<br/>按配置顺序组织 Feature 与模板子树]
         filter[控制器内部：逐叶检查<br/>Feature 开关 → 外部应用依赖]
         facts[能力规则与事实读取（组合）<br/>同次菜单共享必要事实]
         prepared[动作准备<br/>AnyContextMenuAction → PreparedContextMenuAction]
@@ -87,7 +87,7 @@ flowchart TB
 | 菜单构建与动作路由 | `FinderContextMenuController` | [FinderContextMenuController.swift](../../../ECMenuFinderExtension/Menu/FinderContextMenuController.swift) | `FIMenuKind` 或已冻结快照 → `NSMenu?` | 读取内存副本的总开关与 Feature 可见性；`NSMenu/NSMenuItem` 构造、每层 `autoenablesItems = false`、action 与 tag 绑定。总开关关闭、不支持的类型、无合法上下文或无有效叶子均返回 nil |
 | Finder 上下文解释（组合） | `FinderContextReader`、`FinderMenuContext`、`FinderContextSnapshot` | [FinderContextReader.swift](../../../ECMenuFinderExtension/Menu/FinderContextReader.swift)、[FinderContextSnapshot.swift](../../../ECMenuFinderExtension/Menu/FinderContextSnapshot.swift) | 菜单类型、Finder 原始字段 → container / items / sidebar 或 nil | `FIFinderSyncController.targetedURL()` 返回 `URL?`，`selectedItemURLs()` 返回 `[URL]?`。container 取选择第一项、为空时取 target；items 取完整非空选择；sidebar 取 target；toolbar 不支持 |
 | 路径与选择契约（组合） | `AbsoluteFilePath`、`FinderItemSelection` | [AbsoluteFilePath.swift](../../../ECMenuShared/Contracts/FileSystem/AbsoluteFilePath.swift)、[FinderItemSelection.swift](../../../ECMenuShared/Contracts/FileSystem/FinderItemSelection.swift) | 文件 URL / POSIX 路径 → 验证后的值 | 纯值规则，使用 `URL.standardizedFileURL`；拒绝无效路径或空选择。该验证不证明对象存在、类型或访问授权 |
-| 产品菜单声明（组合） | `ContextMenuComposition`、`ContextMenuFeature`、`ContextMenuAction` | [ContextMenuComposition.swift](../../../ECMenuFinderExtension/Menu/ContextMenuComposition.swift)、[ContextMenuFeature.swift](../../../ECMenuFinderExtension/Menu/ContextMenuFeature.swift)、[ContextMenuAction.swift](../../../ECMenuFinderExtension/Menu/ContextMenuAction.swift) | 模板描述、七个固定命令的 descriptor → 递归声明树 | 接收命令客户端和当前模板描述，按产品顺序组合声明树；总开关与 Feature 可见性由菜单控制器读取和过滤。模板 unavailable 与有效空清单均不产生新建子菜单 |
+| 产品菜单声明（组合） | `ContextMenuComposition`、`ContextMenuFeature`、`ContextMenuAction` | [ContextMenuComposition.swift](../../../ECMenuFinderExtension/Menu/ContextMenuComposition.swift)、[ContextMenuFeature.swift](../../../ECMenuFinderExtension/Menu/ContextMenuFeature.swift)、[ContextMenuAction.swift](../../../ECMenuFinderExtension/Menu/ContextMenuAction.swift) | 当前配置、有序模板描述、七个固定命令的 descriptor → 递归声明树 | 接收命令客户端与当前副本，按 `orderedFeatureIDs` 排列完整 Feature 子树，模板子树按描述数组排列；总开关与 Feature 可见性由菜单控制器读取和过滤。模板 unavailable 与有效空清单均不产生新建子菜单；排序是纯内存规则 |
 | 单次菜单事实（组合） | `FinderContextMenuEvaluationContext`、`FinderTargetReader`、`FinderSingleTargetFacts`、`FinderTargetKind` | [FinderContextMenuEvaluationContext.swift](../../../ECMenuFinderExtension/Menu/FinderContextMenuEvaluationContext.swift)、[FinderTargetReader.swift](../../../ECMenuFinderExtension/Menu/FinderTargetReader.swift)、[FinderTargetFacts.swift](../../../ECMenuFinderExtension/Menu/FinderTargetFacts.swift) | 本次唯一目标 → directory / other / unavailable | `FileManager.fileExists(atPath:isDirectory:)` 跟随符号链接，失败返回不可用；多选不读取。上下文只在本次同步菜单构建中缓存事实，随后释放 |
 | 单目标命令规则（组合） | `CreateNewFileFeature`、`OpenInVSCodeFeature`、`OpenInITerm2Feature` | [CreateNewFileFeature.swift](../../../ECMenuFinderExtension/Commands/NewFile/CreateNewFileFeature.swift)、[OpenInApplicationFeatures.swift](../../../ECMenuFinderExtension/Commands/OpenInApplication/OpenInApplicationFeatures.swift) | 菜单种类、单目标事实、模板 ID 或固定应用要求 → 类型化命令或 nil | 使用上行事实，无额外文件 I/O。新建以单文件父目录或目录自身为目标；背景/侧边栏要求目录。VS Code 接受存在的单目标，iTerm2 要求目录 |
 | 复制路径菜单规则 | `CopyPathFeature` | [CopyPathFeature.swift](../../../ECMenuFinderExtension/Commands/CopyPath/CopyPathFeature.swift) | 非空有序路径 → `CopyPathCommand` | 纯规则；菜单阶段不查询对象是否存在，保持 Finder 返回的路径顺序 |
@@ -101,7 +101,7 @@ flowchart TB
 
 返回 `NSMenu` 只表示 Extension 已构造菜单，不表示 Finder 已显示或用户已选择。菜单 Controller 保留叶子对应的冻结命令与唯一 tag，点击消费一次；它不在点击时重新读取 Finder 当前选择或菜单开关。每次菜单注册后，按 `max(256, 本次菜单叶子数)` 保留最近动作，后续大量菜单可淘汰旧项。无效或重复 tag 只播放提示音。
 
-模板显示名、顺序与 ID 在当前菜单中固定；模板内容和默认文件名由主应用执行时读取。配置副本更新只影响下一次菜单构建。图标缓存独立跨菜单保留，同一路径的应用图标变化不会主动清空缓存。
+一级入口顺序、模板显示名、模板顺序与 ID 在当前菜单中固定；模板内容和默认文件名由主应用执行时读取。配置副本更新只影响下一次菜单构建。图标缓存独立跨菜单保留，同一路径的应用图标变化不会主动清空缓存。
 
 Finder 字段组合属于项目映射，API 顺序也不承诺等于可见排序；官方范围及项目观察见[菜单语义](../Platform/Finder/ContextMenus.md)。菜单主体尺度与图标裁切依据见[菜单图标](../Platform/Finder/MenuIcons.md)。
 

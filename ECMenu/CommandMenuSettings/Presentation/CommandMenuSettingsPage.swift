@@ -1,6 +1,6 @@
 /**
- 呈现各命令的菜单可见性开关与外部应用依赖状态。
- 根据注入的配置和系统事实确定可操作性，通过回调请求变更。
+ 按用户顺序呈现命令手柄、菜单可见性开关与外部应用依赖状态。
+ 排序和开关分别发出变更意图，外部依赖只限制开关操作。
  */
 
 import AppKit
@@ -12,22 +12,28 @@ struct CommandMenuSettingsPage: View {
     let configuration: CommandMenuSettings
     let systemState: StatusPageSystemState
     let setVisibility: (Bool, ContextCommandFeatureID) -> Void
+    let moveCommand: (ContextCommandFeatureID, ContextCommandFeatureID?) -> Void
+
+    private var orderedDescriptors: [ContextCommandDescriptor] {
+        configuration.orderedFeatureIDs.map { id in descriptors.first { $0.id == id }! }
+    }
 
     /// 显示每项 Finder 右键命令的图标、外部依赖状态与开关。
     var body: some View {
-        ScrollView {
+        VStack {
             GroupBox {
-                VStack(spacing: 0) {
-                    ForEach(descriptors, id: \.id) { descriptor in
+                SettingsReorderList(rows: orderedDescriptors, move: moveCommand) { descriptor in
+                    VStack(spacing: 0) {
                         contextMenuRow(for: descriptor)
-
-                        if descriptor.id != descriptors.last?.id {
+                        if descriptor.id != orderedDescriptors.last?.id {
                             Divider()
                         }
                     }
                 }
+                .frame(height: CGFloat(orderedDescriptors.count) * (StatusPageStyle.rowHeight + 1))
             }
             .frame(maxWidth: .infinity)
+            Spacer(minLength: 0)
         }
         .padding(StatusPageStyle.contentPadding)
     }
@@ -62,6 +68,7 @@ struct CommandMenuSettingsPage: View {
             )
 
         return SettingsComponents.settingRow {
+            reorderHandle(for: descriptor)
             SettingsComponents.settingLabel(descriptor.title) {
                 SettingsComponents.commandIcon(for: descriptor, systemState: systemState)
             }
@@ -96,7 +103,17 @@ struct CommandMenuSettingsPage: View {
                 )
             }
         }
-        .disabled(!isDependencyAvailable)
     }
 
+    private func reorderHandle(for descriptor: ContextCommandDescriptor) -> some View {
+        let ids = configuration.orderedFeatureIDs
+        let index = ids.firstIndex(of: descriptor.id)!
+        return SettingsReorderHandle(
+            title: String(localized: descriptor.title),
+            moveUp: index > 0 ? { moveCommand(descriptor.id, ids[index - 1]) } : nil,
+            moveDown: index + 1 < ids.count
+                ? { moveCommand(descriptor.id, ids.dropFirst(index + 2).first) } : nil
+        )
+        .frame(width: 20, height: 24)
+    }
 }

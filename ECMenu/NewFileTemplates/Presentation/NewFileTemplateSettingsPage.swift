@@ -1,5 +1,5 @@
 /**
- 组成模板管理页的清单、名称编辑、操作控件与加载错误界面。
+ 组成模板管理页的有序清单、拖拽、名称编辑、操作控件与加载错误界面。
  集中模板页面使用的布局和文案，通过注入的状态、编辑会话与操作回调绑定交互。
  */
 
@@ -22,7 +22,7 @@ enum NewFileTemplatesStyle {
     static let operationProgressDelay: Duration = .milliseconds(300)
 }
 
-/// 模板管理的呈现层；每次名称编辑和文件操作分别提交。
+/// 模板管理的呈现层；名称、排序和文件操作分别提交。
 struct NewFileTemplateSettingsPage: View {
     let state: FileTemplatePageState
     let isUpdating: Bool
@@ -33,7 +33,9 @@ struct NewFileTemplateSettingsPage: View {
     let openTemplate: (FileTemplateID) async throws -> Void
     let replaceTemplate: (FileTemplateID) async throws -> Void
     let removeTemplate: (FileTemplateID) async throws -> Void
+    let moveTemplate: (FileTemplateID, FileTemplateID?) async throws -> Void
     let reload: () async -> Void
+    @State private var dragNameCommit: Task<Bool, Never>?
 
     var body: some View {
         VStack(spacing: StatusPageStyle.sectionSpacing) {
@@ -111,16 +113,15 @@ struct NewFileTemplateSettingsPage: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                GeometryReader { geometry in
-                    ScrollView {
-                        VStack(spacing: 0) {
-                            ForEach(templates) { template in
-                                templateRow(template)
-                                Divider()
-                            }
-                        }
-                        .frame(maxWidth: .infinity, minHeight: geometry.size.height, alignment: .top)
-                        .background { editingBackground }
+                SettingsReorderList(
+                    rows: templates, allowsMoving: !actions.isPerforming,
+                    dragBegan: { dragNameCommit = nameEditing.requestFinishing() },
+                    dragEnded: { dragNameCommit = nil },
+                    move: dropMove
+                ) { template in
+                    VStack(spacing: 0) {
+                        templateRow(template)
+                        Divider()
                     }
                 }
             }
@@ -137,6 +138,7 @@ struct NewFileTemplateSettingsPage: View {
 
     private func templateRow(_ template: FileTemplate) -> some View {
         HStack(spacing: StatusPageStyle.rowSpacing) {
+            reorderHandle(for: template)
             VStack(alignment: .leading, spacing: NewFileTemplatesStyle.rowNameSpacing) {
                 name(template, field: .displayName)
                 name(template, field: .defaultFileName)
@@ -195,6 +197,30 @@ struct NewFileTemplateSettingsPage: View {
 
     private func perform(_ operation: @escaping () async throws -> Void) {
         actions.perform(finishing: nameEditing, operation: operation)
+    }
+
+    private func reorderHandle(for template: FileTemplate) -> some View {
+        let ids = state.templates!.map(\.id)
+        let index = ids.firstIndex(of: template.id)!
+        return SettingsReorderHandle(
+            title: template.displayName,
+            moveUp: index > 0 ? { move(template.id, before: ids[index - 1]) } : nil,
+            moveDown: index + 1 < ids.count
+                ? { move(template.id, before: ids.dropFirst(index + 2).first) } : nil
+        )
+        .frame(width: 20, height: 24)
+    }
+
+    private func move(_ id: FileTemplateID, before destination: FileTemplateID?) {
+        perform { try await moveTemplate(id, destination) }
+    }
+
+    private func dropMove(_ id: FileTemplateID, before destination: FileTemplateID?) {
+        // 原生 List 的辅助功能移动也走 onMove，此时没有鼠标拖拽会话。
+        let commit = dragNameCommit ?? nameEditing.requestFinishing()
+        actions.perform(afterNameCommit: commit) {
+            try await moveTemplate(id, destination)
+        }
     }
 }
 

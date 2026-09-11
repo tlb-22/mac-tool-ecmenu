@@ -45,7 +45,7 @@ nonisolated struct ContextCommandFeatureID: Codable, Hashable, Sendable {
 }
 
 /// 描述主应用界面和 Finder 菜单共同认识的命令身份。
-nonisolated struct ContextCommandDescriptor: Equatable, Sendable {
+nonisolated struct ContextCommandDescriptor: Equatable, Identifiable, Sendable {
     /// 持久化菜单可见性使用的稳定命令标识。
     let id: ContextCommandFeatureID
 

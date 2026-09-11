@@ -33,6 +33,56 @@ final class ContextMenuCompositionTests: XCTestCase {
         )
     }
 
+    /// 配置先排列完整能力，随后过滤隐藏、依赖和上下文；新建文件始终保留完整模板子树。
+    func testConfiguredOrderSurvivesFilteringAndKeepsTemplateSubmenuTogether() throws {
+        let ids = [
+            OpenInITerm2Command.descriptor.id,
+            CopyPathCommand.descriptor.id,
+            CreateNewFileCommand.descriptor.id,
+            ShowItemsCommand.descriptor.id,
+            OpenInVSCodeCommand.descriptor.id,
+            HideItemsCommand.descriptor.id,
+            CompressImagesCommand.descriptor.id,
+        ]
+        var configuration = CommandMenuSettings(
+            isEnabled: false,
+            hiddenFeatureIDs: [OpenInVSCodeCommand.descriptor.id.rawValue],
+            orderedFeatureIDs: ids
+        )
+        let templates = [
+            FileTemplateMenuItem(id: FileTemplateID(), displayName: "MD"),
+            FileTemplateMenuItem(id: FileTemplateID(), displayName: "TXT"),
+        ]
+        let definition = ContextMenuComposition.menu(
+            commandClient: ContextCommandClient(),
+            newFileTemplates: templates,
+            configuration: configuration
+        )
+        XCTAssertEqual(definition.nodes.compactMap { $0.items.first?.descriptor.id.featureID }, ids)
+        let controller = FinderContextMenuController(
+            menu: definition,
+            isFeatureVisible: { configuration.isVisible($0) },
+            isMenuEnabled: { configuration.isEnabled },
+            isApplicationAvailable: {
+                $0.bundleIdentifier == OpenInVSCodeCommand.descriptor.requiredApplication?.bundleIdentifier
+            }
+        )
+        let directory = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        let snapshot = FinderContextSnapshot.container(path: absolutePath(directory.path))
+        let action = NSSelectorFromString("performContextCommand:")
+        XCTAssertNil(controller.menu(for: snapshot, action: action))
+
+        configuration.setEnabled(true)
+        let menu = try XCTUnwrap(controller.menu(for: snapshot, action: action))
+        XCTAssertEqual(menu.items.map(\.title), [
+            localizedTitle(CopyPathCommand.descriptor),
+            localizedTitle(CreateNewFileCommand.descriptor),
+        ])
+        let submenu = try XCTUnwrap(menu.items.last?.submenu)
+        XCTAssertEqual(submenu.items.map(\.title), templates.map(\.displayName))
+        XCTAssertTrue(submenu.items.allSatisfy { $0.submenu == nil })
+    }
+
     /// 简单菜单策略应只依赖同一次构建冻结的快照。
     func testSimpleFeaturesUseProvidedSnapshot() throws {
         let client = ContextCommandClient()

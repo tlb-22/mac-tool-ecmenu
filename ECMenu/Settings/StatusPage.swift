@@ -71,6 +71,7 @@ struct StatusPage: View {
             setVisibility: { isVisible, featureID in
                 commandMenuSettings.setVisible(isVisible, for: featureID)
             },
+            moveCommand: { commandMenuSettings.move($0, before: $1) },
             openFullDiskAccessSettings: {
                 if !systemServices.openFullDiskAccessSettings() {
                     NSSound.beep()
@@ -81,6 +82,7 @@ struct StatusPage: View {
             openTemplate: newFileTemplates.openTemplate,
             replaceTemplate: replaceTemplate,
             removeTemplate: newFileTemplates.removeTemplate,
+            moveTemplate: newFileTemplates.moveTemplate,
             reloadTemplates: newFileTemplates.reload
         )
         .task {
@@ -119,4 +121,3 @@ struct StatusPage: View {
         loginItemController.refresh()
     }
 }
-

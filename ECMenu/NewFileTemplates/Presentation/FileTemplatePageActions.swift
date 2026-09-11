@@ -35,11 +35,26 @@ final class FileTemplatePageActions: ObservableObject {
         finishing nameEditing: FileTemplateNameEditingSession,
         operation: @escaping () async throws -> Void
     ) {
+        perform(preparing: { await nameEditing.finishEditing() }, operation: operation)
+    }
+
+    /// 放下时等待拖拽开始已发出的名称提交，不重复尝试一次已经失败的保存。
+    func perform(
+        afterNameCommit task: Task<Bool, Never>,
+        operation: @escaping () async throws -> Void
+    ) {
+        perform(preparing: { await task.value }, operation: operation)
+    }
+
+    private func perform(
+        preparing prepare: @escaping () async -> Bool,
+        operation: @escaping () async throws -> Void
+    ) {
         guard phase == .idle else { return }
         phase = .finishingName
         Task {
             defer { phase = .idle }
-            guard await nameEditing.finishEditing() else { return }
+            guard await prepare() else { return }
             phase = .performing
             do {
                 try await operation()

@@ -111,7 +111,11 @@ final class ContextCommandTransportTests: XCTestCase {
         )
 
         let configuration = CommandMenuSettingsSnapshot(
-            configuration: CommandMenuSettings(isEnabled: false, hiddenFeatureIDs: ["new-text-file"]),
+            configuration: CommandMenuSettings(
+                isEnabled: false,
+                hiddenFeatureIDs: ["new-text-file"],
+                orderedFeatureIDs: CommandMenuSettings.defaultFeatureIDs.reversed()
+            ),
             newFileTemplates: [
                 FileTemplateMenuItem(id: .init(), displayName: "TXT"),
                 FileTemplateMenuItem(id: .init(), displayName: "TXT")

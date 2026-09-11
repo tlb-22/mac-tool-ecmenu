@@ -75,6 +75,14 @@ final class FileTemplateOperations {
         }
     }
 
+    /// 一次排序只在顺序实际提交后发布；不变的插入位置不产生提交或提示。
+    func moveTemplate(id: FileTemplateID, before destinationID: FileTemplateID?) async throws -> FileTemplateCommit? {
+        _ = try await load()
+        let result = try await library.move(id: id, before: destinationID)
+        if let result { didChange(result.templates) }
+        return result
+    }
+
     func replaceTemplate(id: FileTemplateID, at url: URL) async throws -> FileTemplateCommit {
         let result = try await perform { try await self.library.replaceFile(for: id, at: url) }
         if case .committedWithCleanupIssue(_, let issue) = result {

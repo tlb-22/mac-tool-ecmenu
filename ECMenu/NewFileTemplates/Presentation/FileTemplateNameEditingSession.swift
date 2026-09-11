@@ -89,8 +89,9 @@ final class FileTemplateNameEditingSession: ObservableObject {
     }
 
     func editingDidEnd(_ control: any FileTemplateNameControl) {
-        guard isEditing(control), transition == nil else { return }
-        // 在原生回调内登记请求，后续目标点击可直接替换目的地。
+        guard let active, active.control === control,
+              transition == nil || active.draft.isSaving else { return }
+        // 保存挂起时，原生失焦仍更新最后目的地；失败后恢复焦点的同步通知不另开请求。
         requestFinishing()
     }
 

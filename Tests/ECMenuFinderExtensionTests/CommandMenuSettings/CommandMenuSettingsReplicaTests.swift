@@ -56,7 +56,7 @@ final class CommandMenuSettingsReplicaTests: XCTestCase {
         XCTAssertTrue(replica.newFileTemplates.isEmpty)
     }
 
-    /// 同名模板以独立身份和原顺序从快照缓存恢复。
+    /// 命令顺序与同名模板的独立身份、原顺序共同从快照缓存恢复。
     func testSnapshotCacheRestoresDuplicateNamesAndDistinctIdentities() throws {
         let suiteName = "CommandMenuSettingsReplicaTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
@@ -66,7 +66,7 @@ final class CommandMenuSettingsReplicaTests: XCTestCase {
             FileTemplateMenuItem(id: FileTemplateID(), displayName: "TXT"),
         ]
         let snapshot = CommandMenuSettingsSnapshot(
-            configuration: .standard,
+            configuration: CommandMenuSettings(orderedFeatureIDs: CommandMenuSettings.defaultFeatureIDs.reversed()),
             newFileTemplates: templates
         )
         defaults.set(
@@ -77,6 +77,7 @@ final class CommandMenuSettingsReplicaTests: XCTestCase {
 
         XCTAssertTrue(replica.isEnabled)
         XCTAssertEqual(replica.newFileTemplates, templates)
+        XCTAssertEqual(replica.menuSettings, snapshot.configuration)
         XCTAssertEqual(replica.newFileTemplates.map(\.displayName), ["TXT", "TXT"])
         XCTAssertNotEqual(replica.newFileTemplates[0].id, replica.newFileTemplates[1].id)
     }
@@ -116,7 +117,8 @@ final class CommandMenuSettingsReplicaTests: XCTestCase {
         let latest = CommandMenuSettingsSnapshot(
             configuration: CommandMenuSettings(
                 isEnabled: true,
-                hiddenFeatureIDs: ["new-text-file"]
+                hiddenFeatureIDs: ["new-text-file"],
+                orderedFeatureIDs: CommandMenuSettings.defaultFeatureIDs.reversed()
             ),
             newFileTemplates: templates
         )
@@ -127,6 +129,7 @@ final class CommandMenuSettingsReplicaTests: XCTestCase {
         XCTAssertTrue(replica.isEnabled)
         XCTAssertFalse(replica.isVisible(CreateNewFileCommand.descriptor.id))
         XCTAssertEqual(replica.newFileTemplates, templates)
+        XCTAssertEqual(replica.menuSettings, latest.configuration)
         let stored = try XCTUnwrap(defaults.data(forKey: CommandMenuSettingsSnapshotCache.key))
         XCTAssertEqual(try CommandMenuSettingsSnapshotCache.decode(stored), latest)
     }

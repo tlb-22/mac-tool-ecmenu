@@ -1,6 +1,6 @@
 /**
  验证模板名称编辑会话在原生控件之间交接焦点的状态转换。
- 使用控件替身覆盖保存期间的最新目标、晚到通知、失败恢复和取消。
+ 使用控件替身覆盖保存期间的最新目标、晚到通知、失败恢复、取消与拖放提交衔接。
  */
 
 import Foundation
@@ -125,6 +125,54 @@ final class FileTemplateNameEditingSessionTests: XCTestCase {
         XCTAssertEqual(control.finishedValues, ["TXT"])
         XCTAssertTrue(saved.isEmpty)
     }
+
+    func testDropConsumesTheDragStartNameCommitWithoutRetryingFailure() async {
+        for (succeeds, completesBeforeDrop) in [(true, false), (false, false), (false, true)] {
+            let session = FileTemplateNameEditingSession()
+            let actions = FileTemplatePageActions()
+            let control = NameControlSpy(value: "TXT")
+            let otherTarget = NameControlSpy(value: "MD").target
+            let gate = NameSessionSaveGate()
+            defer { gate.finish() }
+            _ = await session.requestEditing(control) { try await gate.save($0) }.value
+            control.displayedValue = "Changed"
+            let nameCommit = session.requestFinishing()
+            await gate.waitUntilSaving()
+            XCTAssertEqual(gate.values, ["Changed"])
+
+            if completesBeforeDrop {
+                gate.finish(throwing: FileTemplateValidationError.emptyDisplayName)
+                let result = await nameCommit.value
+                XCTAssertFalse(result)
+            }
+
+            var moves = 0
+            actions.perform(afterNameCommit: nameCommit) {
+                XCTAssertNil(session.draft)
+                moves += 1
+            }
+            XCTAssertEqual(moves, 0)
+            XCTAssertFalse(actions.isPerforming)
+            XCTAssertFalse(actions.allowsNameEditing(otherTarget, in: session))
+
+            if !completesBeforeDrop {
+                gate.finish(throwing: succeeds ? nil : FileTemplateValidationError.emptyDisplayName)
+            }
+            let result = await nameCommit.value
+            XCTAssertEqual(result, succeeds)
+            let deadline = ProcessInfo.processInfo.systemUptime + 2
+            while !actions.allowsNameEditing(otherTarget, in: session),
+                  ProcessInfo.processInfo.systemUptime < deadline {
+                await Task.yield()
+            }
+            XCTAssertTrue(actions.allowsNameEditing(otherTarget, in: session))
+            XCTAssertEqual(moves, succeeds ? 1 : 0)
+            XCTAssertEqual(gate.values, ["Changed"], "Dropping must consume the original result without saving again")
+            XCTAssertEqual(session.isEditing(control), !succeeds)
+            XCTAssertNil(actions.errorMessage)
+            if !succeeds { XCTAssertNotNil(session.draft?.errorMessage) }
+        }
+    }
 }
 
 @MainActor
@@ -177,8 +225,12 @@ private final class NameSessionSaveGate {
         await withCheckedContinuation { entered = $0 }
     }
 
-    func finish() {
-        completion?.resume()
+    func finish(throwing error: Error? = nil) {
+        if let error {
+            completion?.resume(throwing: error)
+        } else {
+            completion?.resume()
+        }
         completion = nil
     }
 }

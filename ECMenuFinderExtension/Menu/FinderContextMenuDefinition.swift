@@ -16,7 +16,11 @@ struct FinderContextMenuDefinition {
             ContextMenuNode<AnyContextMenuAction>
         ]
     ) {
-        let nodes = content()
+        self.init(nodes: content())
+    }
+
+    /// 使用已经按配置排列的完整能力子树构造菜单。
+    init(nodes: [ContextMenuNode<AnyContextMenuAction>]) {
         let actionIDs = nodes
             .flatMap { $0.items }
             .map(\.descriptor.id)
