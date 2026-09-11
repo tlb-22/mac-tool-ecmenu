@@ -118,7 +118,9 @@ flowchart TB
         selection[更新 selectedPane<br/>AppStorage 保存页面标识]
         remain[保留原页面与编辑会话]
         pages[能力页面<br/>通用 / 菜单配置 / 文件模板]
+        lists[共享设置列表<br/>原生 List 与行布局]
         window --> session --> shell --> pages
+        pages -->|呈现设置分组行| lists
         choice --> editing
         editing -->|否| selection
         editing -->|是| finish --> success
@@ -139,9 +141,20 @@ flowchart TB
 | 设置窗口 | `StatusPageWindowController` | [StatusPageWindowController.swift](../../../ECMenu/Settings/StatusPageWindowController.swift) | 已装配能力对象、显示/关闭意图 → 唯一 `NSWindow` | 首次显示时创建 `NSHostingController/NSWindow`；`setFrameUsingName` 返回是否恢复位置，失败居中；`setFrameAutosaveName` 交给 AppKit 保存后续位置。窗口创建、最小化与关闭边界见[应用生命周期](../Runtime/ApplicationLifecycle.md#窗口与呈现状态) |
 | 设置会话 | `StatusPage` | [StatusPage.swift](../../../ECMenu/Settings/StatusPage.swift) | 观察的 Controller 状态、保存的页面标识 → 内容与回调 | `@EnvironmentObject` 观察能力对象；`@AppStorage("status-page-selected-pane")` 读写主应用偏好。缺失或无效标识显示 General；`task` 调用模板 `loadIfNeeded`，模板错误由该能力呈现 |
 | 页面导航与装配 | `StatusPageContent` | [StatusPageContent.swift](../../../ECMenu/Settings/StatusPageContent.swift) | 当前页面、能力状态、用户导航 → 页面装配或等待编辑 | SwiftUI `@Binding` 连接页面选择；`@StateObject` 持有名称编辑与文件操作会话。有草稿时异步等待 `finishEditing`，成功才更新页面；失败保留原页。`didResignActiveNotification` 请求结束当前编辑，不退出应用 |
+| 共享设置列表 | `SettingsList`、`SettingsListRow` | [SettingsList.swift](../../../ECMenu/Settings/Components/SettingsList.swift) | 页面提供的独立行内容 → 统一的原生列表与行布局 | SwiftUI `List` 及行、滚动内容的布局修饰符；只组合视图，不保存业务数据。通用页关闭滚动；排序页由 `SettingsReorderList` 添加移动行为，详见[共享列表布局](#共享列表布局) |
 | 应用显示元数据 | `ApplicationMetadata` | [ApplicationMetadata.swift](../../../ECMenu/App/ApplicationMetadata.swift) | 当前 Bundle → 显示名与版本 | `Bundle.main.object(forInfoDictionaryKey:)`；显示名依次读取 DisplayName、Name、进程名，缺失版本显示占位值。这些是界面元数据，不进入业务契约 |
 | 共享设置呈现 | `SettingsComponents`、`StatusPageIconRenderer` | [SettingsComponents.swift](../../../ECMenu/Settings/Components/SettingsComponents.swift)、[StatusPageIconRenderer.swift](../../../ECMenu/Settings/Components/StatusPageIconRenderer.swift) | 能力提供的文案/图标与场景度量 → 控件和图像 | SwiftUI、AppKit `NSImage` 与 Symbol configuration；画布计算复用[共享原语](../../../ECMenuShared/Platform/Rendering/AppKitIconCanvasRenderer.swift)。视觉参数属于呈现层，不进入 Requirements |
 | 本地化资源 | `LocalizedStringResource` / Bundle 字符串目录 | [资源与使用入口](../Runtime/Localization.md) | `LocalizedStringResource`、当前进程语言 → 显示文字 | Foundation `String(localized:)` 与 SwiftUI 文本；语言不进入 IPC。当前只保证进程启动时的语言选择，完整规则见[本地化](../Runtime/Localization.md) |
+
+### 共享列表布局
+
+三个设置页面的分组行均使用 `GroupBox → SettingsList → SettingsListRow`。通用页的每个分组包含两个独立行，按共享行高与分割线空间计算固定高度，并以 `scrollDisabled(true)` 保持整组静态显示。菜单页与模板页通过 `SettingsReorderList` 复用同一容器，再接入[系统排序](../Runtime/CommandMenuSettings.md#设置列表排序交互)。控件仍由各能力页面构造，业务状态和操作回调不由列表层持有。
+
+`SettingsList` 将 `List` 设为 `.plain`，隐藏滚动内容背景，将 `.scrollContent` 的 `contentMargins` 设为零，并统一最小行高；`SettingsListRow` 将 `listRowInsets` 设为零，隐藏系统分割线并使用透明行背景。页面在行内容后绘制 `Divider`，行内部的水平 padding 仅作用于控件。三页由同一原生容器决定分割线跨度与行边界，具体视觉参数由呈现层保存。
+
+官方契约与项目观察需分开理解：[`listRowInsets`](https://developer.apple.com/documentation/swiftui/view/listrowinsets(_:)) 设置行内容边距，[`contentMargins`](https://developer.apple.com/documentation/swiftui/view/contentMargins(_:_:for:)-1lt8b) 按 placement 设置内容边距；本地 AppKit SDK 对 `NSTableView.Style.plain` 的说明仍保留由 `intercellSpacing.width` 决定的单元格间隔。这些是不同层级的布局量。
+
+项目观察（2026-09-11，macOS 26.6.2、Xcode 26.6）：生产列表组合的底层 `NSTableView.style/effectiveStyle` 均为 `.plain`，滚动内容 inset 全零，`intercellSpacing` 为 `(17, 0)`。在宽 422 点的 table 中，单元格起点为 8、宽度为 405，两端分别留下 8 与 9 点；自绘分割线随该单元格收缩。行内再增加的 8 点 padding 属于页面自己的控件布局。实测标识为 `20260911-194644-settings-list-insets-23900`。零行 inset 和零滚动内容边距仍可与这些原生间隔同时存在；上述数值只描述该系统与当前列表组合。项目采用共享容器继承系统布局，使三页保持一致。
 
 ## 状态所有权与设计依据
 

@@ -1,5 +1,5 @@
 /**
- 使用系统 List 管理整行拖动预览、插入指示、取消与边缘滚动。
+ 在共用设置列表上接入系统整行拖动预览、插入指示、取消与边缘滚动。
  将原生 onMove 的最终下标转换为稳定 ID 意图，每次实际移动只调用一次业务保存入口。
  */
 
@@ -14,13 +14,12 @@ struct SettingsReorderList<Row: Identifiable, RowContent: View>: View {
     @ViewBuilder let rowContent: (Row) -> RowContent
 
     var body: some View {
-        List {
+        SettingsList {
             ForEach(rows) { row in
-                rowContent(row)
-                    .listRowInsets(EdgeInsets())
-                    .listRowSeparator(.hidden)
-                    .listRowBackground(Color.clear)
-                    .moveDisabled(!allowsMoving)
+                SettingsListRow {
+                    rowContent(row)
+                }
+                .moveDisabled(!allowsMoving)
             }
             .onMove { source, destination in
                 if let movement = SettingsListMove(ids: rows.map(\.id), source: source, destination: destination) {
@@ -28,10 +27,6 @@ struct SettingsReorderList<Row: Identifiable, RowContent: View>: View {
                 }
             }
         }
-        .listStyle(.plain)
-        .scrollContentBackground(.hidden)
-        .contentMargins(.all, 0, for: .scrollContent)
-        .environment(\.defaultMinListRowHeight, 1)
         .onDragSessionUpdated { session in
             switch session.phase {
             case .initial: dragBegan()

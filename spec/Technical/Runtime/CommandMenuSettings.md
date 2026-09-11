@@ -36,12 +36,13 @@ sequenceDiagram
 
 ## 设置列表排序交互
 
-右键菜单页与文件模板页共用基于 SwiftUI `List` 与 `ForEach.onMove` 的设置列表。系统负责整行拖动预览、插入指示、取消与边缘滚动；页面按稳定 ID 呈现已提交清单。左侧三线是重排提示，可从提示或行内非控件区域发起系统行拖动，名称输入、开关和按钮保留各自的原生交互。
+右键菜单页与文件模板页共用基于 SwiftUI `List` 与 `ForEach.onMove` 的设置列表。列表容器与行布局由 `SettingsList`、`SettingsListRow` 提供，通用页也复用这一层；`SettingsReorderList` 负责排序事件与移动转换。系统负责整行拖动预览、插入指示、取消与边缘滚动；页面按稳定 ID 呈现已提交清单。左侧三线是重排提示，可从提示或行内非控件区域发起系统行拖动，名称输入、开关和按钮保留各自的原生交互。
 
 完成移动时，列表把 `onMove` 的来源下标与插入下标转换为稳定来源 ID 和目标 ID，再调用一次业务移动入口。原位放下不产生移动意图；悬停和取消不写配置。手柄的键盘与辅助功能上移、下移操作也使用同一业务保存入口。
 
 | 职责模块 | 核心类型 | 源码入口 | 输入 → 输出与状态所有权 | 外部 API |
 |---|---|---|---|---|
+| 共享列表容器与行布局 | `SettingsList`、`SettingsListRow` | [SettingsList.swift](../../../ECMenu/Settings/Components/SettingsList.swift) | 能力提供的行内容 → 原生列表与统一行布局；不持有配置或顺序 | SwiftUI `List` 与行、滚动内容的布局修饰符；API 使用方式和实测间隔见[共享列表布局](../Features/GeneralSettings.md#共享列表布局) |
 | 原生排序列表与移动转换 | `SettingsReorderList`、`SettingsListMove` | [SettingsReorderList.swift](../../../ECMenu/Settings/Components/SettingsReorderList.swift) | 已提交行清单、移动可用性、系统移动下标 → 稳定 ID 移动意图与开始/结束回调 | R01–R03；拖动呈现由系统 List 持有，纯转换不保存第二份清单 |
 | 排序提示与相邻移动入口 | `SettingsReorderHandle` | [SettingsReorderHandle.swift](../../../ECMenu/Settings/Components/SettingsReorderHandle.swift) | 本地化行标题、可用的相邻移动闭包、键盘/辅助功能事件 → 相邻移动请求 | R04；SwiftUI 呈现三线图像并接收焦点，不建立独立拖拽源或持有业务配置 |
 
