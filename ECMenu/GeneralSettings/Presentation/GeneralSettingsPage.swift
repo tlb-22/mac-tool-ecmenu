@@ -34,29 +34,25 @@ struct GeneralSettingsPage: View {
             GroupBox {
                 SettingsList {
                     SettingsListRow {
-                        VStack(spacing: 0) {
-                            SettingsComponents.settingRow {
-                                SettingsComponents.settingLabel(enableTitle) {
-                                    SettingsComponents.systemRowIcon("power")
-                                }
-                                .foregroundStyle(
-                                    systemState.isExtensionEnabled
-                                        ? Color.primary
-                                        : Color.secondary
-                                )
-                            } trailing: {
-                                SettingsComponents.compactToggle(
-                                    enableTitle,
-                                    isOn: Binding(
-                                        get: { configuration.isEnabled },
-                                        set: setEnabled
-                                    )
-                                )
+                        SettingsComponents.settingRow {
+                            SettingsComponents.settingLabel(enableTitle) {
+                                SettingsComponents.systemRowIcon("power")
                             }
-                            .disabled(!systemState.isExtensionEnabled)
-
-                            Divider()
+                            .foregroundStyle(
+                                systemState.isExtensionEnabled
+                                    ? Color.primary
+                                    : Color.secondary
+                            )
+                        } trailing: {
+                            SettingsComponents.compactToggle(
+                                enableTitle,
+                                isOn: Binding(
+                                    get: { configuration.isEnabled },
+                                    set: setEnabled
+                                )
+                            )
                         }
+                        .disabled(!systemState.isExtensionEnabled)
                     }
 
                     SettingsListRow {
@@ -83,7 +79,7 @@ struct GeneralSettingsPage: View {
                         }
                     }
                 }
-                .frame(height: 2 * (StatusPageStyle.rowHeight + 1))
+                .frame(height: 2 * StatusPageStyle.rowHeight)
                 .scrollDisabled(true)
             }
             .frame(maxWidth: .infinity)
@@ -91,42 +87,38 @@ struct GeneralSettingsPage: View {
             GroupBox {
                 SettingsList {
                     SettingsListRow {
-                        VStack(spacing: 0) {
-                            SettingsComponents.settingRow {
-                                SettingsComponents.settingLabel(
-                                    LocalizedStringResource(
-                                        "statusPage.general.finderExtension",
-                                        defaultValue: "Finder Extension",
-                                        comment: "Label for the Finder Extension settings row"
-                                    )
-                                ) {
-                                    SettingsComponents.systemRowIcon("puzzlepiece.extension")
-                                        .foregroundStyle(
-                                            systemState.isExtensionEnabled ? .green : .secondary
-                                        )
-                                }
-                                .accessibilityElement(children: .combine)
-                                .accessibilityValue(
-                                    StatusPageAccessibility.extensionState(
-                                        isEnabled: systemState.isExtensionEnabled
-                                    )
+                        SettingsComponents.settingRow {
+                            SettingsComponents.settingLabel(
+                                LocalizedStringResource(
+                                    "statusPage.general.finderExtension",
+                                    defaultValue: "Finder Extension",
+                                    comment: "Label for the Finder Extension settings row"
                                 )
-                            } trailing: {
-                                Button(
-                                    LocalizedStringResource(
-                                        "statusPage.general.settings",
-                                        defaultValue: "Settings…",
-                                        comment: "Button that opens a related pane in System Settings"
+                            ) {
+                                SettingsComponents.systemRowIcon("puzzlepiece.extension")
+                                    .foregroundStyle(
+                                        systemState.isExtensionEnabled ? .green : .secondary
                                     )
-                                ) {
-                                    manageExtension()
-                                }
-                                .accessibilityLabel(
-                                    StatusPageAccessibility.extensionSettings
-                                )
                             }
-
-                            Divider()
+                            .accessibilityElement(children: .combine)
+                            .accessibilityValue(
+                                StatusPageAccessibility.extensionState(
+                                    isEnabled: systemState.isExtensionEnabled
+                                )
+                            )
+                        } trailing: {
+                            Button(
+                                LocalizedStringResource(
+                                    "statusPage.general.settings",
+                                    defaultValue: "Settings…",
+                                    comment: "Button that opens a related pane in System Settings"
+                                )
+                            ) {
+                                manageExtension()
+                            }
+                            .accessibilityLabel(
+                                StatusPageAccessibility.extensionSettings
+                            )
                         }
                     }
 
@@ -157,7 +149,7 @@ struct GeneralSettingsPage: View {
                         }
                     }
                 }
-                .frame(height: 2 * (StatusPageStyle.rowHeight + 1))
+                .frame(height: 2 * StatusPageStyle.rowHeight)
                 .scrollDisabled(true)
             }
             .frame(maxWidth: .infinity)

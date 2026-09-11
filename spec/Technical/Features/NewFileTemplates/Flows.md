@@ -50,6 +50,8 @@ sequenceDiagram
 
 `loadIfNeeded()` 让启动和页面入口共享一个初始 Task；初始失败也保留该 Task，用户点击 Retry 才通过 `reload()` 再次读取。重试先进入 loading；库有缓存时只返回缓存，无缓存时重新读取并校验索引。初始化的成功路径同样执行维护式孤儿清理；[存储契约](Persistence.md#初始化与恢复)列出初始化失败边界。
 
+[`NewFileTemplateSettingsPage`](../../../../ECMenu/NewFileTemplates/Presentation/NewFileTemplateSettingsPage.swift) 将 `FileTemplatePageState` 映射为三种原生呈现：loading 使用 `ProgressView`，failed 使用 [`ContentUnavailableView(label:description:actions:)`](https://developer.apple.com/documentation/swiftui/contentunavailableview/init(label:description:actions:)) 呈现错误标题、原因与重试按钮，ready 的空清单使用同一状态视图呈现添加说明并保留底部添加入口。状态视图只接收文案和操作闭包，不持有加载任务或模板数据；标题层级、说明与动作的布局由 SwiftUI 管理。
+
 `loadForManagement()` 成功时发送一次提示，即使本次返回缓存，或同时完成初始化；这使之前收到 `.unavailable` 的 Extension 有重新查询机会。生产的普通 `load()`、`content(for:)`、`fileURL(for:)` 只在本次首次读取实际提交了初始化时提示。后两者先完成读取发布，再读取内容或验证打开 URL；即使请求的 ID 随后无法解析，已经发生的初始化提交仍然发布。
 
 | 读取来源 | 库返回的事实 | 普通应用读取是否提示 | 管理页成功加载/重试是否提示 |

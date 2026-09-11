@@ -45,18 +45,18 @@ struct NewFileTemplateSettingsPage: View {
                 ProgressView()
                 Spacer()
             case .failed(let message):
-                Spacer()
-                Text(NewFileTemplatesText.loadFailed)
-                    .font(.headline)
-                Text(verbatim: message)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                Button {
-                    Task { await reload() }
-                } label: {
-                    Text(NewFileTemplatesText.retry)
+                ContentUnavailableView {
+                    Text(NewFileTemplatesText.loadFailed)
+                } description: {
+                    Text(verbatim: message)
+                } actions: {
+                    Button {
+                        Task { await reload() }
+                    } label: {
+                        Text(NewFileTemplatesText.retry)
+                    }
                 }
-                Spacer()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             case .ready(let templates):
                 templateList(templates)
 
@@ -104,12 +104,10 @@ struct NewFileTemplateSettingsPage: View {
     private func templateList(_ templates: [FileTemplate]) -> some View {
         GroupBox {
             if templates.isEmpty {
-                VStack(spacing: StatusPageStyle.rowSpacing) {
+                ContentUnavailableView {
                     Text(NewFileTemplatesText.emptyTitle)
+                } description: {
                     Text(NewFileTemplatesText.emptyDescription)
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
@@ -119,10 +117,7 @@ struct NewFileTemplateSettingsPage: View {
                     dragEnded: { dragNameCommit = nil },
                     move: dropMove
                 ) { template in
-                    VStack(spacing: 0) {
-                        templateRow(template)
-                        Divider()
-                    }
+                    templateRow(template)
                 }
             }
         }

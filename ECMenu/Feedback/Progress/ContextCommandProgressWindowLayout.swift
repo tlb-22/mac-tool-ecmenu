@@ -9,6 +9,17 @@ import Foundation
 /// 保存共享进度窗口中不可从系统控件推导的布局偏好。
 @MainActor
 enum ContextCommandProgressWindowLayout {
+    /// 图标固定画布的边长；所有来源共用相同画布。
+    static let iconCanvasLength: CGFloat = 40
+
+    /// SF Symbol 的自然字号；语义居中时保持此字号产生的尺寸。
+    static let iconSymbolPointSize: CGFloat = 23
+
+    /// 交给共享图标变换的场景画布尺寸。
+    static var iconCanvasSize: NSSize {
+        NSSize(width: iconCanvasLength, height: iconCanvasLength)
+    }
+
     /// 官方 Finder 任务窗口风格的紧凑固定宽度。
     static let contentWidth: CGFloat = 400
 
@@ -20,9 +31,6 @@ enum ContextCommandProgressWindowLayout {
 
     /// 多个并发任务行之间的间距。
     static let taskSpacing: CGFloat = 12
-
-    /// 图标固定画布的边长。
-    static let iconCanvasLength: CGFloat = 40
 
     /// 图标与右侧三行任务信息之间的间距。
     static let iconContentSpacing: CGFloat = 10
@@ -46,7 +54,4 @@ enum ContextCommandProgressWindowLayout {
     static var cancelButtonLength: CGFloat {
         cancelButtonSymbolPointSize
     }
-
-    /// Finder 风格确定进度槽的可见高度。
-    static let progressBarHeight: CGFloat = 8
 }

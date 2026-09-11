@@ -18,8 +18,8 @@ final class ContextCommandProgressRowView: NSView {
     /// 命令产品名称。
     private let titleLabel = NSTextField(labelWithString: "")
 
-    /// Finder 风格的确定进度槽。
-    private let progressBar = ContextCommandProgressBarView()
+    /// 使用系统外观与辅助功能的确定进度条。
+    private let progressBar = NSProgressIndicator()
 
     /// 以“已完成 / 总数”显示的项目计数。
     private let countLabel = NSTextField(labelWithString: "")
@@ -67,10 +67,8 @@ final class ContextCommandProgressRowView: NSView {
             iconImageView.image = iconResolver.image(for: item.descriptor)
             iconImageView.setAccessibilityLabel(localizedTitle)
         }
-        progressBar.apply(
-            completedUnitCount: item.completedUnitCount,
-            totalUnitCount: item.totalUnitCount
-        )
+        progressBar.maxValue = Double(item.totalUnitCount)
+        progressBar.doubleValue = Double(item.completedUnitCount)
         countLabel.stringValue = "\(item.completedUnitCount) / \(item.totalUnitCount)"
         cancelButton.isEnabled = !item.isCancellationRequested
         let cancelToolTip = item.isCancellationRequested
@@ -112,6 +110,11 @@ final class ContextCommandProgressRowView: NSView {
         titleLabel.lineBreakMode = .byTruncatingMiddle
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
 
+        progressBar.style = .bar
+        progressBar.isIndeterminate = false
+        progressBar.minValue = 0
+        progressBar.controlSize = .small
+        progressBar.sizeToFit()
         progressBar.setContentHuggingPriority(.defaultLow, for: .horizontal)
         progressBar.translatesAutoresizingMaskIntoConstraints = false
 
@@ -180,9 +183,6 @@ final class ContextCommandProgressRowView: NSView {
             ),
             cancelButton.heightAnchor.constraint(
                 equalToConstant: ContextCommandProgressWindowLayout.cancelButtonLength
-            ),
-            progressBar.heightAnchor.constraint(
-                equalToConstant: ContextCommandProgressWindowLayout.progressBarHeight
             ),
             titleLabel.topAnchor.constraint(equalTo: topAnchor),
             detailLeading,

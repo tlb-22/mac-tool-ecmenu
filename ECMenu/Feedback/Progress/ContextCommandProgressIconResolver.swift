@@ -1,6 +1,6 @@
 /**
  解析进度任务描述中的系统符号、应用或文件类型图标。
- 将图标查找与缓存集中在进度展示边界。
+ 图标查找、场景配置与缓存留在进度展示边界，画布变换复用共享的语义居中与等比适配规则。
  */
 
 import AppKit
@@ -16,7 +16,10 @@ final class ContextCommandProgressIconResolver {
     func image(for descriptor: ContextCommandDescriptor) -> NSImage? {
         switch descriptor.icon {
         case .fileType(let filenameExtension):
-            return centeredImage(FileTypeIconProvider.icon(forFilenameExtension: filenameExtension))
+            return AppKitIconCanvasRenderer.proportionallyFittedImage(
+                FileTypeIconProvider.icon(forFilenameExtension: filenameExtension),
+                canvasSize: ContextCommandProgressWindowLayout.iconCanvasSize
+            )
 
         case .systemSymbol(let name):
             return systemSymbol(named: name)
@@ -38,7 +41,10 @@ final class ContextCommandProgressIconResolver {
             let sourceImage = NSWorkspace.shared.icon(
                 forFile: applicationURL.path
             )
-            guard let image = centeredImage(sourceImage) else {
+            guard let image = AppKitIconCanvasRenderer.proportionallyFittedImage(
+                sourceImage,
+                canvasSize: ContextCommandProgressWindowLayout.iconCanvasSize
+            ) else {
                 return systemSymbol(named: "questionmark.app.dashed")
             }
             cache[cacheKey] = image
@@ -46,7 +52,7 @@ final class ContextCommandProgressIconResolver {
         }
     }
 
-    /// 按系统标签颜色创建 SF Symbol。
+    /// 按场景字号和系统标签颜色生成 SF Symbol，保持自然尺寸并按语义主体居中。
     private func systemSymbol(named name: String) -> NSImage? {
         let cacheKey = "symbol:\(name)"
         if let cachedImage = cache[cacheKey] {
@@ -54,7 +60,7 @@ final class ContextCommandProgressIconResolver {
         }
 
         let configuration = NSImage.SymbolConfiguration(
-            pointSize: 30,
+            pointSize: ContextCommandProgressWindowLayout.iconSymbolPointSize,
             weight: .regular
         ).applying(
             NSImage.SymbolConfiguration(hierarchicalColor: .labelColor)
@@ -64,52 +70,15 @@ final class ContextCommandProgressIconResolver {
                 systemSymbolName: name,
                 accessibilityDescription: nil
             )?.withSymbolConfiguration(configuration),
-            let image = centeredImage(sourceImage)
+            let image = AppKitIconCanvasRenderer.semanticCenteredSymbol(
+                sourceImage,
+                canvasSize: ContextCommandProgressWindowLayout.iconCanvasSize
+            )
         else {
             return nil
         }
 
         cache[cacheKey] = image
-        return image
-    }
-
-    /// 保持比例缩放并居中，非正方形图标不被拉伸或裁切。
-    private func centeredImage(_ sourceImage: NSImage) -> NSImage? {
-        let sourceSize = sourceImage.size
-        guard sourceSize.width > 0, sourceSize.height > 0 else {
-            return nil
-        }
-
-        let canvasLength = ContextCommandProgressWindowLayout.iconCanvasLength
-        let canvasSize = NSSize(width: canvasLength, height: canvasLength)
-        let maximumIconLength = canvasLength - 4
-        let scale = min(
-            maximumIconLength / sourceSize.width,
-            maximumIconLength / sourceSize.height
-        )
-        let fittedSize = NSSize(
-            width: sourceSize.width * scale,
-            height: sourceSize.height * scale
-        )
-        let fittedRect = NSRect(
-            x: (canvasLength - fittedSize.width) / 2,
-            y: (canvasLength - fittedSize.height) / 2,
-            width: fittedSize.width,
-            height: fittedSize.height
-        )
-
-        let image = NSImage(size: canvasSize, flipped: false) { _ in
-            sourceImage.draw(
-                in: fittedRect,
-                from: NSRect(origin: .zero, size: sourceSize),
-                operation: .sourceOver,
-                fraction: 1,
-                respectFlipped: true,
-                hints: [.interpolation: NSImageInterpolation.high]
-            )
-            return true
-        }
-        image.isTemplate = sourceImage.isTemplate
         return image
     }
 }

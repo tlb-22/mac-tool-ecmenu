@@ -23,14 +23,9 @@ struct CommandMenuSettingsPage: View {
         VStack {
             GroupBox {
                 SettingsReorderList(rows: orderedDescriptors, move: moveCommand) { descriptor in
-                    VStack(spacing: 0) {
-                        contextMenuRow(for: descriptor)
-                        if descriptor.id != orderedDescriptors.last?.id {
-                            Divider()
-                        }
-                    }
+                    contextMenuRow(for: descriptor)
                 }
-                .frame(height: CGFloat(orderedDescriptors.count) * (StatusPageStyle.rowHeight + 1))
+                .frame(height: CGFloat(orderedDescriptors.count) * StatusPageStyle.rowHeight)
             }
             .frame(maxWidth: .infinity)
             Spacer(minLength: 0)

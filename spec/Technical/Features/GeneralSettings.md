@@ -148,13 +148,15 @@ flowchart TB
 
 ### 共享列表布局
 
-三个设置页面的分组行均使用 `GroupBox → SettingsList → SettingsListRow`。通用页的每个分组包含两个独立行，按共享行高与分割线空间计算固定高度，并以 `scrollDisabled(true)` 保持整组静态显示。菜单页与模板页通过 `SettingsReorderList` 复用同一容器，再接入[系统排序](../Runtime/CommandMenuSettings.md#设置列表排序交互)。控件仍由各能力页面构造，业务状态和操作回调不由列表层持有。
+三个设置页面的分组行均使用 `GroupBox → SettingsList → SettingsListRow`。通用页的每个分组包含两个独立行，按共享行高计算固定高度，并以 `scrollDisabled(true)` 保持整组静态显示。菜单页与模板页通过 `SettingsReorderList` 复用同一容器，再接入[系统排序](../Runtime/CommandMenuSettings.md#设置列表排序交互)。控件仍由各能力页面构造，业务状态和操作回调不由列表层持有。
 
-`SettingsList` 将 `List` 设为 `.plain`，隐藏滚动内容背景，将 `.scrollContent` 的 `contentMargins` 设为零，并统一最小行高；`SettingsListRow` 将 `listRowInsets` 设为零，隐藏系统分割线并使用透明行背景。页面在行内容后绘制 `Divider`，行内部的水平 padding 仅作用于控件。三页由同一原生容器决定分割线跨度与行边界，具体视觉参数由呈现层保存。
+`SettingsList` 将 `List` 设为 `.plain`，隐藏滚动内容背景，将 `.scrollContent` 的 `contentMargins` 设为零，并统一最小行高；`SettingsListRow` 将 `listRowInsets` 设为零，启用系统分割线并使用透明行背景。[`listRowSeparator(.visible)`](https://developer.apple.com/documentation/swiftui/view/listrowseparator(_:edges:)) 把分割线的绘制交给列表；`alignmentGuide` 将 `listRowSeparatorLeading/Trailing` 分别绑定到行内容的 leading/trailing，三页共用同一对齐基准。页面仅提供控件内容与行内 padding，具体视觉参数由呈现层保存。
+
+项目观察（2026-09-11，macOS 26.6.2）：系统自动分割线在普通设置行从 SwiftUI 标题处起画，在混合 `NSTextField` 的模板行从操作按钮文字处起画。显式提供上述系统对齐基准后，三页分割线均覆盖完整行内容宽度；无需页面插入分割视图或额外增加行高。双语预览标识为 `20260911-202734-localized-previews-29243`。
 
 官方契约与项目观察需分开理解：[`listRowInsets`](https://developer.apple.com/documentation/swiftui/view/listrowinsets(_:)) 设置行内容边距，[`contentMargins`](https://developer.apple.com/documentation/swiftui/view/contentMargins(_:_:for:)-1lt8b) 按 placement 设置内容边距；本地 AppKit SDK 对 `NSTableView.Style.plain` 的说明仍保留由 `intercellSpacing.width` 决定的单元格间隔。这些是不同层级的布局量。
 
-项目观察（2026-09-11，macOS 26.6.2、Xcode 26.6）：生产列表组合的底层 `NSTableView.style/effectiveStyle` 均为 `.plain`，滚动内容 inset 全零，`intercellSpacing` 为 `(17, 0)`。在宽 422 点的 table 中，单元格起点为 8、宽度为 405，两端分别留下 8 与 9 点；自绘分割线随该单元格收缩。行内再增加的 8 点 padding 属于页面自己的控件布局。实测标识为 `20260911-194644-settings-list-insets-23900`。零行 inset 和零滚动内容边距仍可与这些原生间隔同时存在；上述数值只描述该系统与当前列表组合。项目采用共享容器继承系统布局，使三页保持一致。
+项目观察（2026-09-11，macOS 26.6.2、Xcode 26.6）：零行边距列表的原生几何探针中，底层 `NSTableView.style/effectiveStyle` 均为 `.plain`，滚动内容 inset 全零，`intercellSpacing` 为 `(17, 0)`。在宽 422 点的 table 中，单元格起点为 8、宽度为 405，两端分别留下 8 与 9 点。行内再增加的 8 点 padding 属于页面自己的控件布局。实测标识为 `20260911-194644-settings-list-insets-23900`。零行 inset 和零滚动内容边距仍可与这些原生间隔同时存在；上述数值限定于该探针的系统与布局组合，不定义系统分割线的最终跨度。项目采用共享容器继承系统布局，使三页保持一致。
 
 ## 状态所有权与设计依据
 
