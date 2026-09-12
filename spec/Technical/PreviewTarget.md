@@ -29,7 +29,7 @@
 
 测试前置条件：每项原生页面测试先用 `AXUIElementCreateApplication(getpid())` 定位测试进程，再通过 `AXUIElementCopyAttributeValue` 查询 `kAXRoleAttribute`，要求返回 `.success` 和 `kAXApplicationRole`。输入仅为本进程 PID 与角色属性，输出为 AX 状态和应用角色；查询失败作为测试失败报告。随后在 1 秒截止时间内跨主循环读取操作按钮，缺失时报告已观察到的按钮与缺失标题。原生字段就绪不代表 SwiftUI 的按钮树已经建立。
 
-项目观察（2026-09-09，macOS 26.6.2、Xcode 26.6）：[GitHub Actions 运行 34305654097](https://github.com/tlb-22/mac-tool-ecmenu/actions/runs/34305654097) 中六项按钮操作测试均读到空树。独立进程探针中，布局及调用窗口 `orderBack` 后均未建立 SwiftUI 节点，本进程角色查询后节点出现；在 `AXIsProcessTrusted() == false` 的沙箱进程中，该查询也成功。测试据此显式初始化自身的 AX 查询路径，保留隐藏窗口与节点就绪检查。Apple 的 [NSHostingView](https://developer.apple.com/documentation/swiftui/nshostingview) 契约提供 AppKit 桥接与可访问性访问接口；上述节点初始化行为属于此版本的项目观察，不是节点同步发布或跨版本时序保证。
+项目观察（2026-09-09，macOS 26.6.2、Xcode 26.6）：[GitHub Actions 运行 34305654097](https://github.com/tlb-22/ECMenu/actions/runs/34305654097) 中六项按钮操作测试均读到空树。独立进程探针中，布局及调用窗口 `orderBack` 后均未建立 SwiftUI 节点，本进程角色查询后节点出现；在 `AXIsProcessTrusted() == false` 的沙箱进程中，该查询也成功。测试据此显式初始化自身的 AX 查询路径，保留隐藏窗口与节点就绪检查。Apple 的 [NSHostingView](https://developer.apple.com/documentation/swiftui/nshostingview) 契约提供 AppKit 桥接与可访问性访问接口；上述节点初始化行为属于此版本的项目观察，不是节点同步发布或跨版本时序保证。
 
 ## 原生列表交互诊断
 
